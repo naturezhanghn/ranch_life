@@ -22,6 +22,7 @@ Development. The real Canvas scene base remains the default runtime; four miniga
 - New sites are scene interactions, not standalone menu pages: `island_patrol`, `island_fishing`, `quarry_vein`, and `port_delivery_run`.
 - Old saves receive `minigames` defaults; active sessions are intentionally cleared on load.
 - The game-space slice is merged into `main`; its branch remains available for audit.
+- Deployment source commit: `ffdc3ba` on `main`; live URL: `https://naturezhanghn.github.io/ranch_life/`.
 
 ## Important files
 
@@ -48,6 +49,7 @@ Development. The real Canvas scene base remains the default runtime; four miniga
 - `npm test` now covers 25 state tests plus 7 minigame tests.
 - Merged `main` verification: 25 state tests + 7 minigame tests pass; desktop and 390×844 real scene-triggered overlay paths pass with no console errors.
 - Minigame completion settlement was exercised in Chromium: hunt reward, ecology update, active-session cleanup, and overlay close all passed.
+- Live deployment check: `js/minigames.js` is served from Pages, and desktop/mobile overlay plus settlement smoke tests pass with no console errors.
 
 ## Risks
 
@@ -59,7 +61,7 @@ Development. The real Canvas scene base remains the default runtime; four miniga
 
 ## Next safest task
 
-Push the merged `main` commit and re-run Pages; then run the opt-in Phaser farm slice against the merged code before migrating additional scenes.
+Run the opt-in Phaser farm slice against the merged code before migrating additional scenes; then extend the next approved gameplay slice.
 
 ## Last slice
 
