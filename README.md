@@ -60,7 +60,9 @@ npm run balance      # 28 天确定性数值模拟，输出 Markdown/JSON 报告
 
 ## GitHub Pages 部署
 
-仓库推送后，`.github/workflows/pages.yml` 会在 `main` 分支更新时发布静态站点。首次运行会尝试自动启用 Pages，并设置来源为 GitHub Actions。
+仓库推送后，`.github/workflows/pages.yml` 会在 `main` 分支更新时检查并发布静态站点。
+
+GitHub 不允许工作流里的 `GITHUB_TOKEN` 创建第一个 Pages 站点，因此公开仓库首次部署必须由仓库管理员在 **Settings → Pages → Build and deployment** 将 Source 设为 **GitHub Actions**。完成这一次设置后，之后每次推送都会自动发布。
 
 部署地址预计为：
 
@@ -68,7 +70,7 @@ npm run balance      # 28 天确定性数值模拟，输出 Markdown/JSON 报告
 https://naturezhanghn.github.io/ranch_life/
 ```
 
-如果仓库设置中的 Pages 被组织策略禁止自动启用，需要在 **Settings → Pages → Build and deployment** 中将 Source 改为 **GitHub Actions**，然后重新运行工作流。
+未启用 Pages 时，部署工作流会成功完成一次检查并在 Summary 中提示设置步骤，不会部署空站点。
 
 ## 项目结构
 
