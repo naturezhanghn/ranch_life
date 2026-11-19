@@ -7,6 +7,7 @@ import {
   ELDER_DIALOGUE,
   ENDINGS,
   GOVERNMENT_POLICIES,
+  HOUSE_UPGRADES,
   ISLAND_DAILY_LIMIT,
   ISLAND_SPOTS,
   MARKET_GOODS,
@@ -39,6 +40,7 @@ import {
   buyFeed,
   buySeed,
   checkDailyTasks,
+  collectForage,
   clearSave,
   createInitialState,
   crossCheckAiClue,
@@ -61,6 +63,7 @@ import {
   tickAnimalOutdoor,
   upgradeBackpack,
   upgradeTool,
+  upgradeHouse,
   getBagUsage,
   recordClue,
   recordTalk,
@@ -393,6 +396,8 @@ function updateHUD(force = false) {
   if (!state) return;
   const weather = weatherPresentation[state.weather] || weatherPresentation.sunny;
   dom.dayNumber.textContent = state.day;
+  const seasonNode = document.querySelector(".date-season");
+  if (seasonNode) seasonNode.textContent = state.season || "春";
   dom.clock.textContent = formatClock(state.minutes);
   dom.weatherLabel.classList.toggle("is-rain", state.weather === "rain");
   dom.weatherLabel.innerHTML = `<span class="weather-icon" aria-hidden="true">${weather.icon}</span><span>${weather.label}</span>`;
@@ -786,6 +791,13 @@ function handleInteraction(id) {
     case "sleep":
       openSleepDialog();
       break;
+    case "forage": {
+      const forageId = state.forage.available.find((id) => !state.forage.collected[id]);
+      const result = forageId ? collectForage(state, forageId) : { ok: false, message: "今天还没有可采集的季节山货。雨后再来看看。" };
+      if (result.ok) { saveGame(state); updateHUD(true); showToast(result.message, { strong: "季节山货" }); }
+      else showToast(result.message);
+      break;
+    }
     case "ai":
       openAiPanel();
       break;
@@ -1354,6 +1366,8 @@ function renderCityPanel() {
     const tool = TOOLS.find((entry) => entry.id === toolId);
     return `<article class="region-card project-card"><div class="region-card-icon" aria-hidden="true">${tool?.icon || "⌁"}</div><div class="region-card-copy"><strong>${tool?.name || toolId} Lv.${state.toolLevels[toolId] || 0}</strong><span>${next ? `${next.title} · ${next.description}` : "已经达到最高等级。"}</span></div><button type="button" class="shop-buy" data-action="upgradeTool" data-value="${toolId}" ${!next || state.coins < next.cost ? "disabled" : ""}>${next ? `✦ ${next.cost}` : "满级"}</button></article>`;
   }).join("");
+  const houseNext = HOUSE_UPGRADES.find((entry) => entry.level === state.house.level + 1);
+  const houseMarkup = `<article class="region-card project-card"><div class="region-card-icon" aria-hidden="true">⌂</div><div class="region-card-copy"><strong>房屋 Lv.${state.house.level}</strong><span>${houseNext ? `${houseNext.title} · ${houseNext.description}` : "冰箱、储物柜和厨房已经全部解锁。"}</span></div><button type="button" class="shop-buy" data-action="upgradeHouse" ${!houseNext || state.coins < houseNext.cost ? "disabled" : ""}>${houseNext ? `✦ ${houseNext.cost}` : "满级"}</button></article>`;
   return `
     ${regionHero("city", "河港市把你的农产品、城市项目和公共生活放在同一张地图上。", [
       regionMetric("城市声誉", Math.round(state.city.reputation)),
@@ -1364,6 +1378,8 @@ function renderCityPanel() {
     <div class="region-card-grid">${projects}</div>
     <div class="region-section-heading"><span>装备工坊</span><small>当前占用 ${getBagUsage(state)} / ${state.bag.slots} 格</small></div>
     <div class="region-card-grid">${backpackMarkup}${toolMarkup}</div>
+    <div class="region-section-heading"><span>房屋与生活</span><small>${state.house.kitchen ? "厨房已开放" : "继续增筑解锁冰箱与厨房"}</small></div>
+    <div class="region-card-grid">${houseMarkup}</div>
     <div class="region-callout region-callout--city">
       <div><strong>今天去市民议事厅</strong><span>听完不同意见，获得公共决策需要的公民点。</span></div>
       <button type="button" class="button button--secondary" data-action="townHall" ${state.city.lastTownHallDay === state.day ? "disabled" : ""}>
@@ -2267,6 +2283,8 @@ function showDaySummary(report, nextEvent = null, auto = false) {
       ${report.shipping?.units ? `<div class="day-report-card"><strong>出货箱结算</strong><span>昨日交付 ${report.shipping.units} 份，到账 ${report.shipping.value} 金。</span></div>` : ""}
       ${report.livestock?.length ? `<div class="day-report-card"><strong>牲畜日结</strong><span>${report.livestock.map((animal) => `${animal.name} · ${animal.sick ? "生病" : animal.unhappy ? "不开心" : "状态稳定"} · 健康 ${Math.round(animal.health)} · 亲密 ${Math.round(animal.affection)} · 放牧 ${Math.round(animal.outdoorMinutes)} 分钟`).join("；")}</span></div>` : ""}
       ${report.systemNotes?.length ? `<div class="day-report-card day-report-card--ai"><strong>牧心记录</strong><span>${report.systemNotes.join("；")}</span></div>` : ""}
+      ${report.forage?.length ? `<div class="day-report-card"><strong>季节山货</strong><span>今天在${state.season}季山路发现：${report.forage.join("、")}。雨后更容易遇到采集物。</span></div>` : ""}
+      ${report.townEvent ? `<div class="day-report-card"><strong>城镇日程 · ${report.townEvent.title}</strong><span>${report.townEvent.description} 活动奖励 ${report.townEvent.reward} 金。</span></div>` : ""}
       ${
         unfedNames.length
           ? `<div class="clue-verification">${unfedNames.join("、")}昨天没有进食，心情下降了。牧心把这条记录标为“关系风险”。</div>`
@@ -2621,6 +2639,14 @@ function handleModalClick(event) {
     }
     case "upgradeTool": {
       const result = upgradeTool(state, value);
+      if (result.ok) {
+        audio.play("success");
+        refreshRegionPanel(result.message);
+      } else showToast(result.message);
+      break;
+    }
+    case "upgradeHouse": {
+      const result = upgradeHouse(state);
       if (result.ok) {
         audio.play("success");
         refreshRegionPanel(result.message);

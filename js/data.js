@@ -5,6 +5,30 @@ export const DAY_START_MINUTES = 6 * 60;
 export const NIGHT_MINUTES = 22 * 60;
 export const REAL_SECONDS_PER_GAME_MINUTE = 0.22;
 
+export const SEASONS = ["春", "夏", "秋", "冬"];
+export const SEASON_DAYS = 28;
+export const SEASONAL_CROP_CALENDAR = {
+  turnip: { seasons: ["春", "秋"], regrowDays: 0, note: "凉爽季节作物" },
+  potato: { seasons: ["春", "秋"], regrowDays: 0, note: "地下块茎" },
+  strawberry: { seasons: ["春"], regrowDays: 3, note: "收获后 3 天再次结果" },
+};
+export const FORAGE_TABLE = {
+  春: [{ id: "spring_herb", name: "春芽草", icon: "❋", price: 28, chance: 0.7 }],
+  夏: [{ id: "summer_berry", name: "夏莓", icon: "●", price: 42, chance: 0.65 }],
+  秋: [{ id: "autumn_mushroom", name: "秋野菇", icon: "◉", price: 68, chance: 0.58 }],
+  冬: [{ id: "winter_root", name: "雪下根", icon: "◇", price: 82, chance: 0.45 }],
+};
+export const HOUSE_UPGRADES = [
+  { level: 1, cost: 260, title: "增筑小屋", features: ["冰箱", "储物柜"], description: "解锁冰箱与额外储物空间。" },
+  { level: 2, cost: 520, title: "厨房扩建", features: ["厨房", "料理台"], description: "解锁厨房料理，料理可恢复体力并提高关系。" },
+];
+export const TOWN_EVENTS = [
+  { id: "spring_market", season: "春", day: 7, title: "春芽集市", reward: 80, description: "城镇广场收购春季作物，价格提高。" },
+  { id: "summer_festival", season: "夏", day: 14, title: "潮灯节", reward: 120, description: "贸易港与海岛声誉获得额外提升。" },
+  { id: "autumn_harvest", season: "秋", day: 21, title: "丰收会", reward: 160, description: "高品质牲畜产品获得额外结算。" },
+  { id: "winter_birthdays", season: "冬", day: 3, title: "冬日生日会", reward: 60, description: "给当天的居民送礼可获得双倍关系。" },
+];
+
 export const REGION_ORDER = ["farm", "city", "island", "trade", "government", "sprites"];
 
 export const REGION_SCENE_MAP = {
@@ -728,6 +752,7 @@ export const SHOP_SEEDS = Object.values(CROPS).map((crop) => ({
 }));
 
 export const INTERACTIONS = [
+  { id: "forage", x: 610, y: 180, radius: 58, label: "采集季节山货", keycap: "E" },
   {
     id: "sleep",
     x: 216,

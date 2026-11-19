@@ -30,6 +30,7 @@ import {
   tickAnimalOutdoor,
   upgradeBackpack,
   upgradeTool,
+  upgradeHouse,
   useToolOnPlot,
 } from "../js/state.js";
 
@@ -362,6 +363,18 @@ test("backpack and tool upgrades persist and affect capacity", () => {
   assert.equal(upgradeTool(state, "hoe").ok, true);
   assert.equal(state.toolLevels.hoe, 1);
   assert.equal(getBagUsage(state), 0);
+});
+
+test("season calendar, house expansion, and town rewards are data-driven", () => {
+  const state = freshState();
+  state.season = "冬";
+  standAtPlot(state, 0, 0);
+  useToolOnPlot(state, "hoe");
+  assert.equal(useToolOnPlot(state, "seed").ok, false);
+  state.coins = 1000;
+  assert.equal(upgradeHouse(state).ok, true);
+  assert.equal(state.house.fridge !== undefined, true);
+  assert.equal(state.house.storageSlots, 8);
 });
 
 console.log(`\n${passed} state tests passed.`);

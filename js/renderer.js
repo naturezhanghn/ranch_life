@@ -61,6 +61,7 @@ export class WorldRenderer {
     this.drawCanalGate(ctx, state, time);
     this.drawStaticProps(ctx, time);
     this.drawScenePortals(ctx, SCENE_DEFS.farm, time);
+    this.drawForageNode(ctx, state, time);
 
     const drawables = [];
     const sisterY = 257;
@@ -354,6 +355,23 @@ export class WorldRenderer {
 
   drawSceneInteractionHighlight(ctx, state, runtime, time) {
     this.drawInteractionHighlight(ctx, state, runtime, time);
+  }
+
+  drawForageNode(ctx, state, time) {
+    if (!state.forage?.available?.length) return;
+    const pulse = 1 + Math.sin(time * 2.5) * 0.12;
+    ctx.save();
+    ctx.fillStyle = "#e4d38b";
+    ctx.globalAlpha = 0.8;
+    ctx.beginPath();
+    ctx.arc(610, 180, 15 * pulse, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = "#5f8d5d";
+    ctx.font = "700 16px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("❋", 610, 186);
+    this.drawPlaceTag(ctx, 610, 154, "季节山货", "rgba(255, 247, 216, 0.9)", "#5d6136");
+    ctx.restore();
   }
 
   drawGround(ctx, state, time) {

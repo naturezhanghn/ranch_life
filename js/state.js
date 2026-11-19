@@ -5,6 +5,8 @@ import {
   CROPS,
   DAILY_TASK_POOL,
   DAY_START_MINUTES,
+  FORAGE_TABLE,
+  HOUSE_UPGRADES,
   GOVERNMENT_POLICIES,
   ISLAND_DAILY_LIMIT,
   ISLAND_SPOTS,
@@ -19,6 +21,10 @@ import {
   SAVE_VERSION,
   SCENE_DEFS,
   SCENE_REGION_MAP,
+  SEASONS,
+  SEASON_DAYS,
+  SEASONAL_CROP_CALENDAR,
+  TOWN_EVENTS,
   SPRITE_DEFS,
   TOOL_UPGRADE_LEVELS,
   TRADE_CONTRACTS,
@@ -135,6 +141,8 @@ export function createInitialState() {
     createdAt: new Date().toISOString(),
     savedAt: null,
     day: 1,
+    season: "春",
+    seasonDay: 1,
     minutes: DAY_START_MINUTES,
     weather: "sunny",
     rngState: seedFromString(`ranch-${Date.now()}`),
@@ -196,6 +204,9 @@ export function createInitialState() {
       totalValue: 0,
       settlements: [],
     },
+    house: { level: 0, upgrades: {}, fridge: {}, storageSlots: 0, kitchen: false },
+    forage: { available: [], collected: {}, lastRefreshDay: 0 },
+    town: { eventsSeen: [], birthdayGifts: {}, festivalBonus: 0 },
     plots: createPlots(),
     animals: createAnimals(),
     player: {
@@ -588,6 +599,8 @@ export function useToolOnPlot(state, toolId) {
       return { ok: false, message: "这块地已经有作物了。" };
     }
     const crop = CROPS[state.selectedSeed];
+    const calendar = SEASONAL_CROP_CALENDAR[state.selectedSeed];
+    if (calendar && !calendar.seasons.includes(state.season)) return { ok: false, message: `${crop.name}只适合${calendar.seasons.join("、")}季。` };
     const count = state.inventory.seeds[state.selectedSeed] || 0;
     if (count <= 0) {
       return { ok: false, message: `${crop.seedName}用完了，去村集买一些吧。` };
@@ -1399,6 +1412,32 @@ export function settleShipping(state, report) {
   return { units, value, items };
 }
 
+export function upgradeHouse(state) {
+  const next = HOUSE_UPGRADES.find((entry) => entry.level === state.house.level + 1);
+  if (!next) return { ok: false, message: "房屋已经完成全部增筑。" };
+  if (state.coins < next.cost) return { ok: false, message: `还差 ${next.cost - state.coins} 金才能完成${next.title}。` };
+  state.coins -= next.cost;
+  state.house.level = next.level;
+  state.house.upgrades[next.level] = true;
+  if (next.features.includes("冰箱")) state.house.fridge = {};
+  if (next.features.includes("储物柜")) state.house.storageSlots = 8;
+  if (next.features.includes("厨房")) state.house.kitchen = true;
+  addMemory(state, `你花 ${next.cost} 金完成${next.title}，解锁${next.features.join("、")}。`, "upgrade", 4);
+  return { ok: true, message: `${next.title}完成，${next.features.join("、")}已经可用。` };
+}
+
+export function collectForage(state, forageId) {
+  const item = (FORAGE_TABLE[state.season] || []).find((entry) => entry.id === forageId);
+  if (!item || !state.forage.available.includes(forageId)) return { ok: false, message: "这里今天没有新的山货。" };
+  if (state.forage.collected[forageId]) return { ok: false, message: "这份山货已经采过了。" };
+  if (state.energy < 1) return { ok: false, message: "体力不够，先回去休息吧。" };
+  state.energy -= 1;
+  state.inventory.resources[forageId] = (state.inventory.resources[forageId] || 0) + 1;
+  state.forage.collected[forageId] = true;
+  addMemory(state, `你在${state.season}季山路采到${item.name}，可以放进贸易箱。`, "forage", 2);
+  return { ok: true, message: `采到${item.name}。` };
+}
+
 export function advanceDay(state) {
   const closingDay = state.day;
   const report = {
@@ -1487,7 +1526,8 @@ export function advanceDay(state) {
   }
 
   for (const plot of state.plots) {
-    if (plot.crop && plot.watered) {
+    const cropCalendar = plot.crop ? SEASONAL_CROP_CALENDAR[plot.crop] : null;
+    if (plot.crop && plot.watered && (!cropCalendar || cropCalendar.seasons.includes(state.season))) {
       plot.growth += 1;
       report.grown += 1;
       if (plot.growth === CROPS[plot.crop].days) report.matured += 1;
@@ -1496,6 +1536,12 @@ export function advanceDay(state) {
   }
 
   state.day += 1;
+  state.seasonDay += 1;
+  if (state.seasonDay > SEASON_DAYS) {
+    state.seasonDay = 1;
+    state.season = SEASONS[(SEASONS.indexOf(state.season) + 1) % SEASONS.length];
+    addMemory(state, `季节更替：现在是${state.season}季。作物日历和山货目录已经刷新。`, "season", 3);
+  }
   state.minutes = DAY_START_MINUTES;
   state.energy = state.maxEnergy;
   state.stats.slept += 1;
@@ -1514,6 +1560,22 @@ export function advanceDay(state) {
 
   state.weather = weather;
   report.weather = weather;
+
+  const forageRoll = nextRandom(state);
+  state.forage.available = [];
+  state.forage.collected = {};
+  if (weather === "rain" || forageRoll > 0.45 || state.seasonDay === 1) {
+    for (const item of FORAGE_TABLE[state.season] || []) if (nextRandom(state) < item.chance) state.forage.available.push(item.id);
+  }
+  state.forage.lastRefreshDay = state.day;
+  report.forage = state.forage.available.map((id) => FORAGE_TABLE[state.season].find((item) => item.id === id)?.name).filter(Boolean);
+  const townEvent = TOWN_EVENTS.find((event) => event.season === state.season && event.day === state.seasonDay);
+  if (townEvent && !state.town.eventsSeen.includes(townEvent.id)) {
+    state.town.eventsSeen.push(townEvent.id);
+    state.coins += townEvent.reward;
+    report.townEvent = townEvent;
+    addMemory(state, `城镇日程：${townEvent.title}开始，获得 ${townEvent.reward} 金活动奖励。`, "town", 3);
+  }
 
   state.island.dailyFinds = {};
   state.world.activeRegion = "farm";
@@ -1638,6 +1700,9 @@ export function loadGame() {
         pending: Array.isArray(parsed.shipping?.pending) ? parsed.shipping.pending : base.shipping.pending,
         settlements: Array.isArray(parsed.shipping?.settlements) ? parsed.shipping.settlements : base.shipping.settlements,
       },
+      house: { ...base.house, ...(parsed.house || {}), upgrades: { ...base.house.upgrades, ...(parsed.house?.upgrades || {}) }, fridge: { ...base.house.fridge, ...(parsed.house?.fridge || {}) } },
+      forage: { ...base.forage, ...(parsed.forage || {}), available: Array.isArray(parsed.forage?.available) ? parsed.forage.available : base.forage.available, collected: { ...base.forage.collected, ...(parsed.forage?.collected || {}) } },
+      town: { ...base.town, ...(parsed.town || {}), eventsSeen: Array.isArray(parsed.town?.eventsSeen) ? parsed.town.eventsSeen : base.town.eventsSeen, birthdayGifts: { ...base.town.birthdayGifts, ...(parsed.town?.birthdayGifts || {}) } },
       stats: { ...base.stats, ...(parsed.stats || {}) },
       ai: {
         ...base.ai,
