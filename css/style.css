@@ -2495,7 +2495,7 @@ body.phaser-runtime #phaserCanvas { display: block; }
   .touch-controls {
     position: absolute;
     z-index: 15;
-    inset: auto 12px 12px;
+    inset: auto calc(12px + env(safe-area-inset-right)) calc(12px + env(safe-area-inset-bottom)) calc(12px + env(safe-area-inset-left));
     display: flex;
     align-items: flex-end;
     justify-content: space-between;
@@ -2503,12 +2503,12 @@ body.phaser-runtime #phaserCanvas { display: block; }
   }
 
   .dpad {
-    width: 122px;
-    height: 98px;
+    width: 144px;
+    height: 94px;
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     grid-template-rows: repeat(2, 1fr);
-    gap: 4px;
+    gap: 6px;
     pointer-events: auto;
   }
 
@@ -2525,6 +2525,8 @@ body.phaser-runtime #phaserCanvas { display: block; }
 
   .dpad button {
     border-radius: 9px;
+    min-width: 44px;
+    min-height: 44px;
     font-size: 10px;
   }
 

@@ -177,6 +177,13 @@ let mobileCamera = { x: 0, y: 0, initialized: false };
 
 const keys = new Set();
 const touchDirections = new Set();
+const touchPointers = new Map();
+const touchInputState = {
+  lastActionAt: 0,
+  acceptedActions: 0,
+  orientation: "",
+  safeAreaInsets: {},
+};
 const runtime = {
   moving: false,
   walkPhase: 0,
@@ -3431,14 +3438,93 @@ function handleKeyUp(event) {
   keys.delete(event.key.toLowerCase());
 }
 
+function refreshTouchEnvironment() {
+  touchInputState.orientation = window.innerWidth > window.innerHeight ? "landscape" : "portrait";
+  if (!dom.touchControls) {
+    touchInputState.safeAreaInsets = {};
+    return;
+  }
+  const styles = getComputedStyle(dom.touchControls);
+  touchInputState.safeAreaInsets = {
+    bottom: Math.max(0, Number.parseFloat(styles.bottom) || 0),
+    left: Math.max(0, Number.parseFloat(styles.left) || 0),
+    right: Math.max(0, Number.parseFloat(styles.right) || 0),
+  };
+}
+
+function syncTouchDirections() {
+  touchDirections.clear();
+  for (const control of touchPointers.values()) {
+    if (control.direction) touchDirections.add(control.direction);
+  }
+  runtime.moving = touchDirections.size > 0;
+}
+
+function clearTouchInputs() {
+  for (const control of touchPointers.values()) {
+    control.button?.classList.remove("is-pressed");
+  }
+  touchPointers.clear();
+  touchDirections.clear();
+  dom.touchAction?.classList.remove("is-pressed");
+  runtime.moving = false;
+}
+
+function beginTouchControl(event) {
+  const button = event.currentTarget;
+  const direction = button.dataset.move || null;
+  event.preventDefault();
+  if (!direction) {
+    if (minigameLayer.active) return;
+    const now = performance.now();
+    if (now - touchInputState.lastActionAt < 180) return;
+    touchInputState.lastActionAt = now;
+    touchInputState.acceptedActions += 1;
+    button.classList.add("is-pressed");
+    performAction();
+    return;
+  }
+  try {
+    button.setPointerCapture?.(event.pointerId);
+  } catch (error) {
+    // Synthetic pointer streams may not own a capture target.
+  }
+  touchPointers.set(event.pointerId, { button, direction });
+  button.classList.add("is-pressed");
+  syncTouchDirections();
+}
+
+function endTouchControl(event) {
+  const control = touchPointers.get(event.pointerId);
+  if (control) {
+    control.button?.classList.remove("is-pressed");
+    touchPointers.delete(event.pointerId);
+    try {
+      control.button?.releasePointerCapture?.(event.pointerId);
+    } catch (error) {
+      // Capture may already have been released by the browser.
+    }
+  }
+  if (event.currentTarget === dom.touchAction) {
+    dom.touchAction.classList.remove("is-pressed");
+  }
+  syncTouchDirections();
+}
+
 function bindEvents() {
   window.addEventListener("keydown", handleKeyDown);
   window.addEventListener("keyup", handleKeyUp);
-  window.addEventListener("resize", resizeViewport);
-  window.addEventListener("orientationchange", () => window.setTimeout(resizeViewport, 80));
+  window.addEventListener("resize", () => {
+    resizeViewport();
+    refreshTouchEnvironment();
+  });
+  window.addEventListener("orientationchange", () => window.setTimeout(() => {
+    resizeViewport();
+    refreshTouchEnvironment();
+  }, 80));
   window.addEventListener("blur", () => {
     keys.clear();
-    touchDirections.clear();
+    clearTouchInputs();
   });
 
   dom.newGameButton.addEventListener("click", () => {
@@ -3501,39 +3587,18 @@ function bindEvents() {
     if (modalClosable) closeModal();
   });
 
-  for (const button of document.querySelectorAll("[data-move]")) {
-    const direction = button.dataset.move;
-    const press = (event) => {
-      event.preventDefault();
-      touchDirections.add(direction);
-      button.classList.add("is-pressed");
-      try {
-        button.setPointerCapture?.(event.pointerId);
-      } catch (error) {
-        // Some synthetic or interrupted pointer streams have no active capture target.
-      }
-    };
-    const release = (event) => {
-      event.preventDefault();
-      touchDirections.delete(direction);
-      button.classList.remove("is-pressed");
-    };
-    button.addEventListener("pointerdown", press);
-    button.addEventListener("pointerup", release);
-    button.addEventListener("pointercancel", release);
-    button.addEventListener("pointerleave", release);
+  const touchButtons = [
+    ...document.querySelectorAll("[data-move]"),
+    dom.touchAction,
+  ].filter(Boolean);
+  for (const button of touchButtons) {
+    button.addEventListener("pointerdown", beginTouchControl);
+    button.addEventListener("pointerup", endTouchControl);
+    button.addEventListener("pointercancel", endTouchControl);
+    button.addEventListener("pointerleave", endTouchControl);
   }
-
-  dom.touchAction.addEventListener("pointerdown", (event) => {
-    event.preventDefault();
-    dom.touchAction.classList.add("is-pressed");
-    if (minigameLayer.active) return;
-    performAction();
-  });
-  dom.touchAction.addEventListener("pointerup", () => dom.touchAction.classList.remove("is-pressed"));
-  dom.touchAction.addEventListener("pointercancel", () =>
-    dom.touchAction.classList.remove("is-pressed"),
-  );
+  dom.touchControls?.addEventListener("contextmenu", (event) => event.preventDefault());
+  refreshTouchEnvironment();
 }
 
 function startNewGame() {
@@ -3568,6 +3633,14 @@ window.__RANCH_DEBUG__ = {
     getTargetPlot: () => getTargetPlot(state),
     npcPositions: (sceneId = state.world.scene, minutes = state.minutes) =>
       scheduledNpcPositions(minutes, sceneId),
+    touchState: () => ({
+      pointerIds: Array.from(touchPointers.keys()),
+      directions: Array.from(touchDirections),
+      lastActionAt: touchInputState.lastActionAt,
+      acceptedActions: touchInputState.acceptedActions,
+      orientation: touchInputState.orientation,
+      safeAreaInsets: { ...touchInputState.safeAreaInsets },
+    }),
     advanceDay: () => {
       const report = advanceDay(state);
       updateHUD(true);
