@@ -29,6 +29,7 @@ import {
   PRODUCT_QUALITY_MULTIPLIERS,
   REGION_ORDER,
   REGION_SCENE_MAP,
+  SAVE_BACKUP_KEY,
   SAVE_KEY,
   SAVE_VERSION,
   SCENE_DEFS,
@@ -55,6 +56,15 @@ function seedFromString(value) {
     hash = Math.imul(hash, 16777619);
   }
   return hash >>> 0;
+}
+
+function checksumText(value) {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(16);
 }
 
 function nextRandom(state) {
@@ -3170,7 +3180,13 @@ export function serializeState(state) {
 
 export function saveGame(state) {
   try {
-    localStorage.setItem(SAVE_KEY, serializeState(state));
+    const serialized = serializeState(state);
+    const previous = localStorage.getItem(SAVE_KEY);
+    if (previous) {
+      localStorage.setItem(SAVE_BACKUP_KEY, previous);
+      localStorage.setItem(`${SAVE_BACKUP_KEY}-checksum`, checksumText(previous));
+    }
+    localStorage.setItem(SAVE_KEY, serialized);
     return true;
   } catch (error) {
     console.warn("Unable to save game", error);
@@ -3180,9 +3196,24 @@ export function saveGame(state) {
 
 export function loadGame() {
   try {
-    const raw = localStorage.getItem(SAVE_KEY);
+    const primary = localStorage.getItem(SAVE_KEY);
+    const backup = localStorage.getItem(SAVE_BACKUP_KEY);
+    let raw = primary;
+    let usingBackup = false;
+    if (!raw && backup) {
+      raw = backup;
+      usingBackup = true;
+    }
     if (!raw) return null;
-    const parsed = JSON.parse(raw);
+    let parsed;
+    try {
+      parsed = JSON.parse(raw);
+    } catch (primaryError) {
+      if (!backup || usingBackup) throw primaryError;
+      raw = backup;
+      usingBackup = true;
+      parsed = JSON.parse(raw);
+    }
     if (!parsed || typeof parsed !== "object") return null;
     const base = createInitialState();
     const merged = {
@@ -3374,6 +3405,29 @@ export function loadGame() {
       daily: parsed.daily || base.daily,
     };
 
+    merged.season = SEASONS.includes(merged.season) ? merged.season : base.season;
+    merged.day = Number.isFinite(Number(merged.day)) ? Math.max(1, Math.floor(Number(merged.day))) : base.day;
+    merged.seasonDay = Number.isFinite(Number(merged.seasonDay))
+      ? Math.max(1, Math.min(SEASON_DAYS, Math.floor(Number(merged.seasonDay))))
+      : base.seasonDay;
+    merged.minutes = Number.isFinite(Number(merged.minutes))
+      ? Math.max(DAY_START_MINUTES, Math.min(24 * 60, Number(merged.minutes)))
+      : base.minutes;
+    merged.coins = Number.isFinite(Number(merged.coins)) ? Math.max(0, Math.floor(Number(merged.coins))) : base.coins;
+    merged.maxEnergy = Number.isFinite(Number(merged.maxEnergy)) ? Math.max(1, Math.floor(Number(merged.maxEnergy))) : base.maxEnergy;
+    merged.energy = Number.isFinite(Number(merged.energy))
+      ? Math.max(0, Math.min(merged.maxEnergy, Number(merged.energy)))
+      : base.energy;
+    merged.maxWater = Number.isFinite(Number(merged.maxWater)) ? Math.max(1, Math.floor(Number(merged.maxWater))) : base.maxWater;
+    merged.water = Number.isFinite(Number(merged.water))
+      ? Math.max(0, Math.min(merged.maxWater, Number(merged.water)))
+      : base.water;
+    merged.player = {
+      ...base.player,
+      ...(merged.player || {}),
+      x: Number.isFinite(Number(merged.player?.x)) ? Number(merged.player.x) : base.player.x,
+      y: Number.isFinite(Number(merged.player?.y)) ? Number(merged.player.y) : base.player.y,
+    };
     if (!Array.isArray(merged.plots) || merged.plots.length !== WORLD.field.cols * WORLD.field.rows) {
       merged.plots = base.plots;
     }
@@ -3395,6 +3449,7 @@ export function loadGame() {
     if (!SCENE_DEFS[merged.world.scene]) merged.world.scene = "farm";
     if (!merged.world.visitedScenes.includes("farm")) merged.world.visitedScenes.unshift("farm");
     merged.sprites.available = Array.from(new Set([...(merged.sprites.available || []), ...(merged.sprites.unlocked || [])]));
+    if (usingBackup) localStorage.setItem(SAVE_KEY, raw);
     return merged;
   } catch (error) {
     console.warn("Unable to load game", error);

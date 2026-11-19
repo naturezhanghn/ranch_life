@@ -1,5 +1,6 @@
 export const SAVE_KEY = "ranch-life-common-ground-save-v1";
-export const SAVE_VERSION = 2;
+export const SAVE_BACKUP_KEY = "ranch-life-common-ground-save-v1-backup";
+export const SAVE_VERSION = 3;
 export const DAY_LENGTH_MINUTES = 18 * 60;
 export const DAY_START_MINUTES = 6 * 60;
 export const NIGHT_MINUTES = 22 * 60;

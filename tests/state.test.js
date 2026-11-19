@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { BRIDGE_QUEST, CROPS, DAY_START_MINUTES, POST_GAME_MODIFIERS, TRADE_CONTRACTS, WORLD } from "../js/data.js";
+import { BRIDGE_QUEST, CROPS, DAY_START_MINUTES, POST_GAME_MODIFIERS, SAVE_BACKUP_KEY, SAVE_KEY, TRADE_CONTRACTS, WORLD } from "../js/data.js";
 import {
   advanceDay,
   advanceBridgeQuest,
@@ -33,6 +33,7 @@ import {
   recordClue,
   resolveDailyRecap,
   resolveEnding,
+  saveGame,
   startBridgeQuest,
   sellAtMarket,
   selectShippingRoute,
@@ -831,6 +832,71 @@ test("accepted trade orders survive one night and expire with a penalty", () => 
   assert.equal(state.market.contracts.some((entry) => entry.id === contract.id && entry.accepted), true);
   advanceDay(state);
   assert.ok(state.market.reputation < beforeReputation || state.government.civicPoints < 3);
+});
+
+test("corrupt primary saves fall back to the previous automatic save", () => {
+  const previousStorage = globalThis.localStorage;
+  const store = {};
+  globalThis.localStorage = {
+    getItem: (key) => (key in store ? store[key] : null),
+    setItem: (key, value) => { store[key] = String(value); },
+    removeItem: (key) => { delete store[key]; },
+  };
+  try {
+    const first = createInitialState();
+    first.day = 1;
+    first.coins = 111;
+    saveGame(first);
+    const second = createInitialState();
+    second.day = 2;
+    second.coins = 222;
+    saveGame(second);
+    assert.ok(store[SAVE_BACKUP_KEY]);
+    store[SAVE_KEY] = "{not valid json";
+    const loaded = loadGame();
+    assert.equal(loaded.day, 1);
+    assert.equal(loaded.coins, 111);
+    assert.notEqual(store[SAVE_KEY], "{not valid json");
+  } finally {
+    globalThis.localStorage = previousStorage;
+  }
+});
+
+test("illegal save numbers are clamped and missing fields get defaults", () => {
+  const previousStorage = globalThis.localStorage;
+  const store = {};
+  globalThis.localStorage = {
+    getItem: (key) => (key in store ? store[key] : null),
+    setItem: (key, value) => { store[key] = String(value); },
+    removeItem: (key) => { delete store[key]; },
+  };
+  try {
+    store[SAVE_KEY] = JSON.stringify({
+      day: -5,
+      season: "??",
+      seasonDay: 99,
+      coins: -30,
+      energy: 999,
+      maxEnergy: 100,
+      water: -8,
+      maxWater: 24,
+    });
+    const clamped = loadGame();
+    assert.equal(clamped.day, 1);
+    assert.equal(clamped.season, "春");
+    assert.equal(clamped.seasonDay, 28);
+    assert.equal(clamped.coins, 0);
+    assert.equal(clamped.energy, 100);
+    assert.equal(clamped.water, 0);
+    store[SAVE_KEY] = JSON.stringify({ day: 4, season: "夏" });
+    const sparse = loadGame();
+    assert.equal(sparse.day, 4);
+    assert.equal(sparse.season, "夏");
+    assert.equal(sparse.player.x, createInitialState().player.x);
+    assert.ok(sparse.quests && sparse.festival && sparse.weekly);
+  } finally {
+    globalThis.localStorage = previousStorage;
+  }
 });
 
 test("backpack and tool upgrades persist and affect capacity", () => {
