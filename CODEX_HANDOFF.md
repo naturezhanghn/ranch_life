@@ -48,8 +48,7 @@ Development. The real Canvas scene base remains the default runtime; four miniga
 - Phaser smoke still required after each adapter change, including farm movement, action, scene dispatch, save/reload, and portrait/landscape resize
 - Node16 Playwright 1.38 audits run through `/tmp/ranch-browser-test/node_modules/playwright` against the existing 4174 server. Mobile controls, mobile scene flow, desktop scene flow, console errors, overflow, touch controls, city→council/workshop entrances, island on-site exploration, and trade port were verified.
 - Regression coverage now includes sleep returning `world.scene` and player spawn to farm, policy `coinCost` deduction, retained/expired order behavior, and safe pointer capture handling.
-- `npm test` now covers 25 state tests plus 7 minigame tests.
-- Task 01 regression coverage now totals 26 state tests, including day-report and牧心 settlement feedback.
+- `npm test` now covers 26 state tests plus 7 minigame tests, including day-report and牧心 settlement feedback.
 - Merged `main` verification: 25 state tests + 7 minigame tests pass; desktop and 390×844 real scene-triggered overlay paths pass with no console errors.
 - Minigame completion settlement was exercised in Chromium: hunt reward, ecology update, active-session cleanup, and overlay close all passed.
 - Live deployment check: `js/minigames.js` is served from Pages, and desktop/mobile overlay plus settlement smoke tests pass with no console errors.
