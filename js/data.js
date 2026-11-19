@@ -146,6 +146,8 @@ export const SCENE_DEFS = {
     portals: [
       { id: "portal_farm", x: 90, y: 648, radius: 42, target: "farm", label: "回月溪牧场" },
       { id: "portal_port", x: 1138, y: 640, radius: 42, target: "port", label: "去贸易港" },
+      { id: "portal_council", x: 770, y: 275, radius: 52, target: "council", label: "进入共同议事厅" },
+      { id: "portal_workshop", x: 1080, y: 274, radius: 52, target: "workshop", label: "进入小精灵工坊" },
     ],
   },
   port: {
@@ -219,8 +221,6 @@ export const SCENE_DEFS = {
 export const SCENE_INTERACTIONS = {
   city: [
     { id: "city_market", x: 430, y: 275, radius: 62, label: "进入城市建设处", keycap: "E" },
-    { id: "city_council", x: 770, y: 275, radius: 62, label: "进入共同议事厅", keycap: "E" },
-    { id: "city_workshop", x: 1080, y: 274, radius: 62, label: "进入小精灵工坊", keycap: "E" },
     { id: "city_mayor", x: 474, y: 526, radius: 58, label: "和市政官聊聊", keycap: "E" },
   ],
   port: [
