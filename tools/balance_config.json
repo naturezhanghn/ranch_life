@@ -1,0 +1,89 @@
+{
+  "model_version": "0.1.0",
+  "game_version": "0.1.0",
+  "horizon_days": 28,
+  "seed": 20261119,
+  "starting": {
+    "coins": 140,
+    "energy": 100,
+    "water": 24,
+    "feed": 6,
+    "turnip_seeds": 5,
+    "potato_seeds": 2,
+    "strawberry_seeds": 0
+  },
+  "crops": {
+    "turnip": {
+      "days": 4,
+      "seed_price": 20,
+      "sell_price": 52
+    },
+    "potato": {
+      "days": 5,
+      "seed_price": 32,
+      "sell_price": 84
+    },
+    "strawberry": {
+      "days": 6,
+      "seed_price": 55,
+      "sell_price": 142
+    }
+  },
+  "animals": [
+    {
+      "id": "chicken",
+      "product": "egg",
+      "sell_price": 34,
+      "every_days": 1
+    },
+    {
+      "id": "sheep",
+      "product": "wool",
+      "sell_price": 96,
+      "every_days": 2
+    },
+    {
+      "id": "cow",
+      "product": "milk",
+      "sell_price": 76,
+      "every_days": 1
+    }
+  ],
+  "feed_price": 12,
+  "energy_costs": {
+    "till": 4,
+    "plant": 1,
+    "water": 2,
+    "harvest": 2,
+    "feed": 1
+  },
+  "weather": {
+    "rain_chance": 0.18,
+    "drought_days": [3, 4, 5]
+  },
+  "targets": {
+    "first_harvest_day_max": 5,
+    "routine_energy_max": 55,
+    "starter_7_day_net_min": 180,
+    "cash_14_day_net_min": 300,
+    "non_negative_coins": true,
+    "strawberry_daily_profit_ratio_min": 1.5
+  },
+  "scenarios": {
+    "starter": {
+      "description": "conservative player keeps 5 turnip plots and cares for all animals",
+      "crop_target": 5,
+      "crop_mix": ["turnip", "turnip", "turnip", "turnip", "potato"]
+    },
+    "cash_crop": {
+      "description": "expansion player moves to 10 plots and strawberries when affordable",
+      "crop_target": 10,
+      "crop_mix": ["strawberry", "strawberry", "potato", "turnip", "turnip"]
+    },
+    "time_poor": {
+      "description": "player prioritizes animals and only maintains 3 turnip plots",
+      "crop_target": 3,
+      "crop_mix": ["turnip", "turnip", "turnip"]
+    }
+  }
+}

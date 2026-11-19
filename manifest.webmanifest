@@ -1,0 +1,17 @@
+{
+  "name": "牧场生活：共同体",
+  "short_name": "牧场生活",
+  "description": "经营边境牧场、追查旧水渠历史，并决定会记忆的 AI 助手牧心应该拥有怎样的权力。",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f2e8cf",
+  "theme_color": "#183c34",
+  "icons": [
+    {
+      "src": "./favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

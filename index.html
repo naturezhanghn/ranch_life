@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta
+      name="description"
+      content="《牧场生活：共同体》是一款叙事经营游戏。经营边境牧场、追查旧水渠历史，并决定会记忆的 AI 助手牧心应该拥有怎样的权力。"
+    />
+    <meta name="theme-color" content="#183c34" />
+    <meta property="og:title" content="牧场生活：共同体 · Ranch Life: The Common Ground" />
+    <meta
+      property="og:description"
+      content="从照料一群动物开始，理解一片土地如何被共同生活塑造。"
+    />
+    <title>牧场生活：共同体 · Ranch Life: The Common Ground</title>
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="stylesheet" href="./css/style.css" />
+  </head>
+  <body>
+    <div class="page-glow page-glow--one" aria-hidden="true"></div>
+    <div class="page-glow page-glow--two" aria-hidden="true"></div>
+
+    <div class="app-shell" id="app">
+      <header class="game-header">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 44 44" role="img">
+              <path
+                d="M9 29c0-9 6-17 14-20-1 9-5 16-14 20Z"
+                fill="currentColor"
+                opacity=".95"
+              />
+              <path
+                d="M34 14c0 10-6 18-15 22 1-10 6-17 15-22Z"
+                fill="currentColor"
+                opacity=".55"
+              />
+              <path
+                d="M12 35c6-8 12-13 22-19"
+                fill="none"
+                stroke="#f8e7b5"
+                stroke-linecap="round"
+                stroke-width="2.4"
+              />
+            </svg>
+          </div>
+          <div>
+            <div class="brand-name">牧场生活<span>：共同体</span></div>
+            <div class="brand-sub">RANCH LIFE · THE COMMON GROUND</div>
+          </div>
+        </div>
+
+        <div class="day-status" aria-label="日期、时间与天气">
+          <div class="date-chip">
+            <span class="date-season">春</span>
+            <span class="date-divider"></span>
+            <span>第 <strong id="dayNumber">1</strong> 天</span>
+          </div>
+          <div class="time-weather">
+            <span class="time" id="clock">06:00</span>
+            <span class="weather" id="weatherLabel">
+              <span class="weather-icon" aria-hidden="true">☀</span>
+              <span>晴朗</span>
+            </span>
+          </div>
+        </div>
+
+        <div class="header-stats">
+          <div class="coin-stat" title="金币">
+            <span class="coin-icon" aria-hidden="true">✦</span>
+            <span id="coinCount">160</span>
+          </div>
+          <div class="energy-stat" title="体力">
+            <div class="energy-copy">
+              <span>体力</span>
+              <strong id="energyText">100</strong>
+            </div>
+            <div class="energy-track" aria-hidden="true">
+              <div class="energy-fill" id="energyFill"></div>
+            </div>
+          </div>
+          <div class="water-stat" title="水罐">
+            <div class="water-copy">
+              <span class="water-icon" aria-hidden="true">◒</span>
+              <strong id="waterText">24</strong>
+            </div>
+            <div class="water-track" aria-hidden="true">
+              <div class="water-fill" id="waterFill"></div>
+            </div>
+          </div>
+          <button class="ai-chip" id="aiButton" type="button" title="打开牧心终端">
+            <span class="ai-pulse" aria-hidden="true"></span>
+            <span>牧心</span>
+          </button>
+          <button class="icon-button" id="soundButton" type="button" aria-label="关闭声音" title="声音">
+            <span id="soundIcon" aria-hidden="true">♪</span>
+          </button>
+          <button class="icon-button" id="menuButton" type="button" aria-label="打开菜单" title="菜单">
+            <span aria-hidden="true">☰</span>
+          </button>
+        </div>
+      </header>
+
+      <main class="game-stage" id="gameStage">
+        <canvas
+          id="gameCanvas"
+          width="1280"
+          height="720"
+          aria-label="牧场生活：共同体游戏画面。使用方向键或 WASD 移动，空格或 E 行动。"
+        >
+          你的浏览器需要支持 Canvas 才能运行这个游戏。
+        </canvas>
+        <div class="stage-vignette" aria-hidden="true"></div>
+        <div class="stage-grain" aria-hidden="true"></div>
+
+        <div class="objective-card" id="objectiveCard">
+          <button class="objective-main" id="objectiveButton" type="button">
+          <span class="objective-kicker">主线 · 土地醒来</span>
+            <span class="objective-text" id="objectiveText">开垦 3 块土地</span>
+            <span class="objective-progress" id="objectiveProgress">0 / 3</span>
+          </button>
+          <div class="objective-reward">
+            <span aria-hidden="true">✦</span>
+            <span id="objectiveReward">+20</span>
+          </div>
+        </div>
+
+        <div class="interaction-hint" id="interactionHint" aria-live="polite">
+          <span class="keycap">E</span>
+          <span id="interactionText">调查</span>
+        </div>
+
+        <div class="toast-stack" id="toastStack" aria-live="polite"></div>
+
+        <div class="touch-controls" id="touchControls" aria-label="触屏控制">
+          <div class="dpad">
+            <button type="button" data-move="up" class="dpad-up" aria-label="向上">▲</button>
+            <button type="button" data-move="left" class="dpad-left" aria-label="向左">◀</button>
+            <button type="button" data-move="down" class="dpad-down" aria-label="向下">▼</button>
+            <button type="button" data-move="right" class="dpad-right" aria-label="向右">▶</button>
+          </div>
+          <button type="button" class="action-button" id="touchAction" aria-label="行动">
+            <span class="action-leaf" aria-hidden="true">✿</span>
+            <span>行动</span>
+          </button>
+        </div>
+
+        <div class="control-legend" aria-hidden="true">
+          <span><b>WASD</b> 移动</span>
+          <span><b>E</b> 行动</span>
+          <span><b>B</b> 换种子</span>
+          <span><b>1–4</b> 工具</span>
+        </div>
+      </main>
+
+      <footer class="tool-dock">
+        <div class="toolbelt" id="toolbelt" role="toolbar" aria-label="工具与种子"></div>
+        <button type="button" class="seed-pouch" id="seedPouchButton" title="切换种子（B）">
+          <span class="seed-pouch-icon" aria-hidden="true">◒</span>
+          <span>
+            <small>当前种子</small>
+            <strong id="seedPouchLabel">白萝卜</strong>
+          </span>
+          <kbd>B</kbd>
+        </button>
+      </footer>
+    </div>
+
+    <div class="welcome-overlay" id="welcomeOverlay" role="dialog" aria-modal="true" aria-labelledby="welcomeTitle">
+      <div class="welcome-landscape" aria-hidden="true">
+        <div class="welcome-sun"></div>
+        <div class="welcome-hills welcome-hills--back"></div>
+        <div class="welcome-hills welcome-hills--front"></div>
+        <div class="welcome-house">
+          <div class="welcome-roof"></div>
+          <div class="welcome-wall"></div>
+          <div class="welcome-door"></div>
+        </div>
+        <div class="welcome-field"></div>
+      </div>
+
+      <div class="welcome-card">
+        <p class="welcome-kicker">RANCH LIFE · THE COMMON GROUND</p>
+        <h1 id="welcomeTitle">牧场生活<span>：共同体</span></h1>
+        <p class="welcome-lead">
+          你继承了一座濒临破产的边境牧场。旧水渠在地底沉默，<br class="desktop-only" />
+          村庄、公司与一台会记住你的机器，都在等一个决定。
+        </p>
+        <p class="welcome-goal">
+          从喂养三只动物开始。也许一条水渠，能通向比收成更远的地方。
+        </p>
+        <div class="welcome-actions">
+          <button type="button" class="button button--primary button--large" id="continueButton" hidden>
+            <span>继续农场生活</span>
+            <small id="continueMeta">第 1 天 · 06:00</small>
+          </button>
+          <button type="button" class="button button--ink button--large" id="newGameButton">
+            <span>开始新生活</span>
+            <small>从第一天开始</small>
+          </button>
+        </div>
+        <div class="welcome-controls">
+          <span><i>WASD</i> 走动</span>
+          <span><i>E</i> 使用工具</span>
+          <span><i>B</i> 选择种子</span>
+          <span><i>H</i> 牧心终端</span>
+        </div>
+      </div>
+      <p class="welcome-footnote">一个可完成的叙事垂直切片 · 进度自动保存在本机</p>
+    </div>
+
+    <div class="modal-layer" id="modalLayer" hidden>
+      <div class="modal-backdrop" data-close-modal></div>
+      <section
+        class="modal-card"
+        id="modalCard"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="modalTitle"
+      >
+        <button type="button" class="modal-close" id="modalClose" aria-label="关闭">×</button>
+        <div class="modal-heading">
+          <p class="modal-kicker" id="modalKicker">月溪手记</p>
+          <h2 id="modalTitle">今日清单</h2>
+        </div>
+        <div class="modal-body" id="modalBody"></div>
+        <div class="modal-footer" id="modalFooter"></div>
+      </section>
+    </div>
+
+    <div class="sr-only" id="liveRegion" aria-live="assertive"></div>
+
+    <script type="module" src="./js/game.js"></script>
+  </body>
+</html>
