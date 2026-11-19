@@ -33,6 +33,7 @@ import {
   resolveEnding,
   startBridgeQuest,
   sellAtMarket,
+  selectShippingRoute,
   shipProduce,
   settleShipping,
   switchScene,
@@ -768,6 +769,28 @@ test("shipping waits overnight and records cumulative settlement", () => {
   assert.ok(state.coins > before);
   assert.equal(state.shipping.totalUnits, 2);
   assert.equal(state.shipping.pending.length, 0);
+});
+
+test("shipping route delays arrival, charges a fee, and rejects a missed boat", () => {
+  const state = freshState();
+  state.inventory.produce.turnip = 3;
+  state.minutes = 9 * 60;
+  assert.equal(selectShippingRoute(state, "ocean").ok, true);
+  const consign = shipProduce(state, "ocean");
+  assert.equal(consign.ok, true);
+  assert.equal(consign.arrivalDay, 3);
+  const firstReport = advanceDay(state);
+  assert.equal(firstReport.shipping.delayed, true);
+  assert.equal(state.shipping.pending.length, 1);
+  state.inventory.produce.turnip = 1;
+  const missed = shipProduce(state, "ocean");
+  assert.equal(missed.ok, false);
+  assert.equal(state.inventory.produce.turnip, 1);
+  const secondReport = advanceDay(state);
+  assert.ok(secondReport.shipping.fee > 0);
+  assert.equal(state.shipping.pending.length, 0);
+  assert.equal(state.shipping.tripHistory[0].route, "ocean");
+  assert.ok(state.shipping.tripHistory[0].payout < state.shipping.tripHistory[0].gross);
 });
 
 test("accepted trade orders survive one night and expire with a penalty", () => {

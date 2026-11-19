@@ -2246,6 +2246,42 @@ export const WEEKLY_REQUEST_TEMPLATES = [
   },
 ];
 
+export const SHIPPING_ROUTES = {
+  cooperative: {
+    id: "cooperative",
+    name: "合作社慢船",
+    shortName: "合作社",
+    description: "每天上午 08:00 发船，价格稳定，手续费低。",
+    departMinute: 8 * 60,
+    arrivalDays: 1,
+    feeRate: 0.02,
+    priceMultiplier: 1,
+    risk: 0,
+  },
+  coastal: {
+    id: "coastal",
+    name: "近海快线",
+    shortName: "近海",
+    description: "每天中午 12:00 发船，第二天到港，价格略高、手续费中等。",
+    departMinute: 12 * 60,
+    arrivalDays: 1,
+    feeRate: 0.05,
+    priceMultiplier: 1.12,
+    risk: 0.08,
+  },
+  ocean: {
+    id: "ocean",
+    name: "远洋货轮",
+    shortName: "远洋",
+    description: "每天下午 16:00 发船，两天后到港，报价最高但会受市场波动影响。",
+    departMinute: 16 * 60,
+    arrivalDays: 2,
+    feeRate: 0.08,
+    priceMultiplier: 1.28,
+    risk: 0.22,
+  },
+};
+
 export const TIPS = [
   "浇水后的作物会在过夜时生长。雨天会自动浇灌所有田地。",
   "照料牲畜后，它们会在第二天留下鸡蛋、牛奶或羊毛。",

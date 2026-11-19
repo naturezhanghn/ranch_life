@@ -38,6 +38,7 @@ import {
   SEASON_DAYS,
   SEASONAL_CROP_CALENDAR,
   TOWN_EVENTS,
+  SHIPPING_ROUTES,
   WEEKLY_REQUEST_TEMPLATES,
   SPRITE_DEFS,
   TOOL_UPGRADE_LEVELS,
@@ -325,6 +326,9 @@ export function createInitialState() {
       totalUnits: 0,
       totalValue: 0,
       settlements: [],
+      selectedRoute: "cooperative",
+      trip: null,
+      tripHistory: [],
     },
     house: { level: 0, upgrades: {}, fridge: {}, storageSlots: 0, kitchen: false },
     forage: {
@@ -1402,10 +1406,26 @@ export function refillWaterAtCanal(state) {
   return { ok: true, message: `从旧水渠取了 ${amount} 格水。水面比记忆中低。` };
 }
 
-export function shipProduce(state) {
+export function selectShippingRoute(state, routeId) {
+  const route = SHIPPING_ROUTES[routeId];
+  if (!route) return { ok: false, message: "没有这条航运路线。" };
+  state.shipping.selectedRoute = routeId;
+  addMemory(state, `你把下一批出货安排在${route.name}：${route.description}`, "economy", 1);
+  return {
+    ok: true,
+    route,
+    message: state.shipping.trip
+      ? `下一批货物将走${route.name}；当前航次仍按原路线结算。`
+      : `已选择${route.name}，下一班船在 ${formatClock(route.departMinute)}。`,
+  };
+}
+
+export function shipProduce(state, routeId = state.shipping.selectedRoute) {
+  const route = SHIPPING_ROUTES[routeId] || SHIPPING_ROUTES.cooperative;
   let units = 0;
   let estimatedValue = 0;
   const consignments = [];
+  const consumed = [];
   const qualityCounts = {};
   for (const [qualityId, count] of Object.entries(state.inventory.qualityProduce || {})) {
     if (count <= 0) continue;
@@ -1413,7 +1433,7 @@ export function shipProduce(state) {
     if (!PRODUCTS[itemId] || !PRODUCT_QUALITY_MULTIPLIERS[quality]) continue;
     consignments.push({ itemId, quality, amount: count, unitPrice: qualityProductPrice(itemId, quality) });
     qualityCounts[itemId] = (qualityCounts[itemId] || 0) + count;
-    state.inventory.qualityProduce[qualityId] = 0;
+    consumed.push({ bucket: "qualityProduce", id: qualityId, amount: count });
   }
   for (const [itemId, count] of Object.entries(state.inventory.produce)) {
     if (count > 0) {
@@ -1421,17 +1441,16 @@ export function shipProduce(state) {
       if (!product) continue;
       const remainder = Math.max(0, count - (qualityCounts[itemId] || 0));
       if (!remainder) {
-        state.inventory.produce[itemId] = 0;
         continue;
       }
       consignments.push({ itemId, quality: null, amount: remainder, unitPrice: product.sellPrice });
-      state.inventory.produce[itemId] = 0;
+      consumed.push({ bucket: "produce", id: itemId, amount: remainder });
     }
   }
   for (const [itemId, count] of Object.entries(state.inventory.resources || {})) {
     if (count <= 0 || !MARKET_GOODS[itemId]) continue;
     consignments.push({ itemId, quality: null, amount: count, unitPrice: getMarketPrice(state, itemId) });
-    state.inventory.resources[itemId] = 0;
+    consumed.push({ bucket: "resources", id: itemId, amount: count });
   }
   for (const consignment of consignments) {
     units += consignment.amount;
@@ -1440,16 +1459,39 @@ export function shipProduce(state) {
   if (units === 0) {
     return { ok: false, message: "出货箱里还没有可以隔夜结算的农产品。" };
   }
+  const existingTrip = state.shipping.trip;
+  if (existingTrip && state.day >= existingTrip.departDay
+    && (state.day > existingTrip.departDay || state.minutes > existingTrip.departMinute)) {
+    return { ok: false, message: "这一班船已经离港，货物留在出货箱里，等下一班。" };
+  }
+  for (const item of consumed) {
+    state.inventory[item.bucket][item.id] = Math.max(0, (state.inventory[item.bucket][item.id] || 0) - item.amount);
+  }
+  let trip = existingTrip;
+  if (!trip) {
+    const departDay = state.minutes <= route.departMinute ? state.day : state.day + 1;
+    trip = {
+      routeId: route.id,
+      departDay,
+      departMinute: route.departMinute,
+      arrivalDay: departDay + route.arrivalDays,
+      manifest: [],
+    };
+    state.shipping.trip = trip;
+  }
+  trip.manifest.push(...consignments);
   state.shipping.pending.push(...consignments);
   state.shipping.dailyConsignedUnits += units;
   state.shipping.dailyConsignedValue += estimatedValue;
   bumpCounter(state, "shipped", units);
-  addMemory(state, `你把 ${units} 份农产品放进出货箱，估值 ${estimatedValue} 金，结算会在明早完成。`, "economy", 2);
+  addMemory(state, `你把 ${units} 份农产品放进出货箱，安排${route.name}，估值 ${estimatedValue} 金，预计第 ${trip.arrivalDay} 天到港。`, "economy", 2);
   return {
     ok: true,
-    message: `交付了 ${units} 份产品，估值 ${estimatedValue} 金。明早会在日结里到账。`,
+    message: `交付了 ${units} 份产品，估值 ${estimatedValue} 金。${route.name}预计第 ${trip.arrivalDay} 天到港。`,
     income: estimatedValue,
     units,
+    trip,
+    arrivalDay: trip.arrivalDay,
     tasks: checkDailyTasks(state),
   };
 }
@@ -2298,6 +2340,21 @@ function refreshMarket(state, report = null) {
 export function settleShipping(state, report) {
   const pending = state.shipping.pending || [];
   if (!pending.length) return { units: 0, value: 0, items: [] };
+  const trip = state.shipping.trip;
+  const route = SHIPPING_ROUTES[trip?.routeId] || SHIPPING_ROUTES.cooperative;
+  if (trip && state.day + 1 < trip.arrivalDay) {
+    if (report) {
+      report.shipping = {
+        units: 0,
+        value: 0,
+        items: [],
+        delayed: true,
+        route: route.name,
+        arrivalDay: trip.arrivalDay,
+      };
+    }
+    return { units: 0, value: 0, items: [], delayed: true, arrivalDay: trip.arrivalDay };
+  }
   let units = 0;
   let value = 0;
   const items = [];
@@ -2307,18 +2364,35 @@ export function settleShipping(state, report) {
     value += itemValue;
     items.push({ ...item, value: itemValue });
   }
-  state.coins += value;
-  state.stats.earned += value;
+  const volatility = route.risk
+    ? 1 + (nextRandom(state) * 2 - 1) * route.risk
+    : 1;
+  const gross = Math.max(0, Math.round(value * route.priceMultiplier * volatility));
+  const fee = Math.round(gross * route.feeRate);
+  const payout = Math.max(0, gross - fee);
+  state.coins += payout;
+  state.stats.earned += payout;
   state.shipping.totalUnits += units;
-  state.shipping.totalValue += value;
-  state.shipping.settlements.unshift({ day: state.day, units, value });
+  state.shipping.totalValue += payout;
+  state.shipping.settlements.unshift({ day: state.day, units, value: payout, gross, fee, route: route.id });
   state.shipping.settlements = state.shipping.settlements.slice(0, 12);
   state.shipping.pending = [];
+  state.shipping.trip = null;
   state.shipping.dailyConsignedUnits = 0;
   state.shipping.dailyConsignedValue = 0;
-  addMemory(state, `隔夜出货箱结算了 ${units} 份产品，共 ${value} 金。稳定的收入也需要等到第二天才真正到账。`, "economy", 3);
-  if (report) report.shipping = { units, value, items };
-  return { units, value, items };
+  state.shipping.tripHistory.unshift({
+    day: state.day,
+    route: route.id,
+    routeName: route.name,
+    units,
+    gross,
+    fee,
+    payout,
+  });
+  state.shipping.tripHistory = state.shipping.tripHistory.slice(0, 12);
+  addMemory(state, `${route.name}结算了 ${units} 份产品：毛收入 ${gross} 金，手续费 ${fee} 金，到账 ${payout} 金。`, "economy", 3);
+  if (report) report.shipping = { units, value: payout, gross, fee, route: route.name, items };
+  return { units, value: payout, gross, fee, items };
 }
 
 export function upgradeHouse(state) {
@@ -3038,6 +3112,13 @@ export function loadGame() {
         ...(parsed.shipping || {}),
         pending: Array.isArray(parsed.shipping?.pending) ? parsed.shipping.pending : base.shipping.pending,
         settlements: Array.isArray(parsed.shipping?.settlements) ? parsed.shipping.settlements : base.shipping.settlements,
+        tripHistory: Array.isArray(parsed.shipping?.tripHistory)
+          ? parsed.shipping.tripHistory
+          : base.shipping.tripHistory,
+        trip: parsed.shipping?.trip || null,
+        selectedRoute: SHIPPING_ROUTES[parsed.shipping?.selectedRoute]
+          ? parsed.shipping.selectedRoute
+          : base.shipping.selectedRoute,
       },
       house: { ...base.house, ...(parsed.house || {}), upgrades: { ...base.house.upgrades, ...(parsed.house?.upgrades || {}) }, fridge: { ...base.house.fridge, ...(parsed.house?.fridge || {}) } },
       forage: {

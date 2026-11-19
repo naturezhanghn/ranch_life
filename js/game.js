@@ -29,6 +29,7 @@ import {
   SCENE_INTERACTIONS,
   SCENE_NPCS,
   SCENE_REGION_MAP,
+  SHIPPING_ROUTES,
   scheduledNpcPositions,
   SHOP_SEEDS,
   SPRITE_DEFS,
@@ -101,6 +102,7 @@ import {
   startBridgeQuest,
   saveGame,
   sellAtMarket,
+  selectShippingRoute,
   shipProduce,
   switchScene,
   switchRegion,
@@ -2913,6 +2915,7 @@ function showDaySummary(report, nextEvent = null, auto = false) {
           : ""
       }
       ${report.shipping?.units ? `<div class="day-report-card"><strong>出货箱结算</strong><span>昨日交付 ${report.shipping.units} 份，到账 ${report.shipping.value} 金。</span></div>` : ""}
+      ${report.shipping?.delayed ? `<div class="day-report-card"><strong>${report.shipping.route} · 在途</strong><span>这批货物还在海上，预计第 ${report.shipping.arrivalDay} 天到港。货物留在出货箱记录里，不会丢失。</span></div>` : ""}
       ${report.dailyTasks ? `<div class="day-report-card"><strong>今日清单</strong><span>完成 ${report.dailyTasks.completed.length} 项，未完成 ${report.dailyTasks.incomplete.length} 项，已获得 ${report.dailyTasks.reward} 金。${report.dailyTasks.incomplete.length ? "未完成：" + report.dailyTasks.incomplete.map((task) => task.text + "（" + task.progress + "/" + task.target + "）").join("、") : "明天继续保持这个节奏。"}</span></div>` : ""}
       ${report.forageStats?.spawned || report.forageStats?.collected || report.forageStats?.expired ? `<div class="day-report-card"><strong>${report.forageStats.window ? "雨后采集" : "季节山货"}</strong><span>新出现 ${report.forageStats.spawned} 个节点，采到 ${report.forageStats.collected} 个，过期 ${report.forageStats.expired} 个。${report.forageStats.window ? "雨后窗口只开放到上午九点。" : ""}</span></div>` : ""}
       ${report.livestock?.length ? `<div class="day-report-card"><strong>牲畜日结</strong><span>${report.livestock.map((animal) => `${animal.name} · ${animal.sick ? "生病" : animal.unhappy ? "不开心" : "状态稳定"} · 健康 ${Math.round(animal.health)} · 亲密 ${Math.round(animal.affection)} · 放牧 ${Math.round(animal.outdoorMinutes)} 分钟`).join("；")}</span></div>` : ""}
@@ -3036,6 +3039,17 @@ function openShippingBin() {
       }, 0) + Object.entries(state.inventory.resources || {}).reduce((sum, [id, count]) => sum + count * getMarketPrice(state, id), 0)
     : 0;
   const pendingValue = state.shipping.pending.reduce((sum, item) => sum + item.amount * item.unitPrice, 0);
+  const routeButtons = Object.values(SHIPPING_ROUTES).map((route) => `
+    <button type="button" class="route-choice ${state.shipping.selectedRoute === route.id ? "is-active" : ""}" data-action="selectShippingRoute" data-value="${route.id}">
+      <strong>${route.shortName}</strong>
+      <span>${formatClock(route.departMinute)} 发船 · ${route.arrivalDays} 天到港 · 手续费 ${Math.round(route.feeRate * 100)}%</span>
+      <small>${route.description}</small>
+    </button>
+  `).join("");
+  const trip = state.shipping.trip;
+  const tripNote = trip
+    ? `${SHIPPING_ROUTES[trip.routeId]?.name || "当前航次"} · ${formatClock(trip.departMinute)} 发船 · 第 ${trip.arrivalDay} 天到港 · 已装 ${trip.manifest?.reduce((sum, item) => sum + item.amount, 0) || 0} 份`
+    : "还没有在途航次。选择一条路线后，出货箱会在下一班船发出。";
   openModal({
     kicker: "牧场合作社 · 出货箱",
     title: "把今天的收成交给明天",
@@ -3045,6 +3059,11 @@ function openShippingBin() {
         <span>今日待交付估值</span>
         <strong>✦ ${total}</strong>
         <span>已在箱内待结算 ✦ ${pendingValue}</span>
+      </div>
+      <div class="shipping-route-panel">
+        <div class="section-title">选择下一班船</div>
+        <div class="shipping-route-grid">${routeButtons}</div>
+        <div class="weather-note">${tripNote}</div>
       </div>
       <div class="shop-grid">
         ${rows.join("") || '<div class="empty-note">出货箱里还空着。收获作物或照料牲畜后再来看看。</div>'}
@@ -3077,7 +3096,7 @@ function doShipping() {
   saveGame(state);
   updateHUD(true);
   closeModal();
-  showToast(result.message, { strong: "合作社结算", duration: 4200 });
+  showToast(result.message, { strong: "航运排期", duration: 4200 });
 }
 
 function openMenu() {
@@ -3330,6 +3349,19 @@ function handleModalClick(event) {
       shopTab = value;
       openShop();
       break;
+    case "selectShippingRoute": {
+      const result = selectShippingRoute(state, value);
+      if (result.ok) {
+        audio.play("ui");
+        showToast(result.message, { strong: "航运路线" });
+        saveGame(state);
+        openShippingBin();
+      } else {
+        audio.play("error");
+        showToast(result.message, { strong: "航运路线" });
+      }
+      break;
+    }
     case "shipProduce":
       doShipping();
       break;
