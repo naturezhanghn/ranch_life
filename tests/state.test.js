@@ -17,6 +17,7 @@ import {
   getClueCount,
   getTargetPlot,
   getBagUsage,
+  loadGame,
   investInCity,
   recruitSprite,
   recordClue,
@@ -235,6 +236,8 @@ test("rain forage nodes expire, collect once, and feed the day report", () => {
   assert.equal(first.ok, true);
   assert.equal(first.combo, 1);
   assert.equal(state.energy, energyBefore - 1);
+  assert.equal(state.minutes, DAY_START_MINUTES + 8);
+  assert.equal(state.relations.ecology, 51);
   assert.equal(state.daily.counters.foraged, 1);
   const memoryCount = state.ai.memories.length;
   const second = collectForage(state, node.id);
@@ -242,6 +245,8 @@ test("rain forage nodes expire, collect once, and feed the day report", () => {
   assert.equal(state.energy, energyBefore - 1);
   assert.equal(state.ai.memories.length, memoryCount);
   assert.equal(state.forage.claimedNodeIds.includes(node.id), true);
+  const nextReport = advanceDay(state);
+  assert.equal(nextReport.forageStats.collected, 1);
 });
 
 test("expired forage gives feedback without spending energy", () => {
@@ -292,6 +297,45 @@ test("forage node identity stays separate from item identity", () => {
   assert.equal(collectForage(state, "forage").ok, true);
   assert.equal(state.forage.claimedNodeIds.length, 2);
   assert.equal(state.inventory.resources.spring_herb, 2);
+});
+
+test("legacy forage saves keep only the current-day available node", () => {
+  const previousStorage = globalThis.localStorage;
+  const legacy = createInitialState();
+  legacy.day = 4;
+  legacy.season = "春";
+  legacy.forage = {
+    available: ["spring_herb"],
+    collected: {},
+    lastRefreshDay: 4,
+  };
+  globalThis.localStorage = {
+    getItem: () => JSON.stringify(legacy),
+    setItem: () => {},
+    removeItem: () => {},
+  };
+  const loaded = loadGame();
+  assert.equal(loaded.forage.nodes.length, 1);
+  assert.equal(loaded.forage.nodes[0].expiresDay, 4);
+  assert.equal(loaded.forage.legacyMigrated, true);
+  legacy.forage = {
+    available: ["spring_herb"],
+    collected: {},
+    lastRefreshDay: 4,
+    nodes: [{
+      id: "old-node",
+      interactionId: "forage",
+      scene: "farm",
+      x: 610,
+      y: 180,
+      itemId: "spring_herb",
+      expiresDay: 0,
+      claimed: false,
+    }],
+  };
+  const loadedBuggyNode = loadGame();
+  assert.equal(loadedBuggyNode.forage.nodes[0].expiresDay, 4);
+  globalThis.localStorage = previousStorage;
 });
 
 test("cooperative, oversight, complete evidence yields common-ground ending", () => {
