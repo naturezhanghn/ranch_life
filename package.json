@@ -6,6 +6,7 @@
   "description": "Ranch Life: The Common Ground — a browser-based narrative farming vertical slice.",
   "scripts": {
     "serve": "python3 -m http.server 4173",
+    "build": "npm run check && npm test",
     "check": "node --check js/data.js && node --check js/state.js && node --check js/audio.js && node --check js/renderer.js && node --check js/game.js",
     "test": "node tests/state.test.js",
     "story-paths": "node tools/story_paths.js",

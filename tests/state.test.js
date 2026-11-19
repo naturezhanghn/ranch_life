@@ -1,16 +1,25 @@
 import assert from "node:assert/strict";
-import { CROPS, WORLD } from "../js/data.js";
+import { CROPS, TRADE_CONTRACTS, WORLD } from "../js/data.js";
 import {
   advanceDay,
   applyDevelopmentChoice,
   applyDroughtChoice,
   applyGovernanceChoice,
+  acceptTradeContract,
+  assignSprite,
   createInitialState,
+  enactGovernmentPolicy,
+  exploreIsland,
+  fulfillTradeContract,
   feedAnimal,
   getClueCount,
   getTargetPlot,
+  investInCity,
+  recruitSprite,
   recordClue,
   resolveEnding,
+  sellAtMarket,
+  switchRegion,
   useToolOnPlot,
 } from "../js/state.js";
 
@@ -220,6 +229,51 @@ test("crop data keeps a meaningful high-investment option", () => {
   assert.equal(sorted[0].id, "turnip");
   assert.equal(sorted.at(-1).id, "strawberry");
   assert.ok(sorted.at(-1).value > sorted[0].value * 1.5);
+});
+
+test("city ferry unlocks a repeatable island exploration route", () => {
+  const state = freshState();
+  assert.equal(investInCity(state, "ferry").ok, true);
+  assert.equal(switchRegion(state, "island").ok, true);
+  const result = exploreIsland(state, "tidePool");
+  assert.equal(result.ok, true);
+  assert.equal(state.inventory.resources.seaweed, 3);
+  assert.equal(exploreIsland(state, "tidePool").ok, false);
+  advanceDay(state);
+  assert.equal(exploreIsland(state, "tidePool").ok, true);
+});
+
+test("dynamic trade contracts consume resources and pay reputation", () => {
+  const state = freshState();
+  state.inventory.resources.seaweed = 3;
+  state.inventory.resources.coconut = 2;
+  const contract = {
+    ...TRADE_CONTRACTS.find((entry) => entry.id === "island-kitchen"),
+    requirements: { seaweed: 3, coconut: 2 },
+    accepted: false,
+    completed: false,
+  };
+  state.market.contracts = [contract];
+  assert.equal(acceptTradeContract(state, contract.id).ok, true);
+  const before = state.coins;
+  assert.equal(fulfillTradeContract(state, contract.id).ok, true);
+  assert.equal(state.coins, before + contract.reward);
+  assert.equal(state.stats.contractsFulfilled, 1);
+  assert.equal(state.market.reputation, contract.reputation);
+});
+
+test("government policies and sprite assignments create daily automation", () => {
+  const state = freshState();
+  assert.equal(enactGovernmentPolicy(state, "waterCharter").ok, true);
+  assert.equal(state.maxWater, 27);
+  assert.equal(recruitSprite(state, "ember").ok, false);
+  assert.equal(assignSprite(state, "seedling", "watering").ok, true);
+  standAtPlot(state, 0, 0);
+  useToolOnPlot(state, "hoe");
+  useToolOnPlot(state, "seed");
+  const report = advanceDay(state);
+  assert.ok(report.helperActions.some((entry) => entry.includes("露水")));
+  assert.equal(state.plots[0].growth, 1);
 });
 
 console.log(`\n${passed} state tests passed.`);

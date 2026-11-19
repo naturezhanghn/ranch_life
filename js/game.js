@@ -1,13 +1,19 @@
 import {
   ANIMAL_DEFS,
   CANAL_LORE,
+  CITY_PROJECTS,
   CROPS,
   ELDER_DIALOGUE,
   ENDINGS,
+  GOVERNMENT_POLICIES,
+  ISLAND_SPOTS,
+  MARKET_GOODS,
   INTERACTIONS,
   PRODUCTS,
+  REGIONS,
   REAL_SECONDS_PER_GAME_MINUTE,
   SHOP_SEEDS,
+  SPRITE_DEFS,
   STORY_OBJECTIVES,
   TIPS,
   TOOLS,
@@ -19,6 +25,8 @@ import {
   applyDevelopmentChoice,
   applyDroughtChoice,
   applyGovernanceChoice,
+  acceptTradeContract,
+  assignSprite,
   buyFeed,
   buySeed,
   checkDailyTasks,
@@ -29,14 +37,23 @@ import {
   formatClock,
   getAiPrediction,
   getClueCount,
+  getMarketPrice,
   getTargetPlot,
+  enactGovernmentPolicy,
+  exploreIsland,
+  fulfillTradeContract,
+  holdTownHall,
+  investInCity,
   loadGame,
+  recruitSprite,
   recordClue,
   recordTalk,
   refillWaterAtCanal,
   resolveEnding,
   saveGame,
+  sellAtMarket,
   shipProduce,
+  switchRegion,
   useToolOnPlot,
 } from "./state.js";
 import { FarmAudio } from "./audio.js";
@@ -55,6 +72,8 @@ const dom = {
   dayNumber: document.getElementById("dayNumber"),
   clock: document.getElementById("clock"),
   weatherLabel: document.getElementById("weatherLabel"),
+  regionChip: document.getElementById("regionChip"),
+  regionNav: document.getElementById("regionNav"),
   coinCount: document.getElementById("coinCount"),
   energyText: document.getElementById("energyText"),
   energyFill: document.getElementById("energyFill"),
@@ -99,6 +118,7 @@ let state = loadGame() || createInitialState();
 let active = false;
 let modalOpen = false;
 let modalClosable = true;
+let regionPanelOpen = false;
 let pendingMorningEvent = null;
 let shopTab = "seeds";
 let lastTimestamp = 0;
@@ -115,6 +135,7 @@ const runtime = {
   walkPhase: 0,
   targetPlot: null,
   nearInteraction: null,
+  effects: [],
 };
 
 audio.setEnabled(state.settings.sound);
@@ -134,6 +155,31 @@ function clamp(value, min, max) {
 
 function percent(value) {
   return `${clamp(value, 0, 100)}%`;
+}
+
+function triggerEffect(type, x = state.player.x, y = state.player.y) {
+  runtime.effects.push({ type, x, y, life: 1, seed: Math.random() });
+  if (runtime.effects.length > 24) runtime.effects.shift();
+}
+
+function regionLabel(regionId) {
+  return REGIONS[regionId]?.shortName || REGIONS.farm.shortName;
+}
+
+function regionStatus(regionId) {
+  return state.world.unlockedRegions.includes(regionId) ? "已开放" : "需建设渡轮";
+}
+
+function renderRegionNav() {
+  if (!dom.regionNav) return;
+  dom.regionNav.querySelectorAll("[data-region]").forEach((button) => {
+    const regionId = button.dataset.region;
+    const unlocked = state.world.unlockedRegions.includes(regionId);
+    button.classList.toggle("is-active", state.world.activeRegion === regionId);
+    button.classList.toggle("is-locked", !unlocked);
+    button.disabled = !active;
+    button.title = unlocked ? `${REGIONS[regionId].name} · 打开界面` : `${REGIONS[regionId].name} · ${regionStatus(regionId)}`;
+  });
 }
 
 function speakerBlock({ name, role, avatar = "", text, ai = false }) {
@@ -232,13 +278,20 @@ function openModal({
 }
 
 function closeModal() {
+  const wasRegionPanel = regionPanelOpen;
   dom.modalLayer.hidden = true;
   dom.modalBody.innerHTML = "";
   dom.modalFooter.innerHTML = "";
   modalOpen = false;
+  regionPanelOpen = false;
   document.body.classList.remove("modal-open");
   pendingMorningEvent = null;
   dom.liveRegion.textContent = "";
+  if (wasRegionPanel && state?.world) {
+    state.world.activeRegion = "farm";
+    updateHUD(true);
+    saveGame(state);
+  }
 }
 
 function refreshWelcome() {
@@ -262,6 +315,7 @@ function beginPlay({ fresh = false, loadedState = null } = {}) {
   } else if (loadedState) {
     state = loadedState;
   }
+  if (state.world) state.world.activeRegion = "farm";
   active = true;
   inputLocked = false;
   audio.setEnabled(state.settings.sound);
@@ -315,6 +369,10 @@ function updateHUD(force = false) {
   dom.clock.textContent = formatClock(state.minutes);
   dom.weatherLabel.classList.toggle("is-rain", state.weather === "rain");
   dom.weatherLabel.innerHTML = `<span class="weather-icon" aria-hidden="true">${weather.icon}</span><span>${weather.label}</span>`;
+  const region = REGIONS[state.world.activeRegion] || REGIONS.farm;
+  dom.regionChip.innerHTML = `<span aria-hidden="true">${region.icon}</span><span>${region.shortName}</span>`;
+  dom.regionChip.className = `region-chip region-chip--${region.accent}`;
+  renderRegionNav();
   dom.coinCount.textContent = Math.floor(state.coins);
   dom.energyText.textContent = Math.ceil(state.energy);
   dom.energyFill.style.width = percent((state.energy / state.maxEnergy) * 100);
@@ -602,9 +660,12 @@ function performAction() {
   }
 
   const tool = state.selectedTool;
+  const effectX = state.player.x;
+  const effectY = state.player.y;
   const result = useToolOnPlot(state, tool);
   if (result.ok) {
     audio.play(tool);
+    triggerEffect(tool === "harvest" ? "harvest" : tool === "water" ? "water" : "soil", effectX, effectY);
     showToast(result.message);
   } else {
     audio.play("error");
@@ -1054,6 +1115,280 @@ function openSeedPouch() {
     `,
     footer: `<button type="button" class="button button--ghost" data-action="close">收起种子袋</button>`,
   });
+}
+
+function inventoryQuantity(itemId) {
+  return (state.inventory.produce[itemId] || 0) + (state.inventory.resources[itemId] || 0);
+}
+
+function formatRequirements(requirements) {
+  return Object.entries(requirements)
+    .map(([itemId, amount]) => `${MARKET_GOODS[itemId]?.name || itemId} × ${amount}`)
+    .join(" · ");
+}
+
+function regionHero(regionId, detail, metricMarkup = "") {
+  const region = REGIONS[regionId];
+  return `
+    <div class="region-hero region-hero--${region.accent}">
+      <div class="region-hero-icon" aria-hidden="true">${region.icon}</div>
+      <div>
+        <p>${region.kicker}</p>
+        <h3>${region.name}</h3>
+        <span>${detail || region.description}</span>
+      </div>
+    </div>
+    ${metricMarkup ? `<div class="region-metric-grid">${metricMarkup}</div>` : ""}
+  `;
+}
+
+function regionMetric(label, value, tone = "") {
+  return `<div class="region-metric"><span>${label}</span><strong class="${tone}">${value}</strong></div>`;
+}
+
+function renderCityPanel() {
+  const projects = Object.values(CITY_PROJECTS)
+    .map((project) => {
+      const built = Boolean(state.city.projects[project.id]);
+      return `
+        <article class="region-card project-card ${built ? "is-complete" : ""}">
+          <div class="region-card-icon" aria-hidden="true">${project.icon}</div>
+          <div class="region-card-copy">
+            <strong>${project.title}</strong>
+            <span>${project.description}</span>
+          </div>
+          <button type="button" class="shop-buy" data-action="cityProject" data-value="${project.id}" ${built || state.coins < project.cost ? "disabled" : ""}>
+            ${built ? "已建成" : `✦ ${project.cost}`}
+          </button>
+        </article>
+      `;
+    })
+    .join("");
+  return `
+    ${regionHero("city", "河港市把你的农产品、城市项目和公共生活放在同一张地图上。", [
+      regionMetric("城市声誉", Math.round(state.city.reputation)),
+      regionMetric("项目进度", `${Object.values(state.city.projects).filter(Boolean).length} / 4`),
+      regionMetric("公民点", Math.round(state.government.civicPoints), "is-gold"),
+    ].join(""))}
+    <div class="region-section-heading"><span>城市建设</span><small>钱包 ✦ ${Math.floor(state.coins)}</small></div>
+    <div class="region-card-grid">${projects}</div>
+    <div class="region-callout region-callout--city">
+      <div><strong>今天去市民议事厅</strong><span>听完不同意见，获得公共决策需要的公民点。</span></div>
+      <button type="button" class="button button--secondary" data-action="townHall" ${state.city.lastTownHallDay === state.day ? "disabled" : ""}>
+        ${state.city.lastTownHallDay === state.day ? "今日已议事" : "参加议事"}
+      </button>
+    </div>
+    <div class="region-note">修好蓝潮渡轮后，海岛界面会变成一条可重复探索的潮汐路线。社区诊所会把每一天的体力上限提高到更适合长线经营的水平。</div>
+  `;
+}
+
+function renderIslandPanel() {
+  const unlocked = state.world.unlockedRegions.includes("island");
+  if (!unlocked) {
+    return `
+      ${regionHero("island", "码头还没有修好。城市里的渡轮项目会把这里从一张旧海图变成可玩的日常路线。")}
+      <div class="region-locked-card">
+        <div class="region-locked-icon" aria-hidden="true">⌁</div>
+        <h3>潮汐路线尚未开放</h3>
+        <p>在城市投资 <strong>蓝潮渡轮</strong> 需要 120 金。建成后，你可以每天选择不同海岸探索，并把海岛资源带入贸易航线。</p>
+        <button type="button" class="button button--primary" data-action="regionSwitch" data-value="city">去城市修渡轮</button>
+      </div>
+    `;
+  }
+  const spots = Object.values(ISLAND_SPOTS)
+    .map((spot) => {
+      const found = Boolean(state.island.dailyFinds[spot.id]);
+      const total = inventoryQuantity(spot.resource);
+      return `
+        <article class="region-card island-spot-card ${found ? "is-complete" : ""}">
+          <div class="region-card-icon region-card-icon--water" aria-hidden="true">${spot.icon}</div>
+          <div class="region-card-copy">
+            <strong>${spot.title}</strong>
+            <span>${spot.description}</span>
+            <small>预计 ${spot.energy} 体力 · ${MARKET_GOODS[spot.resource].name} × ${spot.amount}${state.government.policies.islandSanctuary ? " +保育奖励" : ""} · 持有 ${total}</small>
+          </div>
+          <button type="button" class="shop-buy" data-action="islandExplore" data-value="${spot.id}" ${found || state.energy < spot.energy ? "disabled" : ""}>
+            ${found ? "已探索" : "出发"}
+          </button>
+        </article>
+      `;
+    })
+    .join("");
+  return `
+    ${regionHero("island", "每一次探索都消耗当天的体力，但会留下可用于高价订单的海岛资源。", [
+      regionMetric("今日远足", `${Object.keys(state.island.dailyFinds).length} / ${Object.keys(ISLAND_SPOTS).length}`),
+      regionMetric("累计远征", state.island.expeditions),
+      regionMetric("稀有发现", state.inventory.resources.pearl || 0, "is-gold"),
+    ].join(""))}
+    <div class="region-section-heading"><span>选择潮汐路线</span><small>体力 ${Math.ceil(state.energy)} / ${state.maxEnergy}</small></div>
+    <div class="region-card-grid">${spots}</div>
+    <div class="region-note">海岛保育区政策会让每个地点多产出一份资源。潮潮负责“海岛探索”时，每天还会带回一份海藻或椰子。</div>
+  `;
+}
+
+function renderTradePanel() {
+  const trendLabel = { rising: "整体上涨", falling: "整体回落", steady: "小幅波动" }[state.market.trend] || "小幅波动";
+  const goods = Object.values(MARKET_GOODS)
+    .map((good) => {
+      const quantity = inventoryQuantity(good.id);
+      const price = getMarketPrice(state, good.id);
+      return `
+        <div class="market-row">
+          <span class="market-icon" aria-hidden="true">${good.icon}</span>
+          <span class="market-good"><strong>${good.name}</strong><small>${good.source} · 基准 ${good.basePrice} 金</small></span>
+          <span class="market-price"><strong>✦ ${price}</strong><small>${state.market.prices[good.id] >= good.basePrice ? "需求偏高" : "需求偏低"}</small></span>
+          <span class="market-stock">× ${quantity}</span>
+          <button type="button" class="shop-buy" data-action="marketSell" data-value="${good.id}" ${quantity <= 0 ? "disabled" : ""}>卖 1</button>
+        </div>
+      `;
+    })
+    .join("");
+  const contracts = state.market.contracts
+    .map((contract) => {
+      const canDeliver = Object.entries(contract.requirements).every(([itemId, amount]) => inventoryQuantity(itemId) >= amount);
+      const status = contract.completed ? "已完成" : contract.accepted ? "进行中" : "未接取";
+      return `
+        <article class="contract-card ${contract.completed ? "is-complete" : contract.accepted ? "is-active" : ""}">
+          <div class="contract-topline"><strong>${contract.title}</strong><span>${status}</span></div>
+          <p>${contract.description}</p>
+          <small>${contract.client} · 需求 ${formatRequirements(contract.requirements)}</small>
+          <div class="contract-footer"><b>奖励 ✦ ${contract.reward} · 声誉 +${contract.reputation}</b>
+            ${contract.completed ? "" : contract.accepted ? `<button type="button" class="shop-buy" data-action="tradeFulfill" data-value="${contract.id}" ${canDeliver ? "" : "disabled"}>交付</button>` : `<button type="button" class="shop-buy" data-action="tradeAccept" data-value="${contract.id}">接单</button>`}
+          </div>
+        </article>
+      `;
+    })
+    .join("");
+  return `
+    ${regionHero("trade", "港口价格每天刷新。普通出货箱保证稳定，贸易航线承担波动，也提供更高的上限。", [
+      regionMetric("市场风向", trendLabel),
+      regionMetric("航线声誉", Math.round(state.market.reputation), "is-gold"),
+      regionMetric("累计交付", state.market.shipments),
+    ].join(""))}
+    <div class="region-section-heading"><span>今日报价</span><small>第 ${state.market.lastRefreshDay} 天刷新</small></div>
+    <div class="market-table">${goods}</div>
+    <div class="region-section-heading"><span>港口订单</span><small>最多同时接两单</small></div>
+    <div class="contract-grid">${contracts || '<div class="empty-note">今天还没有新的订单。</div>'}</div>
+    <div class="region-note">小精灵金穗负责贸易时，每天都会整理一条航线。公平贸易条例会提高低价时的保护线。</div>
+  `;
+}
+
+function renderGovernmentPanel() {
+  const policies = Object.values(GOVERNMENT_POLICIES)
+    .map((policy) => {
+      const activePolicy = Boolean(state.government.policies[policy.id]);
+      return `
+        <article class="region-card policy-card ${activePolicy ? "is-complete" : ""}">
+          <div class="region-card-icon region-card-icon--ink" aria-hidden="true">${policy.icon}</div>
+          <div class="region-card-copy"><strong>${policy.title}</strong><span>${policy.description}</span></div>
+          <button type="button" class="shop-buy" data-action="enactPolicy" data-value="${policy.id}" ${activePolicy || state.government.civicPoints < policy.cost ? "disabled" : ""}>
+            ${activePolicy ? "已生效" : `公民点 ${policy.cost}`}
+          </button>
+        </article>
+      `;
+    })
+    .join("");
+  return `
+    ${regionHero("government", "政府界面把关系、资源和小精灵的权益写成可执行的公共规则。", [
+      regionMetric("公民点", Math.round(state.government.civicPoints), "is-gold"),
+      regionMetric("已通过政策", Object.values(state.government.policies).filter(Boolean).length),
+      regionMetric("社区信任", Math.round(state.relations.community)),
+    ].join(""))}
+    <div class="region-callout region-callout--government">
+      <div><strong>市民议事厅</strong><span>今天 ${state.government.lastSessionDay === state.day ? "已经开过会" : "还可以开会"}。听取异议会让政策更有根。</span></div>
+      <button type="button" class="button button--secondary" data-action="townHall" ${state.government.lastSessionDay === state.day ? "disabled" : ""}>召开议事</button>
+    </div>
+    <div class="region-section-heading"><span>公共政策</span><small>政策会持续生效</small></div>
+    <div class="region-card-grid">${policies}</div>
+    <div class="region-note">公民点来自完成每日清单、与村民交流和交付贸易订单。它不消耗金币，代表的是愿意坐下来处理共同问题的时间。</div>
+  `;
+}
+
+function renderSpritesPanel() {
+  const roleLabels = { watering: "田地", animals: "牲畜", trade: "贸易", island: "海岛" };
+  const assignments = state.sprites.assignments || {};
+  const roleButtons = (spriteId) => Object.entries(roleLabels)
+    .map(([role, label]) => `<button type="button" class="sprite-role ${assignments[role] === spriteId ? "is-active" : ""}" data-action="spriteAssign" data-value="${spriteId}|${role}">${label}</button>`)
+    .join("");
+  const roster = Object.values(SPRITE_DEFS)
+    .map((sprite) => {
+      const unlocked = state.sprites.unlocked.includes(sprite.id);
+      return `
+        <article class="sprite-card ${unlocked ? "is-unlocked" : "is-locked"}" style="--sprite-color:${sprite.color}">
+          <div class="sprite-avatar" aria-hidden="true">${sprite.icon}</div>
+          <div class="sprite-copy"><strong>${sprite.name}</strong><span>${sprite.talent}</span><small>${unlocked ? `友好度 ${state.sprites.friendship[sprite.id] || 0}` : sprite.unlockText}</small></div>
+          ${unlocked ? `<div class="sprite-roles">${roleButtons(sprite.id)}</div>` : `<button type="button" class="shop-buy" data-action="spriteRecruit" data-value="${sprite.id}" ${state.coins < sprite.cost ? "disabled" : ""}>${sprite.cost ? `邀请 ✦ ${sprite.cost}` : "遇见"}</button>`}
+        </article>
+      `;
+    })
+    .join("");
+  return `
+    ${regionHero("sprites", "小精灵的工作不是替你完成游戏，而是让每天的选择有更多组合。", [
+      regionMetric("伙伴数量", state.sprites.unlocked.length),
+      regionMetric("派遣次数", state.sprites.dispatches),
+      regionMetric("自动劳动", Object.values(assignments).filter(Boolean).length, "is-gold"),
+    ].join(""))}
+    <div class="sprite-workboard">
+      <span>当前分工</span>
+      <div>${Object.entries(roleLabels).map(([role, label]) => `<b>${label} · ${assignments[role] ? SPRITE_DEFS[assignments[role]].name : "空缺"}</b>`).join("")}</div>
+    </div>
+    <div class="region-section-heading"><span>工坊名册</span><small>点击分工按钮即可重新安排</small></div>
+    <div class="sprite-roster">${roster}</div>
+    <div class="region-note">芽芽负责田地，烬烬照料牲畜，金穗整理贸易，潮潮探索海岛。每只精灵每天都会因为与你一起生活而成长。</div>
+  `;
+}
+
+function renderRegionBody(regionId) {
+  if (regionId === "city") return renderCityPanel();
+  if (regionId === "island") return renderIslandPanel();
+  if (regionId === "trade") return renderTradePanel();
+  if (regionId === "government") return renderGovernmentPanel();
+  if (regionId === "sprites") return renderSpritesPanel();
+  return `${regionHero("farm", "界面已经切回牧场。关闭这张世界卡片，继续用 WASD 走动。")}<div class="region-callout"><div><strong>回到土地</strong><span>日常操作会让城市、贸易、政府和小精灵系统持续产生变化。</span></div><button type="button" class="button button--primary" data-action="close">继续走动</button></div>`;
+}
+
+function openRegionHub(regionId = state.world.activeRegion) {
+  const region = REGIONS[regionId] || REGIONS.farm;
+  if (regionId === "farm") {
+    if (modalOpen) closeModal();
+    state.world.activeRegion = "farm";
+    updateHUD(true);
+    triggerEffect("travel", state.player.x, state.player.y);
+    showToast("回到月溪牧场。土地、牲畜和今天的时间都在等你。", { strong: "世界导航" });
+    saveGame(state);
+    return;
+  }
+  if (!state.world.unlockedRegions.includes(regionId)) {
+    regionPanelOpen = true;
+    openModal({
+      kicker: region.kicker,
+      title: region.name,
+      wide: true,
+      body: renderRegionBody(regionId),
+      footer: `<button type="button" class="button button--ghost" data-action="close">返回当前界面</button>`,
+    });
+    return;
+  }
+  if (state.world.activeRegion !== regionId) switchRegion(state, regionId);
+  regionPanelOpen = true;
+  document.body.classList.add("region-switching");
+  window.setTimeout(() => document.body.classList.remove("region-switching"), 360);
+  saveGame(state);
+  updateHUD(true);
+  openModal({
+    kicker: region.kicker,
+    title: region.name,
+    wide: true,
+    body: renderRegionBody(regionId),
+    footer: `<span class="pause-label">世界界面 · 时间已暂停</span><button type="button" class="button button--ghost" data-action="close">返回牧场</button>`,
+  });
+}
+
+function refreshRegionPanel(message = "") {
+  if (message) showToast(message, { strong: regionLabel(state.world.activeRegion) });
+  saveGame(state);
+  updateHUD(true);
+  openRegionHub(state.world.activeRegion);
 }
 
 function openArchive() {
@@ -2096,6 +2431,110 @@ function handleModalClick(event) {
       }
       break;
     }
+    case "regionSwitch":
+      openRegionHub(value);
+      break;
+    case "cityProject": {
+      const result = investInCity(state, value);
+      if (result.ok) {
+        audio.play("success");
+        triggerEffect("city", state.player.x, state.player.y);
+        refreshRegionPanel(result.message);
+      } else {
+        audio.play("error");
+        showToast(result.message);
+      }
+      break;
+    }
+    case "townHall": {
+      const result = holdTownHall(state);
+      if (result.ok) {
+        audio.play("memory");
+        refreshRegionPanel(result.message);
+      } else {
+        audio.play("error");
+        showToast(result.message);
+      }
+      break;
+    }
+    case "islandExplore": {
+      const result = exploreIsland(state, value);
+      if (result.ok) {
+        audio.play("water");
+        triggerEffect("island", state.player.x, state.player.y);
+        refreshRegionPanel(result.message);
+      } else {
+        audio.play("error");
+        showToast(result.message);
+      }
+      break;
+    }
+    case "marketSell": {
+      const result = sellAtMarket(state, value, 1);
+      if (result.ok) {
+        audio.play("success");
+        triggerEffect("trade", state.player.x, state.player.y);
+        refreshRegionPanel(result.message);
+      } else {
+        audio.play("error");
+        showToast(result.message);
+      }
+      break;
+    }
+    case "tradeAccept": {
+      const result = acceptTradeContract(state, value);
+      if (result.ok) refreshRegionPanel(result.message);
+      else showToast(result.message);
+      break;
+    }
+    case "tradeFulfill": {
+      const result = fulfillTradeContract(state, value);
+      if (result.ok) {
+        audio.play("success");
+        triggerEffect("trade", state.player.x, state.player.y);
+        refreshRegionPanel(result.message);
+      } else {
+        audio.play("error");
+        showToast(result.message);
+      }
+      break;
+    }
+    case "enactPolicy": {
+      const result = enactGovernmentPolicy(state, value);
+      if (result.ok) {
+        audio.play("memory");
+        triggerEffect("policy", state.player.x, state.player.y);
+        refreshRegionPanel(result.message);
+      } else {
+        audio.play("error");
+        showToast(result.message);
+      }
+      break;
+    }
+    case "spriteRecruit": {
+      const result = recruitSprite(state, value);
+      if (result.ok) {
+        audio.play("success");
+        triggerEffect("sprite", state.player.x, state.player.y);
+        refreshRegionPanel(result.message);
+      } else {
+        audio.play("error");
+        showToast(result.message);
+      }
+      break;
+    }
+    case "spriteAssign": {
+      const [spriteId, role] = value.split("|");
+      const result = assignSprite(state, spriteId, role);
+      if (result.ok) {
+        audio.play("ui");
+        refreshRegionPanel(result.message);
+      } else {
+        audio.play("error");
+        showToast(result.message);
+      }
+      break;
+    }
     case "toggleSound":
       toggleSound(true);
       break;
@@ -2158,6 +2597,18 @@ function handleKeyDown(event) {
     openSeedPouch();
   } else if (key === "m") {
     openMenu();
+  } else if (key === "f") {
+    openRegionHub("farm");
+  } else if (key === "c") {
+    openRegionHub("city");
+  } else if (key === "i") {
+    openRegionHub("island");
+  } else if (key === "t") {
+    openRegionHub("trade");
+  } else if (key === "g") {
+    openRegionHub("government");
+  } else if (key === "p") {
+    openRegionHub("sprites");
   } else if (["1", "2", "3", "4"].includes(key)) {
     selectTool(TOOLS[Number(key) - 1].id);
   } else if (key === "escape") {
@@ -2223,6 +2674,10 @@ function bindEvents() {
   dom.objectiveButton.addEventListener("click", openMenu);
   dom.menuButton.addEventListener("click", openMenu);
   dom.aiButton.addEventListener("click", openAiPanel);
+  dom.regionNav.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-region]");
+    if (button) openRegionHub(button.dataset.region);
+  });
   dom.soundButton.addEventListener("click", () => {
     toggleSound(false);
   });

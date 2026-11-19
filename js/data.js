@@ -1,9 +1,68 @@
 export const SAVE_KEY = "ranch-life-common-ground-save-v1";
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
 export const DAY_LENGTH_MINUTES = 18 * 60;
 export const DAY_START_MINUTES = 6 * 60;
 export const NIGHT_MINUTES = 22 * 60;
 export const REAL_SECONDS_PER_GAME_MINUTE = 0.22;
+
+export const REGION_ORDER = ["farm", "city", "island", "trade", "government", "sprites"];
+
+export const REGIONS = {
+  farm: {
+    id: "farm",
+    name: "月溪牧场",
+    shortName: "牧场",
+    icon: "⌂",
+    kicker: "日常 · 土地与牲畜",
+    description: "照料、种植和把每一天过成一条有回声的生活。",
+    accent: "leaf",
+  },
+  city: {
+    id: "city",
+    name: "河港市",
+    shortName: "城市",
+    icon: "▦",
+    kicker: "建设 · 公共设施",
+    description: "把赚到的钱投入港口、诊所和市民议事厅。",
+    accent: "amber",
+  },
+  island: {
+    id: "island",
+    name: "蓝潮海岛",
+    shortName: "海岛",
+    icon: "◒",
+    kicker: "探索 · 潮汐与精灵",
+    description: "乘渡轮寻找海藻、椰子和会发光的潮汐矿石。",
+    accent: "water",
+  },
+  trade: {
+    id: "trade",
+    name: "贸易航线",
+    shortName: "贸易",
+    icon: "↔",
+    kicker: "市场 · 价格与订单",
+    description: "观察需求波动，选择卖给合作社还是远方的商队。",
+    accent: "gold",
+  },
+  government: {
+    id: "government",
+    name: "共同议政",
+    shortName: "政府",
+    icon: "⚖",
+    kicker: "治理 · 政策与责任",
+    description: "用公民点推动政策，把社区关系变成可执行的规则。",
+    accent: "ink",
+  },
+  sprites: {
+    id: "sprites",
+    name: "小精灵工坊",
+    shortName: "小精灵",
+    icon: "✦",
+    kicker: "伙伴 · 分工与成长",
+    description: "邀请小精灵帮忙照料牧场，每天重新安排它们的工作。",
+    accent: "rose",
+  },
+};
 
 export const WORLD = {
   width: 1280,
@@ -105,6 +164,301 @@ export const PRODUCTS = {
   milk: { id: "milk", name: "牛奶", icon: "◌", sellPrice: 76, kind: "animal" },
   wool: { id: "wool", name: "羊毛", icon: "☁", sellPrice: 96, kind: "animal" },
   feed: { id: "feed", name: "饲料", icon: "≋", buyPrice: 12, kind: "supply" },
+};
+
+export const MARKET_GOODS = {
+  turnip: {
+    id: "turnip",
+    name: "白萝卜",
+    icon: "◒",
+    basePrice: 52,
+    minPrice: 34,
+    maxPrice: 86,
+    volatility: 0.16,
+    source: "牧场",
+  },
+  potato: {
+    id: "potato",
+    name: "土豆",
+    icon: "◉",
+    basePrice: 84,
+    minPrice: 54,
+    maxPrice: 132,
+    volatility: 0.2,
+    source: "牧场",
+  },
+  strawberry: {
+    id: "strawberry",
+    name: "草莓",
+    icon: "♥",
+    basePrice: 142,
+    minPrice: 92,
+    maxPrice: 228,
+    volatility: 0.27,
+    source: "牧场",
+  },
+  egg: {
+    id: "egg",
+    name: "鸡蛋",
+    icon: "◯",
+    basePrice: 34,
+    minPrice: 22,
+    maxPrice: 58,
+    volatility: 0.13,
+    source: "牲畜棚",
+  },
+  milk: {
+    id: "milk",
+    name: "牛奶",
+    icon: "◌",
+    basePrice: 76,
+    minPrice: 48,
+    maxPrice: 116,
+    volatility: 0.17,
+    source: "牲畜棚",
+  },
+  wool: {
+    id: "wool",
+    name: "羊毛",
+    icon: "☁",
+    basePrice: 96,
+    minPrice: 62,
+    maxPrice: 148,
+    volatility: 0.23,
+    source: "牲畜棚",
+  },
+  seaweed: {
+    id: "seaweed",
+    name: "潮汐海藻",
+    icon: "≋",
+    basePrice: 48,
+    minPrice: 28,
+    maxPrice: 88,
+    volatility: 0.3,
+    source: "蓝潮海岛",
+  },
+  coconut: {
+    id: "coconut",
+    name: "银沙椰子",
+    icon: "◒",
+    basePrice: 78,
+    minPrice: 44,
+    maxPrice: 136,
+    volatility: 0.26,
+    source: "蓝潮海岛",
+  },
+  pearl: {
+    id: "pearl",
+    name: "月光珍珠",
+    icon: "◇",
+    basePrice: 240,
+    minPrice: 135,
+    maxPrice: 420,
+    volatility: 0.38,
+    source: "蓝潮海岛",
+  },
+  coral: {
+    id: "coral",
+    name: "赤潮珊瑚",
+    icon: "❋",
+    basePrice: 126,
+    minPrice: 78,
+    maxPrice: 210,
+    volatility: 0.34,
+    source: "蓝潮海岛",
+  },
+};
+
+export const TRADE_CONTRACTS = [
+  {
+    id: "harbor-breakfast",
+    title: "港口早餐会",
+    client: "河港市餐厅联盟",
+    requirements: { egg: 3, milk: 1 },
+    reward: 196,
+    reputation: 4,
+    description: "早班船靠岸前，需要一批新鲜早餐。",
+  },
+  {
+    id: "island-kitchen",
+    title: "海岛厨房",
+    client: "蓝潮旅店",
+    requirements: { seaweed: 3, coconut: 2 },
+    reward: 312,
+    reputation: 6,
+    description: "旅店想把海岛风味留在每一张餐桌上。",
+  },
+  {
+    id: "winter-stores",
+    title: "冬储车队",
+    client: "上游村合作仓",
+    requirements: { potato: 3, turnip: 4 },
+    reward: 348,
+    reputation: 7,
+    description: "合作仓愿意为稳定交付支付溢价。",
+  },
+  {
+    id: "weavers-choice",
+    title: "织坊的颜色",
+    client: "河港市旧织坊",
+    requirements: { wool: 2, coral: 1 },
+    reward: 388,
+    reputation: 8,
+    description: "织坊需要羊毛和赤潮珊瑚做一批节庆染料。",
+  },
+  {
+    id: "museum-pearl",
+    title: "博物馆的月光",
+    client: "河港市地方博物馆",
+    requirements: { pearl: 1 },
+    reward: 520,
+    reputation: 10,
+    description: "博物馆想收藏一枚来自旧海路的月光珍珠。",
+  },
+];
+
+export const CITY_PROJECTS = {
+  marketHall: {
+    id: "marketHall",
+    title: "港口市场",
+    icon: "▤",
+    cost: 180,
+    description: "增加远方买家的报价，贸易订单每天多一条。",
+  },
+  ferry: {
+    id: "ferry",
+    title: "蓝潮渡轮",
+    icon: "⌁",
+    cost: 120,
+    description: "修复旧码头，解锁蓝潮海岛与潮汐资源。",
+  },
+  clinic: {
+    id: "clinic",
+    title: "社区诊所",
+    icon: "＋",
+    cost: 220,
+    description: "最大体力提高 10，雨天恢复更稳定。",
+  },
+  civicCenter: {
+    id: "civicCenter",
+    title: "市民议事厅",
+    icon: "⌂",
+    cost: 160,
+    description: "每次市民议事额外获得 2 公民点。",
+  },
+};
+
+export const GOVERNMENT_POLICIES = {
+  waterCharter: {
+    id: "waterCharter",
+    title: "共同水章",
+    icon: "◒",
+    cost: 2,
+    description: "公开水量记录，水罐上限提高 3，社区信任提高。",
+  },
+  fairTrade: {
+    id: "fairTrade",
+    title: "公平贸易条例",
+    icon: "↔",
+    cost: 3,
+    description: "订单声誉提高，动态价格的最低值上浮。",
+  },
+  islandSanctuary: {
+    id: "islandSanctuary",
+    title: "海岛保育区",
+    icon: "❋",
+    cost: 3,
+    description: "海岛探索更容易发现稀有资源，生态韧性提高。",
+  },
+  spriteCommons: {
+    id: "spriteCommons",
+    title: "精灵共居公约",
+    icon: "✦",
+    cost: 4,
+    description: "所有小精灵友好度提高，自动劳动额外产生 1 点声誉。",
+  },
+};
+
+export const SPRITE_DEFS = {
+  seedling: {
+    id: "seedling",
+    name: "芽芽",
+    icon: "❋",
+    color: "#9fc477",
+    role: "watering",
+    cost: 0,
+    talent: "每天悄悄给两块田留下露水。",
+    unlockText: "初次进入小精灵工坊即可遇见。",
+  },
+  tide: {
+    id: "tide",
+    name: "潮潮",
+    icon: "◒",
+    color: "#71b8c4",
+    role: "island",
+    cost: 70,
+    talent: "每天从潮间带带回一份海岛资源。",
+    unlockText: "修好蓝潮渡轮后出现。",
+  },
+  golden: {
+    id: "golden",
+    name: "金穗",
+    icon: "✦",
+    color: "#e0ad5e",
+    role: "trade",
+    cost: 100,
+    talent: "贸易订单声誉与售价小幅提高。",
+    unlockText: "港口市场建成后出现。",
+  },
+  ember: {
+    id: "ember",
+    name: "烬烬",
+    icon: "◇",
+    color: "#d78467",
+    role: "animals",
+    cost: 90,
+    talent: "每天替你照料一只牲畜，优先照顾心情最低的那只。",
+    unlockText: "完成 3 份贸易订单后出现。",
+  },
+};
+
+export const ISLAND_SPOTS = {
+  tidePool: {
+    id: "tidePool",
+    title: "潮声湾",
+    icon: "≋",
+    resource: "seaweed",
+    amount: 3,
+    energy: 4,
+    description: "退潮后露出一圈柔软的蓝色海藻。",
+  },
+  silverBeach: {
+    id: "silverBeach",
+    title: "银沙滩",
+    icon: "◒",
+    resource: "coconut",
+    amount: 2,
+    energy: 5,
+    description: "椰影落在沙上，远处的海鸟把一枚果实推到脚边。",
+  },
+  moonReef: {
+    id: "moonReef",
+    title: "月光礁",
+    icon: "◇",
+    resource: "pearl",
+    amount: 1,
+    energy: 8,
+    description: "需要等潮汐最安静的时候，才能在礁缝里找到珍珠。",
+  },
+  redGarden: {
+    id: "redGarden",
+    title: "赤潮花园",
+    icon: "❋",
+    resource: "coral",
+    amount: 1,
+    energy: 7,
+    description: "被阳光染红的珊瑚，适合做成节庆染料。",
+  },
 };
 
 export const ANIMAL_DEFS = [

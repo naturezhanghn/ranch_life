@@ -65,6 +65,7 @@
               <span>晴朗</span>
             </span>
           </div>
+          <span class="region-chip" id="regionChip"><span aria-hidden="true">⌂</span><span>牧场</span></span>
         </div>
 
         <div class="header-stats">
@@ -102,6 +103,39 @@
           </button>
         </div>
       </header>
+
+      <nav class="region-nav" id="regionNav" aria-label="世界界面切换">
+        <button type="button" class="region-nav-button is-active" data-region="farm">
+          <span class="region-nav-icon" aria-hidden="true">⌂</span>
+          <span>牧场</span>
+          <small>F</small>
+        </button>
+        <button type="button" class="region-nav-button" data-region="city">
+          <span class="region-nav-icon" aria-hidden="true">▦</span>
+          <span>城市</span>
+          <small>C</small>
+        </button>
+        <button type="button" class="region-nav-button" data-region="island">
+          <span class="region-nav-icon" aria-hidden="true">◒</span>
+          <span>海岛</span>
+          <small>I</small>
+        </button>
+        <button type="button" class="region-nav-button" data-region="trade">
+          <span class="region-nav-icon" aria-hidden="true">↔</span>
+          <span>贸易</span>
+          <small>T</small>
+        </button>
+        <button type="button" class="region-nav-button" data-region="government">
+          <span class="region-nav-icon" aria-hidden="true">⚖</span>
+          <span>政府</span>
+          <small>G</small>
+        </button>
+        <button type="button" class="region-nav-button" data-region="sprites">
+          <span class="region-nav-icon" aria-hidden="true">✦</span>
+          <span>小精灵</span>
+          <small>P</small>
+        </button>
+      </nav>
 
       <main class="game-stage" id="gameStage">
         <canvas
@@ -152,6 +186,7 @@
           <span><b>E</b> 行动</span>
           <span><b>B</b> 换种子</span>
           <span><b>1–4</b> 工具</span>
+          <span><b>F/C/I/T/G/P</b> 世界界面</span>
         </div>
       </main>
 
@@ -206,6 +241,7 @@
           <span><i>E</i> 使用工具</span>
           <span><i>B</i> 选择种子</span>
           <span><i>H</i> 牧心终端</span>
+          <span><i>F/C/I/T/G/P</i> 世界界面</span>
         </div>
       </div>
       <p class="welcome-footnote">一个可完成的叙事垂直切片 · 进度自动保存在本机</p>

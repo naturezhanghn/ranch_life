@@ -1,12 +1,19 @@
 import {
   ANIMAL_DEFS,
+  CITY_PROJECTS,
   CROPS,
   DAILY_TASK_POOL,
   DAY_START_MINUTES,
+  GOVERNMENT_POLICIES,
+  ISLAND_SPOTS,
+  MARKET_GOODS,
   PLAYER_START,
   PRODUCTS,
+  REGION_ORDER,
   SAVE_KEY,
   SAVE_VERSION,
+  SPRITE_DEFS,
+  TRADE_CONTRACTS,
   WORLD,
 } from "./data.js";
 
@@ -47,6 +54,30 @@ function createAnimals() {
     careDays: 0,
     productCounter: 0,
   }));
+}
+
+function bounded(value, min = 0, max = 100) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function createMarketPrices() {
+  return Object.fromEntries(
+    Object.entries(MARKET_GOODS).map(([id, good]) => [id, good.basePrice]),
+  );
+}
+
+export function generateTradeContracts(state) {
+  const anchor = `${state.day}:${state.rngState}:${state.market?.reputation || 0}`;
+  return TRADE_CONTRACTS.map((contract, index) => ({
+    ...contract,
+    requirements: { ...contract.requirements },
+    rank: seedFromString(`${anchor}:${contract.id}:${index}`),
+    accepted: false,
+    completed: false,
+  }))
+    .sort((a, b) => a.rank - b.rank)
+    .slice(0, state.city?.projects?.marketHall ? 4 : 3)
+    .map(({ rank, ...contract }) => contract);
 }
 
 export function generateDailyTasks(state) {
@@ -108,6 +139,12 @@ export function createInitialState() {
         milk: 0,
         wool: 0,
       },
+      resources: {
+        seaweed: 0,
+        coconut: 0,
+        pearl: 0,
+        coral: 0,
+      },
     },
     plots: createPlots(),
     animals: createAnimals(),
@@ -126,6 +163,9 @@ export function createInitialState() {
       planted: 0,
       earned: 0,
       slept: 0,
+      contractsFulfilled: 0,
+      islandFinds: 0,
+      policiesEnacted: 0,
     },
     daily: null,
     ai: {
@@ -142,6 +182,63 @@ export function createInitialState() {
       ecology: 50,
       corporation: 20,
       automation: 10,
+    },
+    world: {
+      activeRegion: "farm",
+      unlockedRegions: ["farm", "city", "trade", "government", "sprites"],
+      visits: {
+        farm: 1,
+        city: 0,
+        island: 0,
+        trade: 0,
+        government: 0,
+        sprites: 0,
+      },
+    },
+    city: {
+      reputation: 12,
+      projects: {
+        marketHall: 0,
+        ferry: 0,
+        clinic: 0,
+        civicCenter: 0,
+      },
+      lastTownHallDay: 0,
+    },
+    island: {
+      visitedSpots: [],
+      dailyFinds: {},
+      expeditions: 0,
+      journal: [],
+    },
+    market: {
+      prices: createMarketPrices(),
+      lastRefreshDay: 1,
+      trend: "steady",
+      reputation: 0,
+      shipments: 0,
+      contracts: [],
+    },
+    government: {
+      civicPoints: 3,
+      policies: {},
+      lastSessionDay: 0,
+    },
+    sprites: {
+      unlocked: ["seedling"],
+      assignments: {
+        watering: "seedling",
+        animals: null,
+        trade: null,
+        island: null,
+      },
+      friendship: {
+        seedling: 20,
+        tide: 0,
+        golden: 0,
+        ember: 0,
+      },
+      dispatches: 0,
     },
     story: {
       chapter: 1,
@@ -173,6 +270,7 @@ export function createInitialState() {
   };
 
   state.daily = generateDailyTasks(state);
+  state.market.contracts = generateTradeContracts(state);
   addMemory(
     state,
     "第一次启动：环境安静，土壤含水量偏低。我不知道你为什么会回来。",
@@ -214,6 +312,9 @@ export function checkDailyTasks(state) {
       state.stats.earned += task.reward;
       completed.push(task);
     }
+  }
+  if (completed.length && state.government) {
+    state.government.civicPoints += completed.length;
   }
   return completed;
 }
@@ -462,8 +563,237 @@ export function buyFeed(state) {
   return { ok: true, message: "买了一袋干草饲料。" };
 }
 
+function inventoryQuantity(state, itemId) {
+  return (state.inventory.produce[itemId] || 0) + (state.inventory.resources[itemId] || 0);
+}
+
+function consumeInventoryItem(state, itemId, amount) {
+  let remaining = amount;
+  const produceCount = Math.min(state.inventory.produce[itemId] || 0, remaining);
+  state.inventory.produce[itemId] -= produceCount;
+  remaining -= produceCount;
+  if (remaining > 0) {
+    const resourceCount = Math.min(state.inventory.resources[itemId] || 0, remaining);
+    state.inventory.resources[itemId] -= resourceCount;
+    remaining -= resourceCount;
+  }
+  return remaining === 0;
+}
+
+export function getMarketPrice(state, itemId) {
+  const good = MARKET_GOODS[itemId];
+  if (!good) return 0;
+  const policyBonus = state.government?.policies?.fairTrade ? 0.08 : 0;
+  const raw = state.market?.prices?.[itemId] || good.basePrice;
+  return Math.round(Math.max(good.minPrice * (1 + policyBonus), raw));
+}
+
+export function sellAtMarket(state, itemId, quantity = 1) {
+  const good = MARKET_GOODS[itemId];
+  const amount = Math.max(1, Math.floor(quantity));
+  if (!good) return { ok: false, message: "这件货物还没有进入贸易目录。" };
+  if (inventoryQuantity(state, itemId) < amount) {
+    return { ok: false, message: `手头没有足够的${good.name}。` };
+  }
+  consumeInventoryItem(state, itemId, amount);
+  const price = getMarketPrice(state, itemId);
+  const income = price * amount;
+  state.coins += income;
+  state.stats.earned += income;
+  state.market.reputation += Math.max(1, Math.ceil(amount / 2));
+  state.market.shipments += amount;
+  if (state.government.policies.fairTrade) state.government.civicPoints += 1;
+  addMemory(state, `你把 ${amount} 份${good.name}交给远方商队，按 ${price} 金的市价结算。`, "economy", 2);
+  return {
+    ok: true,
+    message: `卖出 ${amount} 份${good.name}，获得 ${income} 金。`,
+    income,
+    itemId,
+    amount,
+  };
+}
+
+export function acceptTradeContract(state, contractId) {
+  const contract = state.market.contracts.find((entry) => entry.id === contractId);
+  if (!contract) return { ok: false, message: "这份订单已经离开港口。" };
+  if (contract.completed) return { ok: false, message: "这份订单已经结算。" };
+  if (contract.accepted) return { ok: false, message: "你已经接下这份订单了。" };
+  const accepted = state.market.contracts.filter((entry) => entry.accepted && !entry.completed).length;
+  if (accepted >= 2) return { ok: false, message: "同时处理两份订单已经是极限。" };
+  contract.accepted = true;
+  addMemory(state, `你接下了「${contract.title}」订单，交付期限是下一次市场刷新前。`, "economy");
+  return { ok: true, message: `已接下「${contract.title}」。` };
+}
+
+export function fulfillTradeContract(state, contractId) {
+  const contract = state.market.contracts.find((entry) => entry.id === contractId);
+  if (!contract) return { ok: false, message: "这份订单已经离开港口。" };
+  if (!contract.accepted) return { ok: false, message: "先在贸易航线接下这份订单。" };
+  if (contract.completed) return { ok: false, message: "这份订单已经结算。" };
+  const missing = Object.entries(contract.requirements).find(
+    ([itemId, amount]) => inventoryQuantity(state, itemId) < amount,
+  );
+  if (missing) {
+    const good = MARKET_GOODS[missing[0]];
+    return { ok: false, message: `还缺 ${missing[1] - inventoryQuantity(state, missing[0])} 份${good?.name || missing[0]}。` };
+  }
+  for (const [itemId, amount] of Object.entries(contract.requirements)) {
+    consumeInventoryItem(state, itemId, amount);
+  }
+  contract.completed = true;
+  state.coins += contract.reward;
+  state.stats.earned += contract.reward;
+  state.stats.contractsFulfilled += 1;
+  state.market.reputation += contract.reputation;
+  state.government.civicPoints += 1;
+  if (state.market.reputation >= 12 && !state.sprites.unlocked.includes("ember")) {
+    state.sprites.unlocked.push("ember");
+    state.sprites.friendship.ember = 12;
+  }
+  addMemory(state, `你完成「${contract.title}」，港口声誉提高了 ${contract.reputation}。`, "economy", 3);
+  return { ok: true, message: `订单完成，获得 ${contract.reward} 金和 ${contract.reputation} 点声誉。`, contract };
+}
+
+export function switchRegion(state, regionId) {
+  if (!REGION_ORDER.includes(regionId)) return { ok: false, message: "没有这条航线。" };
+  if (!state.world.unlockedRegions.includes(regionId)) {
+    return { ok: false, message: regionId === "island" ? "先去城市修好蓝潮渡轮。" : "这条区域还没有对你开放。" };
+  }
+  state.world.activeRegion = regionId;
+  state.world.visits[regionId] = (state.world.visits[regionId] || 0) + 1;
+  if (regionId === "trade") {
+    state.market.contracts = state.market.contracts.length ? state.market.contracts : generateTradeContracts(state);
+  }
+  addMemory(state, `你打开了${regionId === "farm" ? "月溪牧场" : regionId === "city" ? "河港市" : regionId === "island" ? "蓝潮海岛" : regionId === "trade" ? "贸易航线" : regionId === "government" ? "共同议政" : "小精灵工坊"}界面。`, "travel");
+  return { ok: true, regionId };
+}
+
+export function investInCity(state, projectId) {
+  const project = CITY_PROJECTS[projectId];
+  if (!project) return { ok: false, message: "没有这项城市项目。" };
+  if (state.city.projects[projectId]) return { ok: false, message: `${project.title}已经建成了。` };
+  if (state.coins < project.cost) return { ok: false, message: `还差 ${project.cost - state.coins} 金才能启动${project.title}。` };
+  state.coins -= project.cost;
+  state.city.projects[projectId] = 1;
+  state.city.reputation += 6;
+  if (projectId === "ferry") {
+    if (!state.world.unlockedRegions.includes("island")) state.world.unlockedRegions.push("island");
+    addMemory(state, "蓝潮渡轮重新响起汽笛。海岛不再只是地图边缘的一个名字。", "travel", 3);
+  } else if (projectId === "clinic") {
+    state.maxEnergy += 10;
+    state.energy = state.maxEnergy;
+  } else if (projectId === "civicCenter") {
+    state.government.civicPoints += 4;
+    state.relations.community += 8;
+  } else if (projectId === "marketHall") {
+    state.market.reputation += 5;
+    state.market.contracts = generateTradeContracts(state);
+  }
+  addMemory(state, `你投资 ${project.cost} 金建成了${project.title}。城市开始把牧场当成长期伙伴。`, "city", 3);
+  return { ok: true, message: `${project.title}已建成。`, projectId };
+}
+
+export function holdTownHall(state) {
+  if (state.city.lastTownHallDay === state.day) return { ok: false, message: "今天的市民议事已经结束了。" };
+  state.city.lastTownHallDay = state.day;
+  state.government.lastSessionDay = state.day;
+  const bonus = state.city.projects.civicCenter ? 4 : 2;
+  state.government.civicPoints += bonus;
+  state.relations.community = bounded(state.relations.community + 3);
+  addMemory(state, `你在市民议事厅听完了不同意见，获得 ${bonus} 点公民点。`, "government", 2);
+  return { ok: true, message: `议事结束，获得 ${bonus} 点公民点。` };
+}
+
+export function enactGovernmentPolicy(state, policyId) {
+  const policy = GOVERNMENT_POLICIES[policyId];
+  if (!policy) return { ok: false, message: "没有这项政策。" };
+  if (state.government.policies[policyId]) return { ok: false, message: `${policy.title}已经生效。` };
+  if (state.government.civicPoints < policy.cost) {
+    return { ok: false, message: `公民点不足，还需要 ${policy.cost - state.government.civicPoints} 点。` };
+  }
+  state.government.civicPoints -= policy.cost;
+  state.government.policies[policyId] = true;
+  state.stats.policiesEnacted += 1;
+  if (policyId === "waterCharter") {
+    state.maxWater += 3;
+    state.water = state.maxWater;
+    state.relations.community = bounded(state.relations.community + 7);
+  } else if (policyId === "fairTrade") {
+    state.market.reputation += 5;
+  } else if (policyId === "islandSanctuary") {
+    state.relations.ecology = bounded(state.relations.ecology + 9);
+  } else if (policyId === "spriteCommons") {
+    for (const spriteId of state.sprites.unlocked) {
+      state.sprites.friendship[spriteId] = bounded((state.sprites.friendship[spriteId] || 0) + 8);
+    }
+  }
+  addMemory(state, `共同议政通过了「${policy.title}」。它把价值判断写成了每天都会生效的规则。`, "government", 4);
+  return { ok: true, message: `政策「${policy.title}」已生效。` };
+}
+
+export function recruitSprite(state, spriteId) {
+  const sprite = SPRITE_DEFS[spriteId];
+  if (!sprite) return { ok: false, message: "没有找到这只小精灵。" };
+  if (state.sprites.unlocked.includes(spriteId)) return { ok: false, message: `${sprite.name}已经是你的伙伴了。` };
+  if (spriteId === "tide" && !state.world.unlockedRegions.includes("island")) {
+    return { ok: false, message: "先修好蓝潮渡轮，潮潮才找得到回家的路。" };
+  }
+  if (spriteId === "golden" && !state.city.projects.marketHall) {
+    return { ok: false, message: "先建成港口市场，金穗才愿意加入贸易航线。" };
+  }
+  if (spriteId === "ember" && state.stats.contractsFulfilled < 3) {
+    return { ok: false, message: "先完成 3 份贸易订单，烬烬才会相信你的交付承诺。" };
+  }
+  if (state.coins < sprite.cost) return { ok: false, message: `还差 ${sprite.cost - state.coins} 金才能邀请${sprite.name}。` };
+  state.coins -= sprite.cost;
+  state.sprites.unlocked.push(spriteId);
+  state.sprites.friendship[spriteId] = 18;
+  addMemory(state, `你邀请${sprite.name}住进小精灵工坊。它说愿意把自己的天赋交给共同生活。`, "social", 3);
+  return { ok: true, message: `${sprite.name}加入了牧场。` };
+}
+
+export function assignSprite(state, spriteId, role) {
+  const sprite = SPRITE_DEFS[spriteId];
+  const roles = ["watering", "animals", "trade", "island"];
+  if (!sprite || !roles.includes(role)) return { ok: false, message: "这个分工还没有准备好。" };
+  if (!state.sprites.unlocked.includes(spriteId)) return { ok: false, message: "先邀请这只小精灵。" };
+  for (const key of roles) {
+    if (state.sprites.assignments[key] === spriteId) state.sprites.assignments[key] = null;
+  }
+  state.sprites.assignments[role] = spriteId;
+  state.sprites.friendship[spriteId] = bounded((state.sprites.friendship[spriteId] || 0) + 2);
+  state.sprites.dispatches += 1;
+  return { ok: true, message: `${sprite.name}现在负责${role === "watering" ? "田地" : role === "animals" ? "牲畜" : role === "trade" ? "贸易" : "海岛探索"}。` };
+}
+
+export function exploreIsland(state, spotId) {
+  if (!state.world.unlockedRegions.includes("island")) return { ok: false, message: "先去城市修好蓝潮渡轮。" };
+  const spot = ISLAND_SPOTS[spotId];
+  if (!spot) return { ok: false, message: "这片海岸还没有标记。" };
+  if (state.island.dailyFinds[spotId]) return { ok: false, message: "今天的潮汐已经把这里搜过了。" };
+  if (state.energy < spot.energy) return { ok: false, message: "体力不够，无法安全走到那里。" };
+  state.energy -= spot.energy;
+  state.minutes = Math.min(24 * 60, state.minutes + spot.energy * 9);
+  const bonus = state.government.policies.islandSanctuary ? 1 : 0;
+  const amount = spot.amount + bonus;
+  state.inventory.resources[spot.resource] += amount;
+  state.island.dailyFinds[spotId] = true;
+  state.island.expeditions += 1;
+  state.island.visitedSpots = Array.from(new Set([...state.island.visitedSpots, spotId]));
+  state.island.journal.unshift({ day: state.day, spot: spot.title, resource: spot.resource, amount });
+  state.island.journal = state.island.journal.slice(0, 12);
+  state.stats.islandFinds += amount;
+  if (state.sprites.assignments.island) {
+    const spriteId = state.sprites.assignments.island;
+    state.sprites.friendship[spriteId] = bounded((state.sprites.friendship[spriteId] || 0) + 3);
+  }
+  addMemory(state, `你在${spot.title}找到 ${amount} 份${MARKET_GOODS[spot.resource].name}。`, "island", 2);
+  return { ok: true, message: `探索${spot.title}，找到 ${amount} 份${MARKET_GOODS[spot.resource].name}。`, resource: spot.resource, amount };
+}
+
 export function recordTalk(state, npcName) {
   bumpCounter(state, "talked");
+  if (state.government) state.government.civicPoints += 1;
   addMemory(
     state,
     `你和${npcName}交谈。你询问了别人，而不只是让系统替你判断。`,
@@ -678,14 +1008,82 @@ export function resolveEnding(state) {
   return ending;
 }
 
+function applySpriteAssignments(state, report) {
+  const assignments = state.sprites?.assignments || {};
+  if (assignments.watering && state.water > 0) {
+    let watered = 0;
+    for (const plot of state.plots) {
+      if (watered >= 2 || state.water <= 0) break;
+      if (plot.crop && !plot.watered) {
+        plot.watered = true;
+        plot.wateredDays += 1;
+        state.water -= 1;
+        watered += 1;
+        bumpCounter(state, "watered");
+      }
+    }
+    if (watered) report.helperActions.push(`芽芽替你留下了 ${watered} 格露水`);
+  }
+
+  if (assignments.animals && state.feed > 0) {
+    const animal = state.animals
+      .filter((entry) => !entry.fed)
+      .sort((a, b) => a.mood - b.mood)[0];
+    if (animal) {
+      animal.fed = true;
+      state.feed -= 1;
+      animal.mood = Math.min(100, animal.mood + 4);
+      animal.affection = Math.min(100, animal.affection + 2);
+      bumpCounter(state, "fed");
+      report.helperActions.push("烬烬照顾了心情最低的牲畜");
+    }
+  }
+
+  if (assignments.trade) {
+    state.market.reputation += state.government.policies.spriteCommons ? 2 : 1;
+    report.helperActions.push("小精灵整理了贸易账本");
+  }
+
+  if (assignments.island && state.world.unlockedRegions.includes("island")) {
+    const resourceId = state.government.policies.islandSanctuary ? "coconut" : "seaweed";
+    state.inventory.resources[resourceId] += 1;
+    state.stats.islandFinds += 1;
+    report.helperActions.push(`潮潮带回了 1 份${MARKET_GOODS[resourceId].name}`);
+  }
+
+  for (const spriteId of state.sprites.unlocked) {
+    state.sprites.friendship[spriteId] = bounded((state.sprites.friendship[spriteId] || 0) + 1);
+  }
+}
+
+function refreshMarket(state) {
+  const previousPrices = state.market.prices || createMarketPrices();
+  let trendTotal = 0;
+  for (const [id, good] of Object.entries(MARKET_GOODS)) {
+    const previous = previousPrices[id] || good.basePrice;
+    const drift = (nextRandom(state) * 2 - 1) * good.volatility;
+    const target = previous * (1 + drift);
+    const floor = good.minPrice * (state.government.policies.fairTrade ? 1.08 : 1);
+    const price = Math.round(Math.max(floor, Math.min(good.maxPrice, target)));
+    state.market.prices[id] = price;
+    trendTotal += price - previous;
+  }
+  state.market.trend = trendTotal > 12 ? "rising" : trendTotal < -12 ? "falling" : "steady";
+  state.market.lastRefreshDay = state.day;
+  state.market.contracts = generateTradeContracts(state);
+}
+
 export function advanceDay(state) {
   const report = {
     products: [],
     grown: 0,
     matured: 0,
     animalsUnfed: [],
+    helperActions: [],
     weather: "sunny",
   };
+
+  applySpriteAssignments(state, report);
 
   for (const animal of state.animals) {
     if (animal.fed) {
@@ -743,6 +1141,10 @@ export function advanceDay(state) {
 
   state.weather = weather;
   report.weather = weather;
+
+  state.island.dailyFinds = {};
+  state.world.activeRegion = "farm";
+  refreshMarket(state);
 
   if (weather === "rain") {
     state.water = state.maxWater;
@@ -847,6 +1249,7 @@ export function loadGame() {
       inventory: {
         seeds: { ...base.inventory.seeds, ...(parsed.inventory?.seeds || {}) },
         produce: { ...base.inventory.produce, ...(parsed.inventory?.produce || {}) },
+        resources: { ...base.inventory.resources, ...(parsed.inventory?.resources || {}) },
       },
       stats: { ...base.stats, ...(parsed.stats || {}) },
       ai: {
@@ -855,6 +1258,50 @@ export function loadGame() {
         memories: Array.isArray(parsed.ai?.memories) ? parsed.ai.memories : base.ai.memories,
       },
       relations: { ...base.relations, ...(parsed.relations || {}) },
+      world: {
+        ...base.world,
+        ...(parsed.world || {}),
+        visits: { ...base.world.visits, ...(parsed.world?.visits || {}) },
+        unlockedRegions: Array.isArray(parsed.world?.unlockedRegions)
+          ? Array.from(new Set(parsed.world.unlockedRegions))
+          : base.world.unlockedRegions,
+      },
+      city: {
+        ...base.city,
+        ...(parsed.city || {}),
+        projects: { ...base.city.projects, ...(parsed.city?.projects || {}) },
+      },
+      island: {
+        ...base.island,
+        ...(parsed.island || {}),
+        visitedSpots: Array.isArray(parsed.island?.visitedSpots)
+          ? parsed.island.visitedSpots
+          : base.island.visitedSpots,
+        dailyFinds: { ...base.island.dailyFinds, ...(parsed.island?.dailyFinds || {}) },
+        journal: Array.isArray(parsed.island?.journal) ? parsed.island.journal : base.island.journal,
+      },
+      market: {
+        ...base.market,
+        ...(parsed.market || {}),
+        prices: { ...base.market.prices, ...(parsed.market?.prices || {}) },
+        contracts: Array.isArray(parsed.market?.contracts)
+          ? parsed.market.contracts
+          : base.market.contracts,
+      },
+      government: {
+        ...base.government,
+        ...(parsed.government || {}),
+        policies: { ...base.government.policies, ...(parsed.government?.policies || {}) },
+      },
+      sprites: {
+        ...base.sprites,
+        ...(parsed.sprites || {}),
+        unlocked: Array.isArray(parsed.sprites?.unlocked)
+          ? Array.from(new Set(parsed.sprites.unlocked))
+          : base.sprites.unlocked,
+        assignments: { ...base.sprites.assignments, ...(parsed.sprites?.assignments || {}) },
+        friendship: { ...base.sprites.friendship, ...(parsed.sprites?.friendship || {}) },
+      },
       story: {
         ...base.story,
         ...(parsed.story || {}),
@@ -879,6 +1326,10 @@ export function loadGame() {
     if (!merged.daily?.tasks?.length) {
       merged.daily = generateDailyTasks(merged);
     }
+    if (!merged.market.contracts?.length) {
+      merged.market.contracts = generateTradeContracts(merged);
+    }
+    if (!merged.world.unlockedRegions.includes("farm")) merged.world.unlockedRegions.unshift("farm");
     return merged;
   } catch (error) {
     console.warn("Unable to load game", error);

@@ -104,6 +104,7 @@ export class WorldRenderer {
     this.drawFloatingAtmosphere(ctx, state, time);
     this.drawWeather(ctx, state, time);
     this.drawLighting(ctx, state, time);
+    this.drawEffects(ctx, runtime, time, delta);
     this.drawDebugVignette(ctx);
   }
 
@@ -1776,6 +1777,70 @@ export class WorldRenderer {
       ctx.fillRect(330, 60, 230, 220);
       ctx.restore();
     }
+  }
+
+  drawEffects(ctx, runtime, time, delta) {
+    if (!runtime.effects?.length) return;
+    ctx.save();
+    for (const effect of runtime.effects) {
+      effect.life -= delta * 1.35;
+      if (effect.life <= 0) continue;
+      const progress = 1 - effect.life;
+      const alpha = Math.min(1, effect.life * 1.8);
+      ctx.globalAlpha = alpha;
+      if (effect.type === "water") {
+        ctx.strokeStyle = "#c9f0e5";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.ellipse(effect.x, effect.y + 7, 9 + progress * 33, 4 + progress * 13, 0, 0, TAU);
+        ctx.stroke();
+        ctx.fillStyle = "#d9f5d2";
+        for (let index = 0; index < 5; index += 1) {
+          ctx.beginPath();
+          ctx.arc(effect.x - 20 + index * 10, effect.y - progress * 28 - (index % 2) * 8, 2, 0, TAU);
+          ctx.fill();
+        }
+      } else if (effect.type === "harvest" || effect.type === "trade" || effect.type === "city" || effect.type === "policy") {
+        const symbol = effect.type === "harvest" ? "✿" : effect.type === "trade" ? "✦" : effect.type === "policy" ? "⚖" : "＋";
+        ctx.fillStyle = effect.type === "trade" ? "#f6d478" : "#fff1b5";
+        ctx.font = "800 18px sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText(symbol, effect.x, effect.y - 25 - progress * 28);
+        ctx.strokeStyle = "rgba(255, 242, 185, 0.85)";
+        ctx.lineWidth = 1.3;
+        for (let ray = 0; ray < 6; ray += 1) {
+          const angle = (ray / 6) * TAU + effect.seed * TAU;
+          const radius = 12 + progress * 24;
+          ctx.beginPath();
+          ctx.moveTo(effect.x + Math.cos(angle) * radius, effect.y - 14 + Math.sin(angle) * radius * 0.48);
+          ctx.lineTo(effect.x + Math.cos(angle) * (radius + 5), effect.y - 14 + Math.sin(angle) * (radius + 5) * 0.48);
+          ctx.stroke();
+        }
+      } else if (effect.type === "sprite") {
+        ctx.fillStyle = "#c8f1be";
+        ctx.shadowColor = "#b0e7a0";
+        ctx.shadowBlur = 12;
+        for (let spark = 0; spark < 7; spark += 1) {
+          const angle = (spark / 7) * TAU + time * 0.7;
+          const radius = 10 + progress * 30 + (spark % 2) * 8;
+          ctx.beginPath();
+          ctx.arc(effect.x + Math.cos(angle) * radius, effect.y - 25 + Math.sin(angle) * radius * 0.5, 2.4, 0, TAU);
+          ctx.fill();
+        }
+        ctx.shadowBlur = 0;
+      } else if (effect.type === "island" || effect.type === "travel") {
+        ctx.strokeStyle = effect.type === "island" ? "#a5e1e1" : "#ffe0a3";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(effect.x, effect.y - 12, 10 + progress * 35, 0, TAU);
+        ctx.stroke();
+      } else {
+        ctx.fillStyle = "#fff1b5";
+        ctx.fillRect(effect.x - progress * 18, effect.y - progress * 26, 3, 3);
+      }
+    }
+    ctx.restore();
+    runtime.effects = runtime.effects.filter((effect) => effect.life > 0);
   }
 
   drawDebugVignette(ctx) {
