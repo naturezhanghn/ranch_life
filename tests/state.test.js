@@ -7,13 +7,16 @@ import {
   applyDroughtChoice,
   applyGovernanceChoice,
   acceptTradeContract,
+  acceptWeeklyRequest,
   assignSprite,
   brushAnimal,
   choosePostGameModifier,
   createInitialState,
   collectForage,
+  deliverWeeklyRequest,
   emitFeedback,
   enactGovernmentPolicy,
+  ensureWeeklyBoard,
   exploreIsland,
   fulfillTradeContract,
   feedAnimal,
@@ -358,6 +361,42 @@ test("expired bridge quest keeps steps and can be reaccepted next week", () => {
   assert.equal(resumed.ok, true);
   assert.equal(state.quests.expired, false);
   assert.equal(getBridgeQuestStep(state).id, "deliver");
+});
+
+test("weekly public requests can be accepted, delivered, and paid once", () => {
+  const state = freshState();
+  const board = ensureWeeklyBoard(state);
+  assert.ok(board.requests.length >= 2);
+  const request = board.requests[0];
+  assert.equal(acceptWeeklyRequest(state, request.id).ok, true);
+  assert.equal(acceptWeeklyRequest(state, request.id).ok, false);
+  for (const [itemId, amount] of Object.entries(request.requirements)) {
+    state.inventory.produce[itemId] = amount;
+  }
+  const coinsBefore = state.coins;
+  const civicBefore = state.government.civicPoints;
+  const result = deliverWeeklyRequest(state, request.id);
+  assert.equal(result.ok, true);
+  assert.equal(state.coins, coinsBefore + request.reward);
+  assert.equal(state.government.civicPoints, civicBefore + request.civic);
+  assert.equal(state.weekly.completedIds.includes(request.id), true);
+  assert.equal(deliverWeeklyRequest(state, request.id).ok, false);
+});
+
+test("weekly request expiry charges reputation and refreshes the board", () => {
+  const state = freshState();
+  const board = ensureWeeklyBoard(state);
+  const request = board.requests[0];
+  acceptWeeklyRequest(state, request.id);
+  state.market.reputation = 10;
+  state.government.civicPoints = 5;
+  state.day = 7;
+  const report = advanceDay(state);
+  assert.equal(state.weekly.expiredIds.includes(request.id), true);
+  assert.ok(report.weeklyExpired.includes(request.title));
+  assert.ok(state.market.reputation < 10);
+  assert.ok(state.government.civicPoints < 5);
+  assert.ok(state.weekly.requests.some((entry) => entry.id !== request.id));
 });
 
 test("rain forage nodes expire, collect once, and feed the day report", () => {

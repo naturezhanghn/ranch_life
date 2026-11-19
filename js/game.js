@@ -47,6 +47,7 @@ import {
   advanceBridgeQuest,
   abortMinigame,
   acceptTradeContract,
+  acceptWeeklyRequest,
   assignSprite,
   animalQuality,
   buyFeed,
@@ -94,6 +95,8 @@ import {
   resolveDailyRecap,
   resolveMinigame,
   discoverSceneFind,
+  deliverWeeklyRequest,
+  ensureWeeklyBoard,
   resolveNpcTopic,
   startBridgeQuest,
   saveGame,
@@ -935,6 +938,51 @@ function openBridgeQuestInfo() {
   });
 }
 
+function openWeeklyBoard() {
+  ensureWeeklyBoard(state);
+  const board = state.weekly;
+  const rows = board.requests.map((request) => {
+    const requirements = Object.entries(request.requirements)
+      .map(([itemId, amount]) => `${MARKET_GOODS[itemId]?.name || PRODUCTS[itemId]?.name || itemId}×${amount}`)
+      .join(" · ");
+    const status = request.completed
+      ? "已交付"
+      : request.expired
+        ? "已过期"
+        : request.accepted
+          ? "已接下"
+          : "待接";
+    const action = request.completed || request.expired
+      ? ""
+      : request.accepted
+        ? `<button type="button" class="button button--primary" data-action="deliverWeekly" data-value="${request.id}">交付</button>`
+        : `<button type="button" class="button button--secondary" data-action="acceptWeekly" data-value="${request.id}">接下</button>`;
+    return `
+      <div class="clue-card ${request.completed ? "is-found" : request.accepted ? "is-current" : "is-locked"}">
+        <span class="clue-icon">${request.completed ? "✓" : request.accepted ? "→" : "○"}</span>
+        <span class="clue-copy">
+          <strong>${request.title} · ${status}</strong>
+          <span>${request.description}</span>
+          <span>需要：${requirements} · 奖励 ${request.reward} 金 / ${request.civic} 公民点 / ${request.reputation} 声誉</span>
+          <span>期限：第 ${request.deadlineDay} 天清晨</span>
+        </span>
+        <span class="clue-status">${action}</span>
+      </div>
+    `;
+  }).join("");
+  openModal({
+    kicker: `本周公告板 · ${state.season}季 · 第 ${Math.floor((state.day - 1) / 7) + 1} 周`,
+    title: "把牧场接进公共生活",
+    wide: true,
+    body: `
+      <p class="story-lead">城市、港口和议事厅共用这一块公告板。接下的请求会在周末结算，交付物直接进入公共厨房、诊所或早班。</p>
+      <div class="clue-list">${rows}</div>
+      <div class="weather-note">一周最多同时接两项。未交付的请求会在周末扣除公民点和声誉；已收集的物资不会凭空消失。</div>
+    `,
+    footer: `<button type="button" class="button button--ghost" data-action="close">先回去安排生产</button>`,
+  });
+}
+
 function handleBridgeQuestInteraction(interaction) {
   if (!interaction.bridgeStep) {
     openBridgeQuestInfo();
@@ -1032,6 +1080,11 @@ function handleInteraction(id) {
       break;
     case "city_market":
       openRegionHub("city");
+      break;
+    case "city_weekly":
+    case "port_weekly":
+    case "council_weekly":
+      openWeeklyBoard();
       break;
     case "city_council":
       travelToScene("council", "road");
@@ -2596,6 +2649,15 @@ function renderBridgeQuestCard() {
   return `<div class="day-report-card"><strong>共同工程 · ${BRIDGE_QUEST.title}</strong><span>${status}</span><span>桥材 ${quest.bridgeMaterials || 0} 份 · 已完成 ${quest.completedSteps?.length || 0} / ${BRIDGE_QUEST.steps.length} 步${quest.deadlineDay && !quest.completed ? ` · 期限第 ${quest.deadlineDay} 天` : ""}</span></div>`;
 }
 
+function renderWeeklyCard() {
+  const board = ensureWeeklyBoard(state);
+  const accepted = board.requests.filter((request) => request.accepted && !request.completed && !request.expired);
+  const completed = board.requests.filter((request) => request.completed);
+  if (!accepted.length && !completed.length) return "";
+  const next = accepted[0];
+  return `<div class="day-report-card"><strong>本周公共请求 · 第 ${Math.floor((state.day - 1) / 7) + 1} 周</strong><span>已接下 ${accepted.length} 项 · 已交付 ${completed.length} 项${next ? ` · 下一项「${next.title}」第 ${next.deadlineDay} 天截止` : ""}</span></div>`;
+}
+
 function showEnding() {
   const endingId = resolveEnding(state);
   const ending = ENDINGS[endingId];
@@ -2831,6 +2893,11 @@ function showDaySummary(report, nextEvent = null, auto = false) {
           : ""
       }
       ${
+        report.weeklyExpired?.length
+          ? `<div class="clue-verification">本周公共请求未交付：${report.weeklyExpired.join("、")}。公民点和声誉受到影响，下一周公告板会刷新。</div>`
+          : ""
+      }
+      ${
         report.seasonVariant
           ? `<div class="day-report-card"><strong>${state.season}季路线 · ${report.seasonVariant.label}</strong><span>${report.seasonVariant.routeLabel}已经在地图上显出来。沿它走，可以找到本季专属的采集点；其他季节的入口会安静地收起，但主路始终可达。</span></div>`
           : ""
@@ -3061,6 +3128,7 @@ function openMenu() {
           ${relationRow("企业影响", state.relations.corporation, "metric-track--amber")}
           ${state.story.postGameModifier ? renderPostGameProgressCard() : ""}
           ${renderBridgeQuestCard()}
+          ${renderWeeklyCard()}
         </div>
         <div>
           <div class="section-title">背包 · ${getBagUsage(state)} / ${state.bag.slots} 格</div>
@@ -3524,6 +3592,33 @@ function handleModalClick(event) {
       } else {
         audio.play("error");
         showToast(result.message, { strong: "旧渠木桥" });
+      }
+      break;
+    }
+    case "acceptWeekly": {
+      const result = acceptWeeklyRequest(state, value);
+      if (result.ok) {
+        audio.play("ui");
+        showToast(result.message, { strong: "本周公共请求" });
+        saveGame(state);
+        openWeeklyBoard();
+      } else {
+        audio.play("error");
+        showToast(result.message, { strong: "本周公共请求" });
+      }
+      break;
+    }
+    case "deliverWeekly": {
+      const result = deliverWeeklyRequest(state, value);
+      if (result.ok) {
+        audio.play("success");
+        showToast(result.message, { strong: "本周公共请求" });
+        updateHUD(true);
+        saveGame(state);
+        openWeeklyBoard();
+      } else {
+        audio.play("error");
+        showToast(result.message, { strong: "本周公共请求" });
       }
       break;
     }

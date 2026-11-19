@@ -38,6 +38,7 @@ import {
   SEASON_DAYS,
   SEASONAL_CROP_CALENDAR,
   TOWN_EVENTS,
+  WEEKLY_REQUEST_TEMPLATES,
   SPRITE_DEFS,
   TOOL_UPGRADE_LEVELS,
   TRADE_CONTRACTS,
@@ -363,6 +364,14 @@ export function createInitialState() {
       completed: false,
       bridgeMaterials: 0,
     },
+    weekly: {
+      weekKey: null,
+      requests: [],
+      acceptedIds: [],
+      completedIds: [],
+      expiredIds: [],
+      deliveredCounts: {},
+    },
     town: { eventsSeen: [], birthdayGifts: {}, festivalBonus: 0 },
     plots: createPlots(),
     animals: createAnimals(),
@@ -554,6 +563,7 @@ export function createInitialState() {
 
   state.daily = generateDailyTasks(state);
   state.market.contracts = generateTradeContracts(state);
+  ensureWeeklyBoard(state);
   addMemory(
     state,
     "第一次启动：环境安静，土壤含水量偏低。我不知道你为什么会回来。",
@@ -695,6 +705,130 @@ export function advanceBridgeQuest(state) {
     nextStep: BRIDGE_QUEST.steps[state.quests.stepIndex] || null,
     message: completed ? "旧渠木桥修好了，城市回报已经到账。" : `「${step.actionLabel}」完成，去下一块路牌。`,
   };
+}
+
+function weeklyBoardKey(state) {
+  const week = Math.floor((state.day - 1) / 7) + 1;
+  return `${state.season}-${week}`;
+}
+
+function weeklyDeadlineDay(state) {
+  return (Math.floor((state.day - 1) / 7) + 1) * 7 + 1;
+}
+
+export function ensureWeeklyBoard(state, force = false) {
+  if (!state.weekly) {
+    state.weekly = {
+      weekKey: null,
+      requests: [],
+      acceptedIds: [],
+      completedIds: [],
+      expiredIds: [],
+      deliveredCounts: {},
+    };
+  }
+  const key = weeklyBoardKey(state);
+  if (!force && state.weekly.weekKey === key && state.weekly.requests.length) return state.weekly;
+  const week = Math.floor((state.day - 1) / 7);
+  const seasonOffset = SEASONS.indexOf(state.season);
+  const firstIndex = (week * 2 + seasonOffset) % WEEKLY_REQUEST_TEMPLATES.length;
+  const templates = [0, 1].map((offset) => (
+    WEEKLY_REQUEST_TEMPLATES[(firstIndex + offset) % WEEKLY_REQUEST_TEMPLATES.length]
+  ));
+  state.weekly = {
+    weekKey: key,
+    requests: templates.map((template) => ({
+      ...template,
+      requirements: { ...template.requirements },
+      deadlineDay: weeklyDeadlineDay(state),
+      accepted: false,
+      completed: false,
+      expired: false,
+    })),
+    acceptedIds: [],
+    completedIds: state.weekly.completedIds || [],
+    expiredIds: state.weekly.expiredIds || [],
+    deliveredCounts: state.weekly.deliveredCounts || {},
+  };
+  return state.weekly;
+}
+
+export function acceptWeeklyRequest(state, requestId) {
+  const board = ensureWeeklyBoard(state);
+  const request = board.requests.find((entry) => entry.id === requestId);
+  if (!request) return { ok: false, message: "这周的公告板上没有这项请求。" };
+  if (request.expired || request.completed) return { ok: false, message: "这项请求已经结束。" };
+  if (request.accepted) return { ok: false, message: "这项请求已经在你的清单里。" };
+  if (board.acceptedIds.length >= 2) return { ok: false, message: "一周最多同时接两项公共请求。" };
+  request.accepted = true;
+  board.acceptedIds.push(request.id);
+  emitFeedback(state, {
+    eventId: "weekly_accepted",
+    kind: "quest",
+    severity: "info",
+    sourceScene: "city",
+    message: `接下本周公共请求「${request.title}」，第 ${request.deadlineDay} 天截止。`,
+    dedupeKey: `weekly_accepted:${request.id}:${board.weekKey}`,
+  });
+  addMemory(state, `你接下了本周公共请求「${request.title}」，期限是第 ${request.deadlineDay} 天清晨。`, "quest", 2);
+  return { ok: true, request, message: `已接下「${request.title}」。` };
+}
+
+export function deliverWeeklyRequest(state, requestId) {
+  const board = ensureWeeklyBoard(state);
+  const request = board.requests.find((entry) => entry.id === requestId);
+  if (!request) return { ok: false, message: "这周的公告板上没有这项请求。" };
+  if (!request.accepted) return { ok: false, message: "先在公告板接下这项请求。" };
+  if (request.completed) return { ok: false, message: "这项请求已经交付。" };
+  if (request.expired) return { ok: false, message: "这项请求已经过期。" };
+  const missing = Object.entries(request.requirements).find(([itemId, amount]) =>
+    inventoryQuantity(state, itemId) < amount,
+  );
+  if (missing) {
+    const item = MARKET_GOODS[missing[0]] || PRODUCTS[missing[0]];
+    return { ok: false, message: `还缺 ${missing[1] - inventoryQuantity(state, missing[0])} 份${item?.name || missing[0]}。` };
+  }
+  for (const [itemId, amount] of Object.entries(request.requirements)) {
+    consumeInventoryItem(state, itemId, amount);
+  }
+  request.completed = true;
+  board.completedIds.push(request.id);
+  board.deliveredCounts[request.id] = (board.deliveredCounts[request.id] || 0) + 1;
+  state.coins += request.reward;
+  state.stats.earned += request.reward;
+  state.government.civicPoints += request.civic;
+  state.market.reputation += request.reputation;
+  emitFeedback(state, {
+    eventId: "weekly_delivered",
+    kind: "quest",
+    severity: "success",
+    message: `本周公共请求「${request.title}」交付完成。`,
+    dedupeKey: `weekly_delivered:${request.id}:${board.weekKey}`,
+  });
+  addMemory(state, `你交付了本周公共请求「${request.title}」，获得 ${request.reward} 金、${request.civic} 公民点和 ${request.reputation} 声誉。`, "quest", 3);
+  return { ok: true, request, message: `交付「${request.title}」，获得 ${request.reward} 金。` };
+}
+
+function expireWeeklyRequests(state, report, checkDay = state.day) {
+  const board = ensureWeeklyBoard(state);
+  for (const request of board.requests) {
+    if (!request.accepted || request.completed || request.expired) continue;
+    if (checkDay < request.deadlineDay) continue;
+    request.expired = true;
+    board.expiredIds.push(request.id);
+    state.market.reputation = Math.max(0, state.market.reputation - 2);
+    state.government.civicPoints = Math.max(0, state.government.civicPoints - 1);
+    report.weeklyExpired.push(request.title);
+    emitFeedback(state, {
+      eventId: "weekly_expired",
+      kind: "quest",
+      severity: "warning",
+      sourceScene: "city",
+      message: `公共请求「${request.title}」未在周末交付，公民点和声誉下降。`,
+      dedupeKey: `weekly_expired:${request.id}:${board.weekKey}`,
+    });
+    addMemory(state, `本周公共请求「${request.title}」过期。公告板留下了空白，下一周会换一批请求。`, "risk", 3);
+  }
 }
 
 export function getSceneSeasonVariant(state, sceneId = state.world?.scene || "farm") {
@@ -2571,9 +2705,11 @@ export function advanceDay(state) {
     },
     seasonVariant: null,
     questExpired: null,
+    weeklyExpired: [],
     systemNotes: [],
     weather: "sunny",
   };
+  expireWeeklyRequests(state, report, closingDay + 1);
   if (state.daily?.recapOptions?.length && !state.daily.recapChoice) {
     addMemory(state, "昨天的日结解释没有落笔。牧心把这段留白记成一次未决的取舍。", "routine", 1);
   }
@@ -2713,6 +2849,7 @@ export function advanceDay(state) {
     });
     addMemory(state, `「${BRIDGE_QUEST.title}」错过了期限，港口声誉下降。桥材和已完成步骤被保留，下一周可以重新接上。`, "risk", 3);
   }
+  ensureWeeklyBoard(state);
   state.minutes = DAY_START_MINUTES;
   state.energy = state.maxEnergy;
   state.stats.slept += 1;
@@ -2934,6 +3071,23 @@ export function loadGame() {
           ? parsed.quests.completedSteps
           : base.quests.completedSteps,
       },
+      weekly: {
+        ...base.weekly,
+        ...(parsed.weekly || {}),
+        requests: Array.isArray(parsed.weekly?.requests)
+          ? parsed.weekly.requests
+          : base.weekly.requests,
+        acceptedIds: Array.isArray(parsed.weekly?.acceptedIds)
+          ? parsed.weekly.acceptedIds
+          : base.weekly.acceptedIds,
+        completedIds: Array.isArray(parsed.weekly?.completedIds)
+          ? parsed.weekly.completedIds
+          : base.weekly.completedIds,
+        expiredIds: Array.isArray(parsed.weekly?.expiredIds)
+          ? parsed.weekly.expiredIds
+          : base.weekly.expiredIds,
+        deliveredCounts: { ...base.weekly.deliveredCounts, ...(parsed.weekly?.deliveredCounts || {}) },
+      },
       town: { ...base.town, ...(parsed.town || {}), eventsSeen: Array.isArray(parsed.town?.eventsSeen) ? parsed.town.eventsSeen : base.town.eventsSeen, birthdayGifts: { ...base.town.birthdayGifts, ...(parsed.town?.birthdayGifts || {}) } },
       stats: { ...base.stats, ...(parsed.stats || {}) },
       ai: {
@@ -3056,6 +3210,7 @@ export function loadGame() {
     }
     merged.forage = normalizeForageState(merged.forage, merged);
     merged.daily = normalizeDailyState(merged.daily, merged);
+    ensureWeeklyBoard(merged);
     if (!merged.market.contracts?.length) {
       merged.market.contracts = generateTradeContracts(merged);
     }

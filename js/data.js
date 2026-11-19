@@ -701,11 +701,13 @@ export const SCENE_INTERACTIONS = {
     { id: "city_market", x: 430, y: 275, radius: 62, label: "进入城市建设处", keycap: "E" },
     { id: "city_mayor", x: 474, y: 526, radius: 58, label: "和市政官聊聊", keycap: "E" },
     { id: "city_forage", x: 310, y: 520, radius: 58, label: "寻找村口山货", keycap: "E", forageNode: true },
+    { id: "city_weekly", x: 700, y: 560, radius: 54, label: "查看本周公共请求", keycap: "E" },
   ],
   council: [
     { id: "council_government", x: 380, y: 364, radius: 64, label: "打开共同议政", keycap: "E" },
     { id: "council_water", x: 860, y: 366, radius: 64, label: "查看水章档案", keycap: "E" },
     { id: "council_clerk", x: 600, y: 566, radius: 54, label: "和议事员聊聊", keycap: "E" },
+    { id: "council_weekly", x: 520, y: 620, radius: 54, label: "查看公共请求盖章台", keycap: "E" },
   ],
   workshop: [
     { id: "workshop_sprites", x: 234, y: 318, radius: 64, label: "打开小精灵工坊", keycap: "E" },
@@ -726,6 +728,7 @@ export const SCENE_INTERACTIONS = {
     { id: "port_shipping", x: 1114, y: 286, radius: 58, label: "打开港口出货箱", keycap: "E" },
     { id: "port_sailor", x: 500, y: 542, radius: 54, label: "和渡轮长聊聊", keycap: "E" },
     { id: "port_delivery_run", x: 760, y: 520, radius: 58, label: "限时运货", keycap: "E", minigame: "delivery" },
+    { id: "port_weekly", x: 900, y: 600, radius: 54, label: "查看本周收货牌", keycap: "E" },
   ],
   quarry: [
     { id: "quarry_vein", x: 620, y: 330, radius: 64, label: "旧矿脉采样", keycap: "E", minigame: "mining" },
@@ -2203,6 +2206,45 @@ export const BRIDGE_QUEST = {
     },
   ],
 };
+
+export const WEEKLY_REQUEST_TEMPLATES = [
+  {
+    id: "school_soup",
+    title: "学校汤锅",
+    description: "村小学这周要给孩子和值夜家长准备热汤。",
+    requirements: { turnip: 2, egg: 2 },
+    reward: 120,
+    civic: 1,
+    reputation: 2,
+  },
+  {
+    id: "clinic_milk",
+    title: "诊所加餐",
+    description: "诊所希望给恢复期的病人准备牛奶和根茎。",
+    requirements: { milk: 1, potato: 2 },
+    reward: 150,
+    civic: 1,
+    reputation: 2,
+  },
+  {
+    id: "harbor_breakfast",
+    title: "港口早班",
+    description: "早班装卸工需要一份能带上船的早餐。",
+    requirements: { egg: 1, milk: 1, turnip: 1 },
+    reward: 135,
+    civic: 1,
+    reputation: 2,
+  },
+  {
+    id: "weaver_straw",
+    title: "织坊草料",
+    description: "旧织坊要修补公共坐垫，收一些羊毛和干草。",
+    requirements: { wool: 1, turnip: 1 },
+    reward: 145,
+    civic: 1,
+    reputation: 2,
+  },
+];
 
 export const TIPS = [
   "浇水后的作物会在过夜时生长。雨天会自动浇灌所有田地。",
