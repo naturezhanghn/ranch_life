@@ -367,6 +367,7 @@ function beginPlay({ fresh = false, loadedState = null } = {}) {
   active = true;
   inputLocked = false;
   audio.setEnabled(state.settings.sound);
+  audio.setScene(state.world?.scene || "farm");
   audio.unlock();
   dom.welcome.classList.add("is-hidden");
   document.body.classList.add("is-playing");
@@ -530,6 +531,17 @@ function scenePortalInteractions(sceneId) {
   }));
 }
 
+function forageInteractionIsAvailable(interaction) {
+  if (!interaction.forageNode) return true;
+  return (state.forage?.nodes || []).some((node) => (
+    node.interactionId === interaction.id
+      && node.scene === currentSceneId()
+      && !node.claimed
+      && node.expiresDay === state.day
+      && state.minutes <= node.expiresMinute
+  ));
+}
+
 function availableInteractions() {
   const sceneId = currentSceneId();
   const base = sceneId === "farm"
@@ -549,7 +561,7 @@ function availableInteractions() {
       npc,
     };
   }).filter(Boolean);
-  return [...base, ...scenePortalInteractions(sceneId), ...npcs];
+  return [...base.filter(forageInteractionIsAvailable), ...scenePortalInteractions(sceneId), ...npcs];
 }
 
 function findNearestInteraction() {
@@ -819,9 +831,9 @@ function handleInteraction(id) {
     case "sleep":
       openSleepDialog();
       break;
-    case "forage": {
-      const forageId = state.forage.available.find((id) => !state.forage.collected[id]);
-      const result = forageId ? collectForage(state, forageId) : { ok: false, message: "今天还没有可采集的季节山货。雨后再来看看。" };
+    case "forage":
+    case "city_forage": {
+      const result = collectForage(state, id);
       if (result.ok) { saveGame(state); updateHUD(true); showToast(result.message, { strong: "季节山货" }); }
       else showToast(result.message);
       break;
@@ -1673,6 +1685,7 @@ function travelToScene(sceneId, mode = "road") {
     showToast(result.message, { strong: "路线未开放" });
     return;
   }
+  audio.setScene(sceneId);
   triggerEffect("travel", state.player.x, state.player.y);
   updateHUD(true);
   updateInteractionHint();
@@ -2319,6 +2332,7 @@ function sleepAndAdvance(auto = false) {
     2,
   );
   const report = advanceDay(state);
+  audio.setScene(state.world?.scene || "farm");
   if (willMeetInvestor) {
     state.story.step = "meetInvestor";
     state.story.marketEventSeen = true;
@@ -2366,9 +2380,10 @@ function showDaySummary(report, nextEvent = null, auto = false) {
       }
       ${report.shipping?.units ? `<div class="day-report-card"><strong>出货箱结算</strong><span>昨日交付 ${report.shipping.units} 份，到账 ${report.shipping.value} 金。</span></div>` : ""}
       ${report.dailyTasks ? `<div class="day-report-card"><strong>今日清单</strong><span>完成 ${report.dailyTasks.completed.length} 项，未完成 ${report.dailyTasks.incomplete.length} 项，已获得 ${report.dailyTasks.reward} 金。${report.dailyTasks.incomplete.length ? "未完成：" + report.dailyTasks.incomplete.map((task) => task.text + "（" + task.progress + "/" + task.target + "）").join("、") : "明天继续保持这个节奏。"}</span></div>` : ""}
+      ${report.forageStats?.spawned || report.forageStats?.expired ? `<div class="day-report-card"><strong>雨后采集</strong><span>新出现 ${report.forageStats.spawned} 个节点，采到 ${report.forageStats.collected} 个，过期 ${report.forageStats.expired} 个。${report.forageStats.window ? "雨后窗口只开放到上午九点。" : ""}</span></div>` : ""}
       ${report.livestock?.length ? `<div class="day-report-card"><strong>牲畜日结</strong><span>${report.livestock.map((animal) => `${animal.name} · ${animal.sick ? "生病" : animal.unhappy ? "不开心" : "状态稳定"} · 健康 ${Math.round(animal.health)} · 亲密 ${Math.round(animal.affection)} · 放牧 ${Math.round(animal.outdoorMinutes)} 分钟`).join("；")}</span></div>` : ""}
       ${report.systemNotes?.length ? `<div class="day-report-card day-report-card--ai"><strong>牧心记录</strong><span>${report.systemNotes.join("；")}</span></div>` : ""}
-      ${report.forage?.length ? `<div class="day-report-card"><strong>季节山货</strong><span>今天在${state.season}季山路发现：${report.forage.join("、")}。雨后更容易遇到采集物。</span></div>` : ""}
+      ${report.forage?.length ? `<div class="day-report-card"><strong>${report.forageStats?.window ? "雨后足迹" : "季节山货"}</strong><span>今天在${state.season}季山路发现：${report.forage.join("、")}。${report.forageStats?.window ? "雨后窗口只开放到上午九点。" : "季节山货会按天气和季节刷新。"}</span></div>` : ""}
       ${report.townEvent ? `<div class="day-report-card"><strong>城镇日程 · ${report.townEvent.title}</strong><span>${report.townEvent.description} 活动奖励 ${report.townEvent.reward} 金。</span></div>` : ""}
       ${
         unfedNames.length

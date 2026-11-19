@@ -18,6 +18,26 @@ export const FORAGE_TABLE = {
   秋: [{ id: "autumn_mushroom", name: "秋野菇", icon: "◉", price: 68, chance: 0.58 }],
   冬: [{ id: "winter_root", name: "雪下根", icon: "◇", price: 82, chance: 0.45 }],
 };
+export const FORAGE_NODE_DEFS = [
+  {
+    id: "farm_rain_trail",
+    interactionId: "forage",
+    scene: "farm",
+    x: 610,
+    y: 180,
+    radius: 58,
+    label: "寻找雨后足迹",
+  },
+  {
+    id: "city_rain_trail",
+    interactionId: "city_forage",
+    scene: "city",
+    x: 310,
+    y: 520,
+    radius: 58,
+    label: "寻找村口山货",
+  },
+];
 export const HOUSE_UPGRADES = [
   { level: 1, cost: 260, title: "增筑小屋", features: ["冰箱", "储物柜"], description: "解锁冰箱与额外储物空间。" },
   { level: 2, cost: 520, title: "厨房扩建", features: ["厨房", "料理台"], description: "解锁厨房料理，料理可恢复体力并提高关系。" },
@@ -243,6 +263,7 @@ export const SCENE_INTERACTIONS = {
   city: [
     { id: "city_market", x: 430, y: 275, radius: 62, label: "进入城市建设处", keycap: "E" },
     { id: "city_mayor", x: 474, y: 526, radius: 58, label: "和市政官聊聊", keycap: "E" },
+    { id: "city_forage", x: 310, y: 520, radius: 58, label: "寻找村口山货", keycap: "E", forageNode: true },
   ],
   council: [
     { id: "council_government", x: 380, y: 364, radius: 64, label: "打开共同议政", keycap: "E" },
@@ -896,7 +917,7 @@ export const SHOP_SEEDS = Object.values(CROPS).map((crop) => ({
 }));
 
 export const INTERACTIONS = [
-  { id: "forage", x: 610, y: 180, radius: 58, label: "采集季节山货", keycap: "E" },
+  { id: "forage", x: 610, y: 180, radius: 58, label: "寻找雨后足迹", keycap: "E", forageNode: true },
   {
     id: "sleep",
     x: 216,

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { CROPS, TRADE_CONTRACTS, WORLD } from "../js/data.js";
+import { CROPS, DAY_START_MINUTES, TRADE_CONTRACTS, WORLD } from "../js/data.js";
 import {
   advanceDay,
   applyDevelopmentChoice,
@@ -9,6 +9,7 @@ import {
   assignSprite,
   brushAnimal,
   createInitialState,
+  collectForage,
   enactGovernmentPolicy,
   exploreIsland,
   fulfillTradeContract,
@@ -216,6 +217,81 @@ test("daily task settlement is shown in the day report and牧心 memory", () => 
   assert.equal(report.dailyTasks.reward, 25);
   assert.ok(report.systemNotes.some((note) => note.includes("今日清单结算")));
   assert.ok(state.ai.memories.some((memory) => memory.text.includes("今日清单结算")));
+});
+
+test("rain forage nodes expire, collect once, and feed the day report", () => {
+  const state = freshState();
+  state.weather = "rain";
+  const report = advanceDay(state);
+  assert.equal(report.forageStats.window, true);
+  assert.equal(report.forageStats.spawned, 1);
+  assert.equal(state.forage.weatherDay, 1);
+  assert.equal(state.forage.expiresDay, 2);
+  assert.equal(state.forage.expiresMinute, DAY_START_MINUTES + 180);
+  const node = state.forage.nodes[0];
+  state.world.scene = node.scene;
+  const energyBefore = state.energy;
+  const first = collectForage(state, node.id);
+  assert.equal(first.ok, true);
+  assert.equal(first.combo, 1);
+  assert.equal(state.energy, energyBefore - 1);
+  assert.equal(state.daily.counters.foraged, 1);
+  const memoryCount = state.ai.memories.length;
+  const second = collectForage(state, node.id);
+  assert.equal(second.ok, false);
+  assert.equal(state.energy, energyBefore - 1);
+  assert.equal(state.ai.memories.length, memoryCount);
+  assert.equal(state.forage.claimedNodeIds.includes(node.id), true);
+});
+
+test("expired forage gives feedback without spending energy", () => {
+  const state = freshState();
+  state.weather = "rain";
+  advanceDay(state);
+  const node = state.forage.nodes[0];
+  state.world.scene = node.scene;
+  state.minutes = node.expiresMinute + 1;
+  const energyBefore = state.energy;
+  const result = collectForage(state, node.id);
+  assert.equal(result.ok, false);
+  assert.equal(state.energy, energyBefore);
+  assert.equal(state.forage.expiryNoted, true);
+  assert.ok(state.ai.memories.some((memory) => memory.text.includes("采集窗口已经关闭")));
+});
+
+test("forage node identity stays separate from item identity", () => {
+  const state = freshState();
+  state.forage.available = ["spring_herb"];
+  state.forage.nodes = [
+    {
+      id: "node-a",
+      interactionId: "forage",
+      scene: "farm",
+      x: 610,
+      y: 180,
+      itemId: "spring_herb",
+      expiresDay: state.day,
+      expiresMinute: DAY_START_MINUTES + 180,
+      claimed: false,
+    },
+    {
+      id: "node-b",
+      interactionId: "forage",
+      scene: "farm",
+      x: 640,
+      y: 180,
+      itemId: "spring_herb",
+      expiresDay: state.day,
+      expiresMinute: DAY_START_MINUTES + 180,
+      claimed: false,
+    },
+  ];
+  state.forage.claimedNodeIds = [];
+  state.world.scene = "farm";
+  assert.equal(collectForage(state, "forage").ok, true);
+  assert.equal(collectForage(state, "forage").ok, true);
+  assert.equal(state.forage.claimedNodeIds.length, 2);
+  assert.equal(state.inventory.resources.spring_herb, 2);
 });
 
 test("cooperative, oversight, complete evidence yields common-ground ending", () => {
