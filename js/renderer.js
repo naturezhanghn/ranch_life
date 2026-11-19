@@ -1,4 +1,4 @@
-import { CROPS, INTERACTIONS, SCENE_DEFS, SCENE_INTERACTIONS, SCENE_NPCS, TOOLS, WORLD } from "./data.js";
+import { CROPS, INTERACTIONS, SCENE_DEFS, SCENE_FINDS, SCENE_INTERACTIONS, SCENE_NPCS, TOOLS, WORLD } from "./data.js";
 
 const TAU = Math.PI * 2;
 
@@ -61,7 +61,8 @@ export class WorldRenderer {
     this.drawCanalGate(ctx, state, time);
     this.drawStaticProps(ctx, time);
     this.drawScenePortals(ctx, SCENE_DEFS.farm, time);
-    this.drawForageNode(ctx, state, time);
+    this.drawForageNodes(ctx, state, time);
+    this.drawSceneFinds(ctx, state, time);
 
     const drawables = [];
     const sisterY = 257;
@@ -129,6 +130,8 @@ export class WorldRenderer {
     this.drawSceneStructures(ctx, sceneId, time);
     this.drawScenePortals(ctx, scene, time);
     this.drawSceneLandmarks(ctx, sceneId, time);
+    this.drawForageNodes(ctx, state, time);
+    this.drawSceneFinds(ctx, state, time);
 
     const drawables = [];
     for (const npc of SCENE_NPCS) {
@@ -373,21 +376,59 @@ export class WorldRenderer {
     this.drawInteractionHighlight(ctx, state, runtime, time);
   }
 
-  drawForageNode(ctx, state, time) {
-    if (!state.forage?.available?.length) return;
-    const pulse = 1 + Math.sin(time * 2.5) * 0.12;
-    ctx.save();
-    ctx.fillStyle = "#e4d38b";
-    ctx.globalAlpha = 0.8;
-    ctx.beginPath();
-    ctx.arc(610, 180, 15 * pulse, 0, TAU);
-    ctx.fill();
-    ctx.fillStyle = "#5f8d5d";
-    ctx.font = "700 16px sans-serif";
-    ctx.textAlign = "center";
-    ctx.fillText("❋", 610, 186);
-    this.drawPlaceTag(ctx, 610, 154, "季节山货", "rgba(255, 247, 216, 0.9)", "#5d6136");
-    ctx.restore();
+  drawForageNodes(ctx, state, time) {
+    const sceneId = state.world?.scene || "farm";
+    const nodes = (state.forage?.nodes || []).filter(
+      (node) => node.scene === sceneId && !node.claimed && node.expiresDay >= state.day,
+    );
+    for (const node of nodes) {
+      const pulse = 1 + Math.sin(time * 2.5 + node.x * 0.01) * 0.12;
+      ctx.save();
+      ctx.globalAlpha = 0.28;
+      ctx.strokeStyle = "#e7f0b2";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(node.x, node.y + 7, 23 * pulse, 0, TAU);
+      ctx.stroke();
+      ctx.globalAlpha = 0.9;
+      ctx.fillStyle = "#e4d38b";
+      ctx.beginPath();
+      ctx.arc(node.x, node.y, 13 * pulse, 0, TAU);
+      ctx.fill();
+      ctx.fillStyle = "#5f8d5d";
+      ctx.font = "700 15px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText(node.icon || "❋", node.x, node.y + 5);
+      ctx.fillStyle = "rgba(37, 68, 52, 0.82)";
+      ctx.font = "600 8px 'PingFang SC', sans-serif";
+      ctx.fillText("雨后足迹", node.x, node.y - 20);
+      ctx.restore();
+    }
+  }
+
+  drawSceneFinds(ctx, state, time) {
+    const sceneId = state.world?.scene || "farm";
+    for (const find of SCENE_FINDS[sceneId] || []) {
+      if (state.world.sceneFinds?.[sceneId]?.[find.id]) continue;
+      const pulse = 0.75 + Math.sin(time * 1.8 + find.x * 0.02) * 0.12;
+      ctx.save();
+      ctx.globalAlpha = 0.24;
+      ctx.fillStyle = "#f2ddb0";
+      ctx.beginPath();
+      ctx.arc(find.x, find.y + 8, 18 * pulse, 0, TAU);
+      ctx.fill();
+      ctx.globalAlpha = 0.58;
+      ctx.strokeStyle = "#f3e0b1";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(find.x, find.y - 7);
+      ctx.lineTo(find.x + 7, find.y);
+      ctx.lineTo(find.x, find.y + 7);
+      ctx.lineTo(find.x - 7, find.y);
+      ctx.closePath();
+      ctx.stroke();
+      ctx.restore();
+    }
   }
 
   drawGround(ctx, state, time) {

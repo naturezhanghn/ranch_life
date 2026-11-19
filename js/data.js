@@ -18,6 +18,19 @@ export const FORAGE_TABLE = {
   秋: [{ id: "autumn_mushroom", name: "秋野菇", icon: "◉", price: 68, chance: 0.58 }],
   冬: [{ id: "winter_root", name: "雪下根", icon: "◇", price: 82, chance: 0.45 }],
 };
+
+export const FORAGE_NODE_LAYOUT = {
+  farm: [
+    { id: "farm_west_trail", x: 608, y: 180 },
+    { id: "farm_village_edge", x: 570, y: 574 },
+  ],
+  city: [
+    { id: "city_old_garden", x: 900, y: 520 },
+  ],
+  port: [
+    { id: "port_tide_rocks", x: 1135, y: 490 },
+  ],
+};
 export const HOUSE_UPGRADES = [
   { level: 1, cost: 260, title: "增筑小屋", features: ["冰箱", "储物柜"], description: "解锁冰箱与额外储物空间。" },
   { level: 2, cost: 520, title: "厨房扩建", features: ["厨房", "料理台"], description: "解锁厨房料理，料理可恢复体力并提高关系。" },
@@ -357,6 +370,191 @@ export const SCENE_NPCS = [
   },
 ];
 
+export const NPC_TOPICS = {
+  mayor: {
+    prompt: "阿禾把新的水章草稿摊在桌上：如果水量再一次不足，应该先保护谁？",
+    choices: [
+      {
+        id: "common",
+        label: "先公开水量记录，让每个村都参与决定。",
+        delta: 3,
+        community: 2,
+        reply: "“公开会让人吵起来，但吵过一次，下一次就不必重新猜。”",
+      },
+      {
+        id: "speed",
+        label: "先让市政快速决定，事后再解释。",
+        delta: -1,
+        community: -1,
+        reply: "“快是快，可被跳过的人会把这件事记很久。”",
+      },
+    ],
+  },
+  merchant: {
+    prompt: "岑岑问你：港口接到一笔高价远洋单，但会挤掉本村小农的交付窗口。",
+    choices: [
+      {
+        id: "shared",
+        label: "保留一部分舱位给本地小农。",
+        delta: 3,
+        community: 1,
+        reply: "“利润少一点，但下次船靠岸时，码头还会有人愿意等你。”",
+      },
+      {
+        id: "profit",
+        label: "先拿远洋单，市场机会不等人。",
+        delta: -1,
+        community: -1,
+        reply: "“机会确实不等人。可小农也不会永远等我们。”",
+      },
+    ],
+  },
+  spriteKeeper: {
+    prompt: "白露问：小精灵是否可以为了效率，临时越过自己最擅长的岗位？",
+    choices: [
+      {
+        id: "consent",
+        label: "先问它们愿意学什么，再安排工作。",
+        delta: 3,
+        community: 1,
+        reply: "“它们不是备用零件。愿意学，和被安排去学，是两种关系。”",
+      },
+      {
+        id: "order",
+        label: "先按牧场缺口派工，成长以后再说。",
+        delta: -1,
+        community: -1,
+        reply: "“效率表上没有写它们昨晚做了梦。”",
+      },
+    ],
+  },
+  islandChild: {
+    prompt: "小满指着潮池问：稀有的月光珍珠应该全部捞走吗？",
+    choices: [
+      {
+        id: "leave",
+        label: "留一半给下一次潮汐和别的生物。",
+        delta: 2,
+        ecology: 2,
+        reply: "“阿婆说，海不是今天才有的。”",
+      },
+      {
+        id: "take",
+        label: "今天能带走就带走，明天未必还有机会。",
+        delta: -1,
+        ecology: -1,
+        reply: "“那明天来的人，只能看到空掉的礁缝。”",
+      },
+    ],
+  },
+  quarryForeman: {
+    prompt: "衡叔敲了敲矿道支柱：深层的富矿能卖好价，但今天的木梁已经旧了。",
+    choices: [
+      {
+        id: "repair",
+        label: "先修支柱，少采一钩也认了。",
+        delta: 2,
+        community: 1,
+        reply: "“矿可以明天再采，人不能明天再长出来。”",
+      },
+      {
+        id: "risk",
+        label: "只下一钩，应该来得及。",
+        delta: -1,
+        community: -1,
+        reply: "“每个出事的人，进去前都说过‘应该’。”",
+      },
+    ],
+  },
+};
+
+export const SCENE_FINDS = {
+  farm: [
+    {
+      id: "old_gate",
+      x: 584,
+      y: 520,
+      label: "查看旧闸刻痕",
+      lore: "闸石侧面有三种深浅不同的刻痕，像是不同年代的人在同一处记下过水位。",
+      reward: { coins: 18 },
+    },
+    {
+      id: "field_stone",
+      x: 190,
+      y: 320,
+      label: "翻看田埂石",
+      lore: "田埂下压着一枚生锈的田界钉，上面没有地主姓名，只有共同修渠的年份。",
+      reward: { coins: 12 },
+    },
+  ],
+  city: [
+    {
+      id: "market_tile",
+      x: 660,
+      y: 540,
+      label: "查看旧市场砖",
+      lore: "一块被磨平的铺地砖上刻着三只手共同托起一束麦穗，边缘已经缺了一角。",
+      reward: { coins: 16 },
+    },
+    {
+      id: "ferry_post",
+      x: 1110,
+      y: 475,
+      label: "读旧渡口牌",
+      lore: "渡口牌背后写着几行已经褪色的名字，都是曾在这条航线上轮班守夜的人。",
+      reward: { coins: 20 },
+    },
+  ],
+  council: [
+    {
+      id: "water_ledger",
+      x: 620,
+      y: 520,
+      label: "翻阅水章旧页",
+      lore: "旧水章里没有“先到先得”，只有“先行者负责通知后来者”。",
+      reward: { coins: 24 },
+    },
+  ],
+  workshop: [
+    {
+      id: "sprite_etch",
+      x: 760,
+      y: 430,
+      label: "查看精灵刻线",
+      lore: "工坊门框上刻着七种不同的手势，白露说那是七个小精灵互相交接工作的暗号。",
+      reward: { coins: 22 },
+    },
+  ],
+  island: [
+    {
+      id: "drift_bottle",
+      x: 850,
+      y: 570,
+      label: "捡起漂流瓶",
+      lore: "瓶中信来自另一座岛，写着：如果你们也看见潮水变低，请联系我们。",
+      reward: { coins: 26 },
+    },
+    {
+      id: "old_beacon",
+      x: 1080,
+      y: 470,
+      label: "查看旧航标",
+      lore: "航标上的灯塔图案被海风磨得模糊，底下仍能看见“为夜行者留灯”五个字。",
+      reward: { coins: 22 },
+    },
+  ],
+  quarry: [
+    {
+      id: "safety_ledger",
+      x: 300,
+      y: 560,
+      label: "查看矿道安全簿",
+      lore: "安全簿最后一页没有写产量，只写着：今日所有人平安归来。",
+      reward: { coins: 20 },
+    },
+  ],
+};
+
 export const PLAYER_START = { x: 286, y: 282, facing: "down" };
 
 export const TOOLS = [
@@ -600,6 +798,46 @@ export const MARKET_GOODS = {
     maxPrice: 104,
     volatility: 0.24,
     source: "旧矿道",
+  },
+  spring_herb: {
+    id: "spring_herb",
+    name: "春芽草",
+    icon: "❋",
+    basePrice: 28,
+    minPrice: 16,
+    maxPrice: 48,
+    volatility: 0.22,
+    source: "雨后山货",
+  },
+  summer_berry: {
+    id: "summer_berry",
+    name: "夏莓",
+    icon: "●",
+    basePrice: 42,
+    minPrice: 25,
+    maxPrice: 72,
+    volatility: 0.25,
+    source: "雨后山货",
+  },
+  autumn_mushroom: {
+    id: "autumn_mushroom",
+    name: "秋野菇",
+    icon: "◉",
+    basePrice: 68,
+    minPrice: 42,
+    maxPrice: 112,
+    volatility: 0.28,
+    source: "雨后山货",
+  },
+  winter_root: {
+    id: "winter_root",
+    name: "雪下根",
+    icon: "◇",
+    basePrice: 82,
+    minPrice: 48,
+    maxPrice: 138,
+    volatility: 0.3,
+    source: "雨后山货",
   },
 };
 

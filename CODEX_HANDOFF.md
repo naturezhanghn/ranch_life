@@ -25,6 +25,10 @@ Development. The real Canvas scene base remains the default runtime; four miniga
 - Old saves receive `minigames` defaults; active sessions are intentionally cleared on load.
 - The game-space slice is merged into `main`; its branch remains available for audit.
 - Deployment source commit: `e94ff22` on `main`; live URL: `https://naturezhanghn.github.io/ranch_life/`.
+- Gameplay cards 02–04 are implemented on the isolated `bailian/game-space` branch: rain-window forage nodes, scene find clues, and NPC daily topic choices.
+- Rainy-day forage nodes now spawn across farm/city/port layouts with one-time claims, energy/time cost, a three-node combo bonus, shared inventory, and day-end reset.
+- Scene finds are hidden landmarks in every scene; investigating them advances time, adds lore memory, grants coins, and completing a scene unlocks a civic point plus AI trust.
+- NPCs have one daily contextual topic. Choosing a response updates `relations.npc`, community/ecology where relevant, and `social.topicDay`; repeat conversations are blocked for the day.
 
 ## Important files
 
@@ -48,10 +52,11 @@ Development. The real Canvas scene base remains the default runtime; four miniga
 - Phaser smoke still required after each adapter change, including farm movement, action, scene dispatch, save/reload, and portrait/landscape resize
 - Node16 Playwright 1.38 audits run through `/tmp/ranch-browser-test/node_modules/playwright` against the existing 4174 server. Mobile controls, mobile scene flow, desktop scene flow, console errors, overflow, touch controls, city→council/workshop entrances, island on-site exploration, and trade port were verified.
 - Regression coverage now includes sleep returning `world.scene` and player spawn to farm, policy `coinCost` deduction, retained/expired order behavior, and safe pointer capture handling.
-- `npm test` now covers 26 state tests plus 7 minigame tests, including day-report and牧心 settlement feedback.
+- `npm test` now covers 26 state tests plus 7 minigame tests plus 3 exploration tests, including day-report and牧心 settlement feedback.
 - Merged `main` verification: 25 state tests + 7 minigame tests pass; desktop and 390×844 real scene-triggered overlay paths pass with no console errors.
 - Minigame completion settlement was exercised in Chromium: hunt reward, ecology update, active-session cleanup, and overlay close all passed.
 - Live deployment check: `js/minigames.js` is served from Pages, and desktop/mobile overlay plus settlement smoke tests pass with no console errors.
+- Exploration smoke on desktop and 390×844: scene find discovery, rainy forage claim, NPC daily topic choice, save-state changes, and touch input all pass with no console errors or horizontal overflow.
 
 ## Risks
 
@@ -64,7 +69,7 @@ Development. The real Canvas scene base remains the default runtime; four miniga
 
 ## Next safest task
 
-Run the opt-in Phaser farm slice against the merged code before migrating additional scenes; then review the first completed card from the tmux queue before accepting the next card.
+Review the next queued gameplay card (05: gift preferences) against the merged main, then add one isolated branch slice and browser acceptance test before merging.
 
 ## Last slice
 
@@ -73,3 +78,10 @@ Run the opt-in Phaser farm slice against the merged code before migrating additi
 - Added deterministic hunt/fishing/mining/delivery state machines and a reusable Canvas overlay.
 - Added daily gating, energy costs, AI memory entries, result settlement, accepted-contract delivery logic, and save migration.
 - Verified: `npm run check`; `npm test` (25 state + 7 minigame); scene-triggered desktop/mobile path from `scene-minigame-path.js`; overlay smoke from `minigame-smoke.js`; completion settlement smoke from `minigame-completion-test.js`; `npm run story-paths` still reports all five endings reachable.
+
+## Latest slice
+
+- Implemented cards 02 rain forage window, 03 scene find collection, and 04 NPC daily topics.
+- Added `FORAGE_NODE_LAYOUT`, `SCENE_FINDS`, `NPC_TOPICS`, `social.topicDay`, `relations.npc`, and scene find state with old-save defaults.
+- Verified: `npm run check`; `npm test` (26 state + 7 minigame + 3 exploration); `exploration-smoke.js` on desktop and 390×844, no console errors or horizontal overflow.
+- Not yet merged or pushed; this branch remains isolated per the parallel-task instruction.

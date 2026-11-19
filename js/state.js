@@ -6,12 +6,14 @@ import {
   DAILY_TASK_POOL,
   DAY_START_MINUTES,
   FORAGE_TABLE,
+  FORAGE_NODE_LAYOUT,
   HOUSE_UPGRADES,
   GOVERNMENT_POLICIES,
   ISLAND_DAILY_LIMIT,
   ISLAND_SPOTS,
   MARKET_GOODS,
   MINIGAME_DEFS,
+  NPC_TOPICS,
   PLAYER_START,
   PRODUCTS,
   PRODUCT_QUALITY_LABELS,
@@ -21,6 +23,8 @@ import {
   SAVE_KEY,
   SAVE_VERSION,
   SCENE_DEFS,
+  SCENE_FINDS,
+  SCENE_NPCS,
   SCENE_REGION_MAP,
   SEASONS,
   SEASON_DAYS,
@@ -302,7 +306,16 @@ export function createInitialState() {
       settlements: [],
     },
     house: { level: 0, upgrades: {}, fridge: {}, storageSlots: 0, kitchen: false },
-    forage: { available: [], collected: {}, lastRefreshDay: 0 },
+    forage: {
+      available: [],
+      collected: {},
+      lastRefreshDay: 0,
+      weatherDay: 0,
+      nodes: [],
+      claimed: {},
+      combo: 0,
+      expiresDay: 0,
+    },
     town: { eventsSeen: [], birthdayGifts: {}, festivalBonus: 0 },
     plots: createPlots(),
     animals: createAnimals(),
@@ -347,12 +360,19 @@ export function createInitialState() {
       ecology: 50,
       corporation: 20,
       automation: 10,
+      npc: {},
+    },
+    social: {
+      topicDay: {},
     },
     world: {
       activeRegion: "farm",
       scene: "farm",
       visitedScenes: ["farm"],
       sceneVisits: { farm: 1 },
+      sceneFinds: {},
+      sceneFindRewards: {},
+      findSeed: 20261119,
       unlockedRegions: ["farm", "city", "trade", "government", "sprites"],
       visits: {
         farm: 1,
@@ -1738,6 +1758,140 @@ export function collectForage(state, forageId) {
   return { ok: true, message: `采到${item.name}。` };
 }
 
+export function generateForageNodes(state, weather, forageRoll = 0) {
+  const shouldSpawn = weather === "rain" || forageRoll > 0.45 || state.seasonDay === 1;
+  state.forage.nodes = [];
+  state.forage.claimed = {};
+  state.forage.available = [];
+  state.forage.weatherDay = weather === "rain" ? state.day : 0;
+  state.forage.expiresDay = state.day;
+  state.forage.combo = 0;
+  if (!shouldSpawn) return;
+
+  const layouts = Object.entries(FORAGE_NODE_LAYOUT);
+  const targetCount = weather === "rain" ? 3 : 2;
+  const items = FORAGE_TABLE[state.season] || [];
+  for (let index = 0; index < targetCount; index += 1) {
+    const [scene, entries] = layouts[index % layouts.length];
+    const point = entries[Math.floor(nextRandom(state) * entries.length)] || entries[0];
+    const item = items[Math.floor(nextRandom(state) * items.length)] || items[0];
+    if (!point || !item) continue;
+    const node = {
+      id: `${point.id}-${state.day}`,
+      itemId: item.id,
+      name: item.name,
+      icon: item.icon,
+      scene,
+      x: point.x,
+      y: point.y,
+      expiresDay: state.day,
+      claimed: false,
+    };
+    state.forage.nodes.push(node);
+    if (!state.forage.available.includes(item.id)) state.forage.available.push(item.id);
+  }
+  addMemory(
+    state,
+    weather === "rain"
+      ? "雨后的地面留下了新鲜足迹。村里和牧场边缘出现了几处可以采集的当季山货。"
+      : "清晨的潮气让几处季节山货冒了出来，窗口不会持续到明天。",
+    "forage",
+    2,
+  );
+}
+
+export function collectForageNode(state, nodeId) {
+  const node = (state.forage.nodes || []).find((entry) => entry.id === nodeId);
+  if (!node || node.claimed || node.expiresDay < state.day) {
+    return { ok: false, message: "这处山货已经被采走，或者雨后的窗口已经结束。" };
+  }
+  if (state.energy < 1) return { ok: false, message: "体力不够，先休息一下吧。" };
+  node.claimed = true;
+  state.energy -= 1;
+  state.minutes = Math.min(24 * 60, state.minutes + 8);
+  state.forage.claimed[node.id] = true;
+  state.forage.combo += 1;
+  state.inventory.resources[node.itemId] = (state.inventory.resources[node.itemId] || 0) + 1;
+  const comboBonus = state.forage.combo === 3 ? 12 : 0;
+  if (comboBonus) {
+    state.coins += comboBonus;
+    state.stats.earned += comboBonus;
+  }
+  bumpCounter(state, "foraged");
+  addMemory(
+    state,
+    `你在${node.scene === "farm" ? "牧场" : node.scene === "city" ? "城市花园" : "港口礁石"}采到${node.name}${comboBonus ? "，连续采集奖励了 12 金" : ""}。`,
+    "forage",
+    2,
+  );
+  return {
+    ok: true,
+    message: `采到${node.name}${comboBonus ? "，连续采集奖励 12 金" : ""}。窗口结束前还可以继续寻找。`,
+    tasks: checkDailyTasks(state),
+  };
+}
+
+export function discoverSceneFind(state, sceneId, findId) {
+  const find = (SCENE_FINDS[sceneId] || []).find((entry) => entry.id === findId);
+  if (!find) return { ok: false, message: "这里没有值得调查的旧物。" };
+  state.world.sceneFinds[sceneId] ||= {};
+  if (state.world.sceneFinds[sceneId][findId]) {
+    return { ok: false, message: "这处线索已经记进地方志了。" };
+  }
+  state.world.sceneFinds[sceneId][findId] = true;
+  state.minutes = Math.min(24 * 60, state.minutes + 12);
+  if (find.reward?.coins) {
+    state.coins += find.reward.coins;
+    state.stats.earned += find.reward.coins;
+  }
+  addMemory(state, `${find.label}：${find.lore}`, "history", 3);
+  const all = SCENE_FINDS[sceneId] || [];
+  const found = all.filter((entry) => state.world.sceneFinds[sceneId][entry.id]);
+  let completion = "";
+  if (found.length === all.length && !state.world.sceneFindRewards[sceneId]) {
+    state.world.sceneFindRewards[sceneId] = true;
+    state.government.civicPoints += 1;
+    state.ai.trust = bounded(state.ai.trust + 2);
+    completion = " 这张地图的地方志条目已经集齐：获得 1 公民点和牧心信任。";
+    addMemory(state, `你集齐了${SCENE_DEFS[sceneId]?.name || sceneId}的地方志条目。地图不再只是通路，它开始有了自己的年轮。`, "history", 4);
+  }
+  return {
+    ok: true,
+    message: `${find.lore}${find.reward?.coins ? ` 获得 ${find.reward.coins} 金。` : ""}${completion}`,
+    find,
+    completedScene: found.length === all.length,
+  };
+}
+
+export function getNpcTopic(state, npcId) {
+  if (!NPC_TOPICS[npcId]) return null;
+  if ((state.social?.topicDay?.[npcId] || 0) === state.day) return null;
+  return NPC_TOPICS[npcId];
+}
+
+export function resolveNpcTopic(state, npcId, choiceId) {
+  const topic = getNpcTopic(state, npcId);
+  if (!topic) return { ok: false, message: "今天已经和这个人聊过了，明天再来吧。" };
+  const choice = topic.choices.find((entry) => entry.id === choiceId);
+  if (!choice) return { ok: false, message: "这个回答还没有准备好。" };
+  state.social.topicDay[npcId] = state.day;
+  state.relations.npc[npcId] = bounded((state.relations.npc[npcId] || 8) + choice.delta, 0, 100);
+  if (choice.community) state.relations.community = bounded(state.relations.community + choice.community);
+  if (choice.ecology) state.relations.ecology = bounded(state.relations.ecology + choice.ecology);
+  addMemory(
+    state,
+    `第 ${state.day} 天，你和${SCENE_NPCS.find((entry) => entry.id === npcId)?.name || "一位居民"}谈了「${topic.prompt}」，你的回答是：${choice.label}`,
+    "social",
+    3,
+  );
+  return {
+    ok: true,
+    message: choice.reply,
+    delta: choice.delta,
+    relation: state.relations.npc[npcId],
+  };
+}
+
 export function advanceDay(state) {
   const closingDay = state.day;
   const report = {
@@ -1880,13 +2034,10 @@ export function advanceDay(state) {
   report.weather = weather;
 
   const forageRoll = nextRandom(state);
-  state.forage.available = [];
-  state.forage.collected = {};
-  if (weather === "rain" || forageRoll > 0.45 || state.seasonDay === 1) {
-    for (const item of FORAGE_TABLE[state.season] || []) if (nextRandom(state) < item.chance) state.forage.available.push(item.id);
-  }
+  generateForageNodes(state, weather, forageRoll);
   state.forage.lastRefreshDay = state.day;
-  report.forage = state.forage.available.map((id) => FORAGE_TABLE[state.season].find((item) => item.id === id)?.name).filter(Boolean);
+  report.forage = state.forage.nodes.map((node) => node.name).filter(Boolean);
+  report.forageNodes = state.forage.nodes.length;
   const townEvent = TOWN_EVENTS.find((event) => event.season === state.season && event.day === state.seasonDay);
   if (townEvent && !state.town.eventsSeen.includes(townEvent.id)) {
     state.town.eventsSeen.push(townEvent.id);
@@ -2019,7 +2170,14 @@ export function loadGame() {
         settlements: Array.isArray(parsed.shipping?.settlements) ? parsed.shipping.settlements : base.shipping.settlements,
       },
       house: { ...base.house, ...(parsed.house || {}), upgrades: { ...base.house.upgrades, ...(parsed.house?.upgrades || {}) }, fridge: { ...base.house.fridge, ...(parsed.house?.fridge || {}) } },
-      forage: { ...base.forage, ...(parsed.forage || {}), available: Array.isArray(parsed.forage?.available) ? parsed.forage.available : base.forage.available, collected: { ...base.forage.collected, ...(parsed.forage?.collected || {}) } },
+      forage: {
+        ...base.forage,
+        ...(parsed.forage || {}),
+        available: Array.isArray(parsed.forage?.available) ? parsed.forage.available : base.forage.available,
+        collected: { ...base.forage.collected, ...(parsed.forage?.collected || {}) },
+        nodes: Array.isArray(parsed.forage?.nodes) ? parsed.forage.nodes : base.forage.nodes,
+        claimed: { ...base.forage.claimed, ...(parsed.forage?.claimed || {}) },
+      },
       town: { ...base.town, ...(parsed.town || {}), eventsSeen: Array.isArray(parsed.town?.eventsSeen) ? parsed.town.eventsSeen : base.town.eventsSeen, birthdayGifts: { ...base.town.birthdayGifts, ...(parsed.town?.birthdayGifts || {}) } },
       stats: { ...base.stats, ...(parsed.stats || {}) },
       ai: {
@@ -2027,12 +2185,23 @@ export function loadGame() {
         ...(parsed.ai || {}),
         memories: Array.isArray(parsed.ai?.memories) ? parsed.ai.memories : base.ai.memories,
       },
-      relations: { ...base.relations, ...(parsed.relations || {}) },
+      relations: {
+        ...base.relations,
+        ...(parsed.relations || {}),
+        npc: { ...base.relations.npc, ...(parsed.relations?.npc || {}) },
+      },
+      social: {
+        ...base.social,
+        ...(parsed.social || {}),
+        topicDay: { ...base.social.topicDay, ...(parsed.social?.topicDay || {}) },
+      },
       world: {
         ...base.world,
         ...(parsed.world || {}),
         visits: { ...base.world.visits, ...(parsed.world?.visits || {}) },
         sceneVisits: { ...base.world.sceneVisits, ...(parsed.world?.sceneVisits || {}) },
+        sceneFinds: { ...base.world.sceneFinds, ...(parsed.world?.sceneFinds || {}) },
+        sceneFindRewards: { ...base.world.sceneFindRewards, ...(parsed.world?.sceneFindRewards || {}) },
         visitedScenes: Array.isArray(parsed.world?.visitedScenes)
           ? Array.from(new Set(parsed.world.visitedScenes))
           : base.world.visitedScenes,

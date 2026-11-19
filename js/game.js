@@ -12,6 +12,8 @@ import {
   ISLAND_SPOTS,
   MARKET_GOODS,
   MINIGAME_DEFS,
+  NPC_TOPICS,
+  SCENE_FINDS,
   INTERACTIONS,
   PRODUCTS,
   REGIONS,
@@ -42,6 +44,7 @@ import {
   buyFeed,
   buySeed,
   beginMinigame,
+  collectForageNode,
   checkDailyTasks,
   collectForage,
   clearSave,
@@ -53,6 +56,7 @@ import {
   getClueCount,
   getMarketPrice,
   getMinigameAvailability,
+  getNpcTopic,
   getTargetPlot,
   enactGovernmentPolicy,
   exploreIsland,
@@ -74,6 +78,8 @@ import {
   refillWaterAtCanal,
   resolveEnding,
   resolveMinigame,
+  discoverSceneFind,
+  resolveNpcTopic,
   saveGame,
   sellAtMarket,
   shipProduce,
@@ -533,8 +539,35 @@ function scenePortalInteractions(sceneId) {
 function availableInteractions() {
   const sceneId = currentSceneId();
   const base = sceneId === "farm"
-    ? INTERACTIONS.filter((interaction) => interaction.id !== "investor" || state.story.step === "meetInvestor")
+    ? INTERACTIONS.filter(
+        (interaction) =>
+          (interaction.id !== "investor" || state.story.step === "meetInvestor") &&
+          (interaction.id !== "forage" || !(state.forage?.nodes || []).length),
+      )
     : (SCENE_INTERACTIONS[sceneId] || []);
+  const forageNodes = (state.forage?.nodes || [])
+    .filter((node) => node.scene === sceneId && !node.claimed && node.expiresDay >= state.day)
+    .map((node) => ({
+      id: `forage_node_${node.id}`,
+      x: node.x,
+      y: node.y,
+      radius: 48,
+      label: `采集${node.name}`,
+      keycap: "E",
+      forageNodeId: node.id,
+    }));
+  const sceneFinds = (SCENE_FINDS[sceneId] || [])
+    .filter((find) => !state.world.sceneFinds?.[sceneId]?.[find.id])
+    .map((find) => ({
+      id: `find_${sceneId}_${find.id}`,
+      x: find.x,
+      y: find.y,
+      radius: 48,
+      label: find.label,
+      keycap: "E",
+      findId: find.id,
+      sceneId,
+    }));
   const npcs = SCENE_NPCS.map((npc) => {
     const position = scheduledNpcPosition(npc);
     if (!position || position.scene !== sceneId) return null;
@@ -549,7 +582,7 @@ function availableInteractions() {
       npc,
     };
   }).filter(Boolean);
-  return [...base, ...scenePortalInteractions(sceneId), ...npcs];
+  return [...base, ...forageNodes, ...sceneFinds, ...scenePortalInteractions(sceneId), ...npcs];
 }
 
 function findNearestInteraction() {
@@ -815,6 +848,14 @@ function handleInteraction(id) {
     startSceneMinigame(sceneInteraction.minigame);
     return;
   }
+  if (sceneInteraction?.forageNodeId) {
+    handleForageNode(sceneInteraction.forageNodeId);
+    return;
+  }
+  if (sceneInteraction?.findId) {
+    handleSceneFind(sceneInteraction.findId, sceneInteraction.sceneId);
+    return;
+  }
   switch (id) {
     case "sleep":
       openSleepDialog();
@@ -904,6 +945,35 @@ function handleInteraction(id) {
   }
 }
 
+function handleForageNode(nodeId) {
+  const result = collectForageNode(state, nodeId);
+  if (result.ok) {
+    audio.play("success");
+    triggerEffect("forage", state.player.x, state.player.y);
+    applyTaskCompletions(result.tasks);
+    showToast(result.message, { strong: "雨后采集" });
+  } else {
+    audio.play("error");
+    showToast(result.message, { strong: "雨后采集" });
+  }
+  updateHUD(true);
+  saveGame(state);
+}
+
+function handleSceneFind(findId, sceneId) {
+  const result = discoverSceneFind(state, sceneId, findId);
+  if (result.ok) {
+    audio.play("memory");
+    triggerEffect("forage", state.player.x, state.player.y);
+    showToast(result.message, { strong: "地方志", duration: 5200 });
+  } else {
+    audio.play("error");
+    showToast(result.message, { strong: "地方志" });
+  }
+  updateHUD(true);
+  saveGame(state);
+}
+
 function startSceneMinigame(type) {
   if (!MINIGAME_DEFS[type]) {
     showToast("这个活动还没有准备好。");
@@ -979,6 +1049,32 @@ function openSceneNpcDialogue(npcId) {
   const npc = SCENE_NPCS.find((entry) => entry.id === npcId);
   if (!npc) return;
   recordNpcTalk(npc.id, npc.name);
+  const topic = getNpcTopic(state, npcId);
+  if (topic) {
+    openModal({
+      kicker: `${npc.role} · 第 ${state.day} 天 · 每日话题`,
+      title: `${npc.name}问你`,
+      body: `
+        ${speakerBlock({ name: npc.name, role: npc.role, text: `“${topic.prompt}”` })}
+        <div class="choice-grid" style="margin-top:16px;">
+          ${topic.choices
+            .map((choice, index) =>
+              choiceOption({
+                number: String(index + 1),
+                title: choice.label,
+                description: choice.reply,
+                action: "npcTopic",
+                value: `${npcId}|${choice.id}`,
+              }),
+            )
+            .join("")}
+        </div>
+        <div class="weather-note">每天只有一次回应机会。你的回答会改变与${npc.name}的关系，并写入牧心的长期记忆。</div>
+      `,
+      footer: `<button type="button" class="button button--ghost" data-action="close">今天先不回答</button>`,
+    });
+    return;
+  }
   const copy = {
     mayor: "“市政不是一张免费 buff 清单。每一条政策都有人出钱、出时间，也有人需要承担它的副作用。”",
     merchant: "“你可以把货交给稳定的出货箱，也可以接受航线的波动。港口记得每一次准时交付，也记得每一次失约。”",
@@ -2782,6 +2878,25 @@ function handleModalClick(event) {
     case "recordElderClue":
       recordElderClue();
       break;
+    case "npcTopic": {
+      const [npcId, choiceId] = value.split("|");
+      const result = resolveNpcTopic(state, npcId, choiceId);
+      if (result.ok) {
+        const npc = SCENE_NPCS.find((entry) => entry.id === npcId);
+        closeModal();
+        updateHUD(true);
+        saveGame(state);
+        audio.play(result.delta > 0 ? "success" : "error");
+        showToast(result.message, {
+          strong: `${npc?.name || "居民"} · 关系 ${Math.round(result.relation)}`,
+          duration: 4600,
+        });
+      } else {
+        audio.play("error");
+        showToast(result.message, { strong: "每日话题" });
+      }
+      break;
+    }
     case "waterChoice":
       chooseWater(value);
       break;
