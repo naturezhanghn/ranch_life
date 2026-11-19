@@ -6,7 +6,7 @@ Keep `js/state.js` authoritative for economy, AI, saves, and scene progression w
 
 ## Phase
 
-Development. The real Canvas scene base remains the default runtime; four minigame slices are integrated through scene landmarks and the `bailian/game-space` slice has been merged into `main`. Phaser 4.2.1 stays opt-in at `?phaser=1`.
+Released vertical slice. The Canvas scene base is the default and mobile-ready runtime; the expanded `bailian/game-space` work is merged into `main` and deployed. Phaser 4.2.1 remains an opt-in farm slice at `?phaser=1`; full Phaser scene migration is not claimed.
 
 ## Current status
 
@@ -27,8 +27,8 @@ Development. The real Canvas scene base remains the default runtime; four miniga
 - New sites are scene interactions, not standalone menu pages: `island_patrol`, `island_fishing`, `quarry_vein`, and `port_delivery_run`.
 - Old saves receive `minigames` defaults; active sessions are intentionally cleared on load.
 - The game-space slice is merged into `main`; its branch remains available for audit.
-- Deployment source commit: `e94ff22` on `main`; live URL: `https://naturezhanghn.github.io/ranch_life/`.
-- Gameplay cards 02–04 are implemented on the isolated `bailian/game-space` branch: rain-window forage nodes, scene find clues, and NPC daily topic choices.
+- Functional deployment source commit: `e2914d6` on `main`; GitHub Pages workflow run `44565815857` completed successfully; live URL: `https://naturezhanghn.github.io/ranch_life/`.
+- Gameplay cards 02–04 are merged into `main`: rain-window forage nodes, scene find clues, and NPC daily topic choices.
 - Rainy-day forage nodes now spawn across farm/city/port layouts with one-time claims, energy/time cost, a three-node combo bonus, shared inventory, and day-end reset.
 - Scene finds are hidden landmarks in every scene; investigating them advances time, adds lore memory, grants coins, and completing a scene unlocks a civic point plus AI trust.
 - NPCs have one daily contextual topic. Choosing a response updates `relations.npc`, community/ecology where relevant, and `social.topicDay`; repeat conversations are blocked for the day.
@@ -49,7 +49,7 @@ Development. The real Canvas scene base remains the default runtime; four miniga
 - Gameplay card 15 is implemented: five NPC birthdays are registered by season/day. Birthday gifts double the preference/ordinary/dislike relationship delta, record `town.birthdayGifts[npc]`, keep the one-gift-per-day cap, and show birthday context in both the NPC dialogue and gift panel.
 - Gameplay card 28 is implemented: save schema is now v3; every save rotates the previous payload into `ranch-life-common-ground-save-v1-backup` with a checksum, corrupt primary JSON falls back to that backup, and load clamps illegal day/season/seasonDay/minutes/coins/energy/water/player values while filling new quest/festival/weekly fields from defaults.
 - Gameplay card 29 is implemented: `assets/manifest.json` now records `size`, `version`, `maxBytes`, runtime/fallback metadata; `tools/check_assets.js` verifies required fields, unique ids, scene ids, existing files, exact size, and per-entry byte caps. It runs in `npm run build` and the GitHub Actions CI workflow. All runtime art remains programmatic with manifest fallbacks.
-- The branch is synchronized with `main` at `f09b381`. The merge keeps main's `FORAGE_NODE_DEFS`/`expiresMinute` implementation, legacy-node recovery, 8-minute collection time cost, and ecology gain, while retaining the shared collection hook.
+- `main` keeps the hardened `FORAGE_NODE_DEFS`/`expiresMinute` implementation, legacy-node recovery, 8-minute collection time cost, and ecology gain, while retaining the shared collection hook.
 
 ## Important files
 
@@ -94,7 +94,15 @@ Development. The real Canvas scene base remains the default runtime; four miniga
 
 ## Next safest task
 
-Review the next queued gameplay card (08: seasonal routes) against the merged main, then add one isolated branch slice and browser acceptance test before merging.
+Start an isolated branch for the remaining cards. Safest next slice is card 16 (weather route/wet paths) extending the existing `forage.nodes` and seasonal variants rather than creating a parallel weather system; then revisit cards 12, 14, 17, 19, 20, 21, and the opt-in Phaser migration (30). Re-run `npm run build` plus desktop/390×844 live-style browser smoke before merging.
+
+## Deployment verification
+
+- `main` functional commit `e2914d6`; Pages workflow `44565815857` completed with conclusion `success`.
+- Live `js/state.js` contains `BRIDGE_QUEST`, `emitFeedback`, `ensureWeeklyBoard`, `getActiveFestival`, and `SAVE_BACKUP_KEY`.
+- Live Playwright desktop smoke: save version 3, farm start, 49px keyboard movement, city weekly board with 2 cards/2 accept buttons.
+- Live Playwright 390×844 smoke: 44px touch movement, 78px action button, weekly board reachable by touch with 2 accept buttons, no horizontal overflow, no console/page errors.
+- Live `?phaser=1`: Phaser canvas starts on the farm scene.
 
 ## Last slice
 
@@ -122,7 +130,7 @@ Review the next queued gameplay card (08: seasonal routes) against the merged ma
 - Card 15 verification: `npm test` (42 state + 9 minigame + 10 exploration); Chromium birthday smoke showed the birthday note in dialogue and gift panel, a favorite birthday turnip raised relationship from 8 to 18, recorded day 12, and produced no console errors.
 - Card 28 verification: `npm test` (44 state + 9 minigame + 10 exploration); regression tests cover corrupt-primary backup recovery, illegal-number clamping, sparse old saves, and new-system defaults.
 - Card 29 verification: `npm run check:assets` reports 2 valid entries; `npm test` remains green; CI now runs the manifest check before tests.
-- This branch remains isolated until review and explicit merge approval.
+- The listed slices are merged into `main` and deployed. Continue future work in an isolated branch and re-run the full build before merging.
 
 ## Latest social/economy slice
 
