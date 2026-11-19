@@ -7,6 +7,19 @@ export const REAL_SECONDS_PER_GAME_MINUTE = 0.22;
 
 export const REGION_ORDER = ["farm", "city", "island", "trade", "government", "sprites"];
 
+export const REGION_SCENE_MAP = {
+  farm: "farm",
+  city: "city",
+  island: "island",
+  trade: "port",
+  government: "council",
+  sprites: "workshop",
+};
+
+export const SCENE_REGION_MAP = Object.fromEntries(
+  Object.entries(REGION_SCENE_MAP).map(([regionId, sceneId]) => [sceneId, regionId]),
+);
+
 export const REGIONS = {
   farm: {
     id: "farm",
@@ -79,6 +92,170 @@ export const WORLD = {
   shippingBin: { x: 790, y: 302, w: 49, h: 43 },
 };
 
+export const SCENE_DEFS = {
+  farm: {
+    id: "farm",
+    name: "月溪牧场",
+    subtitle: "田地、牲畜棚与旧水渠",
+    palette: ["#89a96b", "#75985a"],
+    spawn: { x: 286, y: 282, facing: "down" },
+    blockers: [],
+    portals: [
+      { id: "portal_city", x: 652, y: 458, radius: 42, target: "city", label: "沿路去村庄" },
+      { id: "portal_port", x: 824, y: 555, radius: 42, target: "port", label: "去码头" },
+    ],
+  },
+  city: {
+    id: "city",
+    name: "河港市",
+    subtitle: "市场、议事厅与居民街区",
+    palette: ["#7f9b8c", "#536f65"],
+    spawn: { x: 115, y: 608, facing: "right" },
+    blockers: [
+      { x: 52, y: 66, w: 248, h: 146 },
+      { x: 348, y: 68, w: 234, h: 146 },
+      { x: 650, y: 72, w: 252, h: 145 },
+      { x: 974, y: 82, w: 220, h: 132 },
+      { x: 48, y: 312, w: 218, h: 132 },
+      { x: 978, y: 310, w: 226, h: 136 },
+    ],
+    portals: [
+      { id: "portal_farm", x: 90, y: 648, radius: 42, target: "farm", label: "回月溪牧场" },
+      { id: "portal_port", x: 1138, y: 640, radius: 42, target: "port", label: "去贸易港" },
+    ],
+  },
+  port: {
+    id: "port",
+    name: "贸易港",
+    subtitle: "出货、订单与蓝潮渡轮",
+    palette: ["#6da5a6", "#3f747f"],
+    spawn: { x: 110, y: 610, facing: "right" },
+    blockers: [
+      { x: 52, y: 72, w: 240, h: 142 },
+      { x: 360, y: 70, w: 272, h: 142 },
+      { x: 714, y: 74, w: 266, h: 136 },
+      { x: 1030, y: 72, w: 174, h: 138 },
+      { x: 50, y: 340, w: 192, h: 136 },
+    ],
+    portals: [
+      { id: "portal_city", x: 86, y: 640, radius: 42, target: "city", label: "回河港市" },
+    ],
+  },
+  council: {
+    id: "council",
+    name: "共同议事厅",
+    subtitle: "水章、公共政策与市民议事",
+    palette: ["#798f9c", "#4d626c"],
+    spawn: { x: 110, y: 620, facing: "right" },
+    blockers: [
+      { x: 126, y: 86, w: 506, h: 235 },
+      { x: 718, y: 86, w: 414, h: 235 },
+      { x: 84, y: 420, w: 250, h: 104 },
+      { x: 970, y: 420, w: 218, h: 104 },
+    ],
+    portals: [
+      { id: "portal_city", x: 88, y: 654, radius: 42, target: "city", label: "回河港市" },
+    ],
+  },
+  workshop: {
+    id: "workshop",
+    name: "小精灵工坊",
+    subtitle: "伙伴、分工与发光的种子仓",
+    palette: ["#8da978", "#5c815f"],
+    spawn: { x: 112, y: 620, facing: "right" },
+    blockers: [
+      { x: 90, y: 72, w: 288, h: 190 },
+      { x: 508, y: 86, w: 270, h: 172 },
+      { x: 920, y: 92, w: 250, h: 166 },
+      { x: 160, y: 408, w: 198, h: 128 },
+      { x: 854, y: 400, w: 220, h: 130 },
+    ],
+    portals: [
+      { id: "portal_city", x: 90, y: 650, radius: 42, target: "city", label: "回河港市" },
+    ],
+  },
+  island: {
+    id: "island",
+    name: "蓝潮海岛",
+    subtitle: "潮声湾、银沙滩、月光礁与赤潮花园",
+    palette: ["#8dc4b4", "#4c918c"],
+    spawn: { x: 112, y: 620, facing: "right" },
+    blockers: [
+      { x: 74, y: 72, w: 250, h: 168 },
+      { x: 488, y: 86, w: 214, h: 156 },
+      { x: 892, y: 66, w: 300, h: 190 },
+      { x: 342, y: 428, w: 202, h: 122 },
+    ],
+    portals: [
+      { id: "portal_port", x: 92, y: 650, radius: 42, target: "port", label: "乘渡轮回港" },
+    ],
+  },
+};
+
+export const SCENE_INTERACTIONS = {
+  city: [
+    { id: "city_market", x: 430, y: 275, radius: 62, label: "进入城市建设处", keycap: "E" },
+    { id: "city_council", x: 770, y: 275, radius: 62, label: "进入共同议事厅", keycap: "E" },
+    { id: "city_workshop", x: 1080, y: 274, radius: 62, label: "进入小精灵工坊", keycap: "E" },
+    { id: "city_mayor", x: 474, y: 526, radius: 58, label: "和市政官聊聊", keycap: "E" },
+  ],
+  port: [
+    { id: "port_trade", x: 490, y: 275, radius: 62, label: "查看贸易航线", keycap: "E" },
+    { id: "port_ferry", x: 850, y: 278, radius: 64, label: "乘蓝潮渡轮", keycap: "E" },
+    { id: "port_shipping", x: 1114, y: 286, radius: 58, label: "打开港口出货箱", keycap: "E" },
+    { id: "port_sailor", x: 500, y: 542, radius: 54, label: "和渡轮长聊聊", keycap: "E" },
+  ],
+  council: [
+    { id: "council_government", x: 380, y: 364, radius: 64, label: "打开共同议政", keycap: "E" },
+    { id: "council_water", x: 860, y: 366, radius: 64, label: "查看水章档案", keycap: "E" },
+    { id: "council_clerk", x: 600, y: 566, radius: 54, label: "和议事员聊聊", keycap: "E" },
+  ],
+  workshop: [
+    { id: "workshop_sprites", x: 234, y: 318, radius: 64, label: "打开小精灵工坊", keycap: "E" },
+    { id: "workshop_garden", x: 640, y: 318, radius: 64, label: "查看精灵花园", keycap: "E" },
+    { id: "workshop_keeper", x: 760, y: 566, radius: 54, label: "和精灵看守聊聊", keycap: "E" },
+  ],
+  island: [
+    { id: "island_tidePool", x: 372, y: 342, radius: 60, label: "探索潮声湾", keycap: "E", spot: "tidePool" },
+    { id: "island_silverBeach", x: 760, y: 342, radius: 60, label: "探索银沙滩", keycap: "E", spot: "silverBeach" },
+    { id: "island_moonReef", x: 1100, y: 350, radius: 60, label: "探索月光礁", keycap: "E", spot: "moonReef" },
+    { id: "island_redGarden", x: 590, y: 590, radius: 60, label: "探索赤潮花园", keycap: "E", spot: "redGarden" },
+  ],
+};
+
+export const SCENE_NPCS = [
+  {
+    id: "mayor",
+    name: "市政官沈禾",
+    role: "河港市公共事务协调员",
+    scenes: [
+      { from: 6 * 60, to: 11 * 60, scene: "city", x: 474, y: 526 },
+      { from: 11 * 60, to: 15 * 60, scene: "council", x: 600, y: 566 },
+      { from: 15 * 60, to: 22 * 60, scene: "city", x: 474, y: 526 },
+    ],
+  },
+  {
+    id: "merchant",
+    name: "港口商人岑岑",
+    role: "贸易航线经纪人",
+    scenes: [
+      { from: 6 * 60, to: 13 * 60, scene: "port", x: 500, y: 542 },
+      { from: 13 * 60, to: 18 * 60, scene: "city", x: 430, y: 275 },
+      { from: 18 * 60, to: 22 * 60, scene: "port", x: 500, y: 542 },
+    ],
+  },
+  {
+    id: "spriteKeeper",
+    name: "精灵看守白露",
+    role: "小精灵工坊的照看人",
+    scenes: [
+      { from: 6 * 60, to: 10 * 60, scene: "workshop", x: 760, y: 566 },
+      { from: 10 * 60, to: 16 * 60, scene: "island", x: 760, y: 342 },
+      { from: 16 * 60, to: 22 * 60, scene: "workshop", x: 760, y: 566 },
+    ],
+  },
+];
+
 export const PLAYER_START = { x: 286, y: 282, facing: "down" };
 
 export const TOOLS = [
@@ -116,6 +293,42 @@ export const TOOLS = [
     hint: "采收成熟的作物",
   },
 ];
+
+export const PRODUCT_QUALITY_LABELS = {
+  S: "S 级",
+  M: "M 级",
+  L: "L 级",
+};
+
+export const PRODUCT_QUALITY_MULTIPLIERS = {
+  S: 1,
+  M: 1.35,
+  L: 1.8,
+};
+
+export const BACKPACK_UPGRADES = [
+  { level: 1, slots: 4, cost: 180, title: "布料背包", description: "背包从 2 格扩展到 4 格。" },
+  { level: 2, slots: 8, cost: 420, title: "远行背包", description: "背包从 4 格扩展到 8 格。" },
+];
+
+export const TOOL_UPGRADE_LEVELS = {
+  hoe: [
+    { level: 1, cost: 140, title: "熟铁锄", description: "开垦体力消耗降低 1。" },
+    { level: 2, cost: 320, title: "精工锄", description: "开垦体力消耗降低 2。" },
+  ],
+  seed: [
+    { level: 1, cost: 100, title: "分格播种器", description: "播种体力消耗降低 1。" },
+    { level: 2, cost: 240, title: "精准播种器", description: "播种时额外提高照料质量。" },
+  ],
+  water: [
+    { level: 1, cost: 160, title: "铜口水壶", description: "浇水体力消耗降低 1。" },
+    { level: 2, cost: 360, title: "蓄压水壶", description: "浇水体力消耗降低 1，最大水量提高 4。" },
+  ],
+  harvest: [
+    { level: 1, cost: 120, title: "藤编收获篮", description: "收获体力消耗降低 1。" },
+    { level: 2, cost: 280, title: "锋叶收获篮", description: "收获时更容易获得额外产量。" },
+  ],
+};
 
 export const CROPS = {
   turnip: {
@@ -231,9 +444,9 @@ export const MARKET_GOODS = {
     id: "seaweed",
     name: "潮汐海藻",
     icon: "≋",
-    basePrice: 48,
-    minPrice: 28,
-    maxPrice: 88,
+    basePrice: 30,
+    minPrice: 18,
+    maxPrice: 54,
     volatility: 0.3,
     source: "蓝潮海岛",
   },
@@ -241,9 +454,9 @@ export const MARKET_GOODS = {
     id: "coconut",
     name: "银沙椰子",
     icon: "◒",
-    basePrice: 78,
-    minPrice: 44,
-    maxPrice: 136,
+    basePrice: 48,
+    minPrice: 28,
+    maxPrice: 84,
     volatility: 0.26,
     source: "蓝潮海岛",
   },
@@ -251,9 +464,9 @@ export const MARKET_GOODS = {
     id: "pearl",
     name: "月光珍珠",
     icon: "◇",
-    basePrice: 240,
-    minPrice: 135,
-    maxPrice: 420,
+    basePrice: 120,
+    minPrice: 72,
+    maxPrice: 220,
     volatility: 0.38,
     source: "蓝潮海岛",
   },
@@ -261,9 +474,9 @@ export const MARKET_GOODS = {
     id: "coral",
     name: "赤潮珊瑚",
     icon: "❋",
-    basePrice: 126,
-    minPrice: 78,
-    maxPrice: 210,
+    basePrice: 64,
+    minPrice: 38,
+    maxPrice: 118,
     volatility: 0.34,
     source: "蓝潮海岛",
   },
@@ -329,7 +542,7 @@ export const CITY_PROJECTS = {
     id: "ferry",
     title: "蓝潮渡轮",
     icon: "⌁",
-    cost: 120,
+    cost: 220,
     description: "修复旧码头，解锁蓝潮海岛与潮汐资源。",
   },
   clinic: {
@@ -354,28 +567,32 @@ export const GOVERNMENT_POLICIES = {
     title: "共同水章",
     icon: "◒",
     cost: 2,
-    description: "公开水量记录，水罐上限提高 3，社区信任提高。",
+    coinCost: 40,
+    description: "公开水量记录，水罐上限提高 3。需要公共维修预算。",
   },
   fairTrade: {
     id: "fairTrade",
     title: "公平贸易条例",
     icon: "↔",
     cost: 3,
-    description: "订单声誉提高，动态价格的最低值上浮。",
+    coinCost: 30,
+    description: "订单声誉提高，动态价格的最低值上浮。由市场基金承担成本。",
   },
   islandSanctuary: {
     id: "islandSanctuary",
     title: "海岛保育区",
     icon: "❋",
     cost: 3,
-    description: "海岛探索更容易发现稀有资源，生态韧性提高。",
+    coinCost: 80,
+    description: "海岛探索更容易发现稀有资源，生态韧性提高。需要保育经费。",
   },
   spriteCommons: {
     id: "spriteCommons",
     title: "精灵共居公约",
     icon: "✦",
     cost: 4,
-    description: "所有小精灵友好度提高，自动劳动额外产生 1 点声誉。",
+    coinCost: 50,
+    description: "所有小精灵友好度提高，自动劳动额外产生 1 点声誉。需要共居维护费。",
   },
 };
 
@@ -447,7 +664,8 @@ export const ISLAND_SPOTS = {
     icon: "◇",
     resource: "pearl",
     amount: 1,
-    energy: 8,
+    energy: 10,
+    chance: 0.45,
     description: "需要等潮汐最安静的时候，才能在礁缝里找到珍珠。",
   },
   redGarden: {
@@ -456,10 +674,13 @@ export const ISLAND_SPOTS = {
     icon: "❋",
     resource: "coral",
     amount: 1,
-    energy: 7,
+    energy: 9,
+    chance: 0.5,
     description: "被阳光染红的珊瑚，适合做成节庆染料。",
   },
 };
+
+export const ISLAND_DAILY_LIMIT = 2;
 
 export const ANIMAL_DEFS = [
   {

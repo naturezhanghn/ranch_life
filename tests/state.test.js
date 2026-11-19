@@ -7,6 +7,7 @@ import {
   applyGovernanceChoice,
   acceptTradeContract,
   assignSprite,
+  brushAnimal,
   createInitialState,
   enactGovernmentPolicy,
   exploreIsland,
@@ -14,12 +15,21 @@ import {
   feedAnimal,
   getClueCount,
   getTargetPlot,
+  getBagUsage,
   investInCity,
   recruitSprite,
   recordClue,
   resolveEnding,
   sellAtMarket,
+  shipProduce,
+  settleShipping,
+  switchScene,
   switchRegion,
+  talkAnimal,
+  toggleAnimalOutdoor,
+  tickAnimalOutdoor,
+  upgradeBackpack,
+  upgradeTool,
   useToolOnPlot,
 } from "../js/state.js";
 
@@ -233,6 +243,7 @@ test("crop data keeps a meaningful high-investment option", () => {
 
 test("city ferry unlocks a repeatable island exploration route", () => {
   const state = freshState();
+  state.coins = 220;
   assert.equal(investInCity(state, "ferry").ok, true);
   assert.equal(switchRegion(state, "island").ok, true);
   const result = exploreIsland(state, "tidePool");
@@ -241,6 +252,17 @@ test("city ferry unlocks a repeatable island exploration route", () => {
   assert.equal(exploreIsland(state, "tidePool").ok, false);
   advanceDay(state);
   assert.equal(exploreIsland(state, "tidePool").ok, true);
+});
+
+test("island routes are limited and rare resources are not guaranteed", () => {
+  const state = freshState();
+  state.coins = 220;
+  investInCity(state, "ferry");
+  switchRegion(state, "island");
+  assert.equal(exploreIsland(state, "tidePool").ok, true);
+  assert.equal(exploreIsland(state, "silverBeach").ok, true);
+  assert.equal(exploreIsland(state, "moonReef").ok, false);
+  assert.ok(state.inventory.resources.pearl === 0);
 });
 
 test("dynamic trade contracts consume resources and pay reputation", () => {
@@ -274,6 +296,72 @@ test("government policies and sprite assignments create daily automation", () =>
   const report = advanceDay(state);
   assert.ok(report.helperActions.some((entry) => entry.includes("露水")));
   assert.equal(state.plots[0].growth, 1);
+});
+
+test("scene travel keeps one shared day, energy, and wallet state", () => {
+  const state = freshState();
+  const beforeCoins = state.coins;
+  assert.equal(switchScene(state, "city", "road").ok, true);
+  assert.equal(state.world.scene, "city");
+  assert.equal(state.world.visitedScenes.includes("city"), true);
+  assert.equal(state.coins, beforeCoins);
+  state.energy = 61;
+  assert.equal(switchScene(state, "port", "road").ok, true);
+  assert.equal(state.energy, 61);
+  assert.equal(state.world.scene, "port");
+  assert.equal(switchScene(state, "island", "road").ok, false);
+});
+
+test("livestock care tracks age, affection, health, grazing, and quality", () => {
+  const state = freshState();
+  const animal = state.animals[0];
+  assert.equal(talkAnimal(state, animal.id).ok, true);
+  assert.equal(brushAnimal(state, animal.id).ok, true);
+  assert.equal(toggleAnimalOutdoor(state, animal.id).ok, true);
+  tickAnimalOutdoor(state, 90);
+  assert.equal(feedAnimal(state, animal.id).ok, true);
+  const report = advanceDay(state);
+  assert.equal(animal.age, 2);
+  assert.ok(animal.affection > 20);
+  assert.ok(animal.health > 92);
+  assert.ok(report.products[0].quality);
+  assert.equal(state.inventory.qualityProduce[`egg_${report.products[0].quality}`], 1);
+});
+
+test("shipping waits overnight and records cumulative settlement", () => {
+  const state = freshState();
+  state.inventory.produce.turnip = 2;
+  const before = state.coins;
+  const consign = shipProduce(state);
+  assert.equal(consign.ok, true);
+  assert.equal(state.coins, before);
+  assert.equal(state.shipping.pending.length, 1);
+  const report = advanceDay(state);
+  assert.equal(report.shipping.units, 2);
+  assert.ok(state.coins > before);
+  assert.equal(state.shipping.totalUnits, 2);
+  assert.equal(state.shipping.pending.length, 0);
+});
+
+test("accepted trade orders survive one night and expire with a penalty", () => {
+  const state = freshState();
+  const contract = state.market.contracts[0];
+  assert.equal(acceptTradeContract(state, contract.id).ok, true);
+  const beforeReputation = state.market.reputation;
+  advanceDay(state);
+  assert.equal(state.market.contracts.some((entry) => entry.id === contract.id && entry.accepted), true);
+  advanceDay(state);
+  assert.ok(state.market.reputation < beforeReputation || state.government.civicPoints < 3);
+});
+
+test("backpack and tool upgrades persist and affect capacity", () => {
+  const state = freshState();
+  state.coins = 1000;
+  assert.equal(upgradeBackpack(state).ok, true);
+  assert.equal(state.bag.slots, 4);
+  assert.equal(upgradeTool(state, "hoe").ok, true);
+  assert.equal(state.toolLevels.hoe, 1);
+  assert.equal(getBagUsage(state), 0);
 });
 
 console.log(`\n${passed} state tests passed.`);

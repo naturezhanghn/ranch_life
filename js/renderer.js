@@ -1,4 +1,4 @@
-import { CROPS, INTERACTIONS, TOOLS, WORLD } from "./data.js";
+import { CROPS, INTERACTIONS, SCENE_DEFS, SCENE_INTERACTIONS, SCENE_NPCS, TOOLS, WORLD } from "./data.js";
 
 const TAU = Math.PI * 2;
 
@@ -40,6 +40,11 @@ export class WorldRenderer {
     const ctx = this.ctx;
     const { player } = state;
 
+    if (state.world?.scene && state.world.scene !== "farm") {
+      this.renderScene(ctx, state, runtime, time, delta);
+      return;
+    }
+
     ctx.clearRect(0, 0, WORLD.width, WORLD.height);
     this.drawGround(ctx, state, time);
     this.drawPaths(ctx, time);
@@ -55,6 +60,7 @@ export class WorldRenderer {
     this.drawShippingBin(ctx, time);
     this.drawCanalGate(ctx, state, time);
     this.drawStaticProps(ctx, time);
+    this.drawScenePortals(ctx, SCENE_DEFS.farm, time);
 
     const drawables = [];
     const sisterY = 257;
@@ -106,6 +112,248 @@ export class WorldRenderer {
     this.drawLighting(ctx, state, time);
     this.drawEffects(ctx, runtime, time, delta);
     this.drawDebugVignette(ctx);
+  }
+
+  renderScene(ctx, state, runtime, time, delta) {
+    const sceneId = state.world.scene;
+    const scene = SCENE_DEFS[sceneId] || SCENE_DEFS.city;
+    ctx.clearRect(0, 0, WORLD.width, WORLD.height);
+    const gradient = ctx.createLinearGradient(0, 0, 0, WORLD.height);
+    gradient.addColorStop(0, scene.palette[0]);
+    gradient.addColorStop(1, scene.palette[1]);
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, WORLD.width, WORLD.height);
+
+    this.drawSceneGround(ctx, sceneId, time);
+    this.drawSceneStructures(ctx, sceneId, time);
+    this.drawScenePortals(ctx, scene, time);
+    this.drawSceneLandmarks(ctx, sceneId, time);
+
+    const drawables = [];
+    for (const npc of SCENE_NPCS) {
+      const position = this.scheduledNpcPosition(npc, state.minutes);
+      if (position?.scene === sceneId) {
+        drawables.push({ y: position.y, draw: () => this.drawSceneNpc(ctx, npc, position, time) });
+      }
+    }
+    drawables.push({
+      y: state.player.y,
+      draw: () => this.drawPlayer(ctx, state.player.x, state.player.y, state.player.facing, runtime, time, state),
+    });
+    drawables.sort((a, b) => a.y - b.y).forEach((drawable) => {
+      ctx.save();
+      drawable.draw();
+      ctx.restore();
+    });
+
+    this.drawSceneInteractionHighlight(ctx, state, runtime, time);
+    this.drawSceneAtmosphere(ctx, sceneId, time);
+    this.drawWeather(ctx, state, time);
+    this.drawLighting(ctx, state, time);
+    this.drawEffects(ctx, runtime, time, delta);
+    this.drawDebugVignette(ctx);
+  }
+
+  scheduledNpcPosition(npc, minutes) {
+    const entry = npc.scenes.find((candidate) => minutes >= candidate.from && minutes < candidate.to);
+    return entry || npc.scenes[npc.scenes.length - 1];
+  }
+
+  drawSceneGround(ctx, sceneId, time) {
+    ctx.save();
+    ctx.globalAlpha = 0.18;
+    ctx.strokeStyle = sceneId === "island" ? "#e6f0c6" : "#e8d4a6";
+    ctx.lineWidth = 2;
+    if (sceneId === "city" || sceneId === "council") {
+      for (let x = 0; x < WORLD.width; x += 46) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x + 26, WORLD.height);
+        ctx.stroke();
+      }
+      for (let y = 26; y < WORLD.height; y += 46) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(WORLD.width, y + 18);
+        ctx.stroke();
+      }
+    } else if (sceneId === "port") {
+      ctx.fillStyle = "rgba(215, 245, 227, 0.12)";
+      ctx.fillRect(0, 430, WORLD.width, 290);
+      for (let row = 0; row < 7; row += 1) {
+        ctx.beginPath();
+        ctx.moveTo(0, 456 + row * 38 + Math.sin(time * 0.4 + row) * 3);
+        ctx.bezierCurveTo(250, 438 + row * 38, 510, 474 + row * 38, 760, 454 + row * 38);
+        ctx.bezierCurveTo(980, 436 + row * 38, 1120, 478 + row * 38, WORLD.width, 454 + row * 38);
+        ctx.stroke();
+      }
+    } else if (sceneId === "island" || sceneId === "workshop") {
+      for (let index = 0; index < 36; index += 1) {
+        const x = 25 + hash01(index * 9.7) * 1220;
+        const y = 30 + hash01(index * 17.3) * 640;
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x + 8, y - 4);
+        ctx.lineTo(x + 15, y);
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+  }
+
+  drawSceneStructures(ctx, sceneId, time) {
+    const structures = {
+      city: [
+        [52, 66, 248, 146, "河港旅店", "#a8664c"],
+        [348, 68, 234, 146, "城市建设处", "#766b5c"],
+        [650, 72, 252, 145, "共同议事厅", "#6f7d83"],
+        [974, 82, 220, 132, "精灵工坊", "#7b965f"],
+        [48, 312, 218, 132, "旧织坊", "#a27b4c"],
+        [978, 310, 226, 136, "城市花园", "#668e68"],
+      ],
+      port: [
+        [52, 72, 240, 142, "港口仓库", "#916e49"],
+        [360, 70, 272, 142, "贸易航线厅", "#86704f"],
+        [714, 74, 266, 136, "蓝潮渡轮", "#4d7e86"],
+        [1030, 72, 174, 138, "出货总站", "#846747"],
+        [50, 340, 192, 136, "海员休息室", "#9c7353"],
+      ],
+      council: [
+        [126, 86, 506, 235, "共同议事厅", "#667882"],
+        [718, 86, 414, 235, "公共档案库", "#7b7263"],
+        [84, 420, 250, 104, "水章公告栏", "#9c8251"],
+        [970, 420, 218, 104, "市民休息处", "#5f846d"],
+      ],
+      workshop: [
+        [90, 72, 288, 190, "小精灵工坊", "#759b63"],
+        [508, 86, 270, 172, "种子仓", "#a08754"],
+        [920, 92, 250, 166, "月光温室", "#668e75"],
+        [160, 408, 198, 128, "蜂蜜花园", "#b28b4c"],
+        [854, 400, 220, 130, "伙伴休息处", "#906a52"],
+      ],
+      island: [
+        [74, 72, 250, 168, "潮声湾", "#6faba1"],
+        [488, 86, 214, 156, "银沙滩", "#ccb878"],
+        [892, 66, 300, 190, "月光礁", "#6d98a1"],
+        [342, 428, 202, 122, "赤潮花园", "#ad6c68"],
+      ],
+    }[sceneId] || [];
+    for (const [x, y, w, h, label, roof] of structures) {
+      ctx.save();
+      ctx.fillStyle = "rgba(34, 55, 46, 0.2)";
+      ctx.beginPath();
+      ctx.ellipse(x + w / 2, y + h + 10, w * 0.52, 18, 0, 0, TAU);
+      ctx.fill();
+      ctx.fillStyle = "#dfd0a9";
+      roundedRect(ctx, x, y + 30, w, h - 30, 7);
+      ctx.fill();
+      ctx.fillStyle = roof;
+      ctx.beginPath();
+      ctx.moveTo(x - 9, y + 36);
+      ctx.lineTo(x + w / 2, y - 6);
+      ctx.lineTo(x + w + 9, y + 36);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = "rgba(69, 60, 48, 0.36)";
+      ctx.fillRect(x + w / 2 - 12, y + h - 50, 24, 50);
+      ctx.fillStyle = "#f3cf79";
+      ctx.fillRect(x + 22, y + 62, 24, 20);
+      ctx.fillRect(x + w - 46, y + 62, 24, 20);
+      this.drawPlaceTag(ctx, x + w / 2, y - 12, label, "rgba(255, 247, 216, 0.85)", "#36594a");
+      ctx.restore();
+    }
+    if (sceneId === "island") {
+      for (let index = 0; index < 18; index += 1) {
+        this.drawTree(ctx, 30 + hash01(index * 8.7) * 1200, 300 + hash01(index * 11.1) * 330, 0.45 + hash01(index * 4.3) * 0.3, time);
+      }
+    }
+    if (sceneId === "workshop") {
+      ctx.save();
+      ctx.strokeStyle = "rgba(232, 252, 184, 0.45)";
+      ctx.lineWidth = 2;
+      for (let index = 0; index < 5; index += 1) {
+        ctx.beginPath();
+        ctx.arc(650, 350, 28 + index * 16 + Math.sin(time + index) * 2, 0, TAU);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+  }
+
+  drawScenePortals(ctx, scene, time) {
+    for (const portal of scene.portals || []) {
+      const pulse = 1 + Math.sin(time * 2.6 + portal.x * 0.01) * 0.08;
+      ctx.save();
+      ctx.strokeStyle = "rgba(255, 238, 175, 0.85)";
+      ctx.lineWidth = 3;
+      ctx.setLineDash([6, 5]);
+      ctx.beginPath();
+      ctx.ellipse(portal.x, portal.y, 28 * pulse, 11 * pulse, 0, 0, TAU);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      this.drawPlaceTag(ctx, portal.x, portal.y - 24, portal.label, "rgba(255, 247, 216, 0.9)", "#6b552e");
+      ctx.restore();
+    }
+  }
+
+  drawSceneLandmarks(ctx, sceneId, time) {
+    for (const interaction of SCENE_INTERACTIONS[sceneId] || []) {
+      ctx.save();
+      const color = sceneId === "island" ? "#d2f0d4" : "#e7cd8d";
+      ctx.globalAlpha = 0.78;
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(interaction.x, interaction.y, 13 + Math.sin(time * 1.5 + interaction.x) * 2, 0, TAU);
+      ctx.fill();
+      ctx.globalAlpha = 0.72;
+      ctx.fillStyle = "#365b4d";
+      ctx.font = "700 10px 'PingFang SC', sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText(interaction.label.replace("进入", "").replace("查看", ""), interaction.x, interaction.y + 4);
+      ctx.restore();
+    }
+  }
+
+  drawSceneNpc(ctx, npc, position, time) {
+    this.drawShadow(ctx, position.x, position.y + 4, 19, 8);
+    ctx.save();
+    ctx.translate(position.x, position.y);
+    const bob = Math.sin(time * 2.2 + position.x * 0.01) * 1.5;
+    ctx.translate(0, bob);
+    ctx.fillStyle = npc.id === "mayor" ? "#4d6670" : npc.id === "merchant" ? "#9c704e" : "#748f5f";
+    ctx.fillRect(-12, -30, 24, 28);
+    ctx.fillStyle = "#e2b889";
+    ctx.beginPath();
+    ctx.arc(0, -40, 10, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = "#38443c";
+    ctx.beginPath();
+    ctx.arc(0, -46, 11, Math.PI, 0);
+    ctx.fill();
+    ctx.fillStyle = "rgba(255, 248, 221, 0.92)";
+    ctx.font = "700 8px 'PingFang SC', sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(npc.name, 0, -58);
+    ctx.restore();
+  }
+
+  drawSceneAtmosphere(ctx, sceneId, time) {
+    ctx.save();
+    const count = sceneId === "island" ? 26 : 16;
+    for (let index = 0; index < count; index += 1) {
+      const x = ((index * 91 + time * (4 + index % 4)) % 1320) - 20;
+      const y = 70 + ((index * 67 + Math.sin(time * 0.4 + index) * 18) % 560);
+      ctx.globalAlpha = sceneId === "island" ? 0.2 : 0.1;
+      ctx.fillStyle = sceneId === "island" ? "#e6f3bd" : "#f4dfa7";
+      ctx.beginPath();
+      ctx.arc(x, y, 1.8 + (index % 2), 0, TAU);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  drawSceneInteractionHighlight(ctx, state, runtime, time) {
+    this.drawInteractionHighlight(ctx, state, runtime, time);
   }
 
   drawGround(ctx, state, time) {
@@ -1604,7 +1852,7 @@ export class WorldRenderer {
 
   drawInteractionHighlight(ctx, state, runtime, time) {
     if (!runtime.nearInteraction) return;
-    const interaction = INTERACTIONS.find((entry) => entry.id === runtime.nearInteraction);
+    const interaction = this.getSceneInteraction(state, runtime.nearInteraction);
     if (!interaction) return;
     const pulse = 1 + Math.sin(time * 3.2) * 0.1;
     ctx.save();
@@ -1630,6 +1878,18 @@ export class WorldRenderer {
     ctx.arc(interaction.x, interaction.y - 41 + Math.sin(time * 2.5) * 2, 3, 0, TAU);
     ctx.fill();
     ctx.restore();
+  }
+
+  getSceneInteraction(state, interactionId) {
+    const sceneId = state.world?.scene || "farm";
+    const base = sceneId === "farm" ? INTERACTIONS : SCENE_INTERACTIONS[sceneId] || [];
+    const portalEntries = (SCENE_DEFS[sceneId]?.portals || []).map((portal) => portal);
+    const npcEntries = SCENE_NPCS.map((npc) => {
+      const position = this.scheduledNpcPosition(npc, state.minutes);
+      if (!position || position.scene !== sceneId) return null;
+      return { id: `npc_${npc.id}`, x: position.x, y: position.y, radius: 46 };
+    }).filter(Boolean);
+    return [...base, ...portalEntries, ...npcEntries].find((entry) => entry.id === interactionId) || null;
   }
 
   drawForegroundFlora(ctx, time) {

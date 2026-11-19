@@ -2740,6 +2740,117 @@ body.modal-open .app-shell {
   }
 }
 
+@media (max-width: 900px) {
+  .modal-close {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 46px;
+    top: 10px;
+    right: 10px;
+    font-size: 25px;
+  }
+
+  .modal-body {
+    font-size: 13px;
+  }
+
+  .modal-body .story-lead,
+  .modal-body .weather-note,
+  .modal-body .region-note,
+  .modal-body .region-locked-card p {
+    font-size: 13px;
+    line-height: 1.7;
+  }
+
+  .modal-body .region-hero span,
+  .modal-body .region-card-copy span,
+  .modal-body .region-callout span,
+  .modal-body .market-good small,
+  .modal-body .market-price small,
+  .modal-body .contract-card p,
+  .modal-body .contract-card > small,
+  .modal-body .sprite-copy span,
+  .modal-body .sprite-copy small {
+    font-size: 11px;
+    line-height: 1.55;
+  }
+
+  .modal-body .region-hero p,
+  .modal-body .region-section-heading,
+  .modal-body .region-section-heading small,
+  .modal-body .region-metric span,
+  .modal-body .region-card-copy small,
+  .modal-body .market-stock,
+  .modal-body .contract-footer b,
+  .modal-body .sprite-workboard > span {
+    font-size: 11px;
+  }
+
+  .modal-body .region-hero h3 {
+    font-size: 24px;
+  }
+
+  .modal-body .region-metric strong {
+    font-size: 17px;
+  }
+
+  .modal-body .region-card {
+    min-height: 94px;
+    padding: 13px;
+  }
+
+  .modal-body .shop-buy,
+  .modal-body .button,
+  .modal-body .sprite-role,
+  .modal-body .settings-action,
+  .modal-body .shop-tab {
+    min-height: 46px;
+    font-size: 12px;
+  }
+
+  .modal-body .shop-buy {
+    min-width: 68px;
+    padding-inline: 12px;
+  }
+
+  .modal-body .sprite-role {
+    min-width: 66px;
+    padding-inline: 10px;
+  }
+
+  .animal-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+
+  .animal-actions .shop-buy {
+    min-width: 78px;
+  }
+
+  .modal-footer .button {
+    min-height: 46px;
+    font-size: 12px;
+  }
+
+  .market-row {
+    min-height: 64px;
+    padding-block: 9px;
+  }
+
+  .market-good strong,
+  .market-price strong,
+  .contract-topline strong,
+  .sprite-copy strong,
+  .region-card-copy strong {
+    font-size: 12px;
+  }
+
+  .region-callout {
+    padding: 15px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -2752,6 +2863,43 @@ body.modal-open .app-shell {
 }
 
 /* World navigation and live-region surfaces */
+.scene-switch-rail {
+  margin-bottom: 12px;
+  padding: 6px;
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  border: 1px solid rgba(31, 67, 56, 0.1);
+  border-radius: 12px;
+  background: rgba(58, 103, 82, 0.06);
+}
+
+.scene-switch-rail::-webkit-scrollbar { display: none; }
+
+.scene-switch-button {
+  min-width: 84px;
+  min-height: 40px;
+  padding: 5px 8px;
+  border: 1px solid rgba(48, 86, 70, 0.12);
+  border-radius: 9px;
+  display: grid;
+  grid-template-columns: 22px 1fr;
+  align-items: center;
+  gap: 0 5px;
+  color: #537064;
+  background: rgba(255, 252, 240, 0.58);
+  cursor: pointer;
+}
+
+.scene-switch-button span { grid-row: 1 / span 2; width: 22px; height: 22px; display: grid; place-items: center; border-radius: 7px; color: #9a6e2d; background: #ead7aa; font-size: 12px; }
+.scene-switch-button b { text-align: left; font-size: 8px; }
+.scene-switch-button small { color: #85948a; font-size: 7px; text-align: left; }
+.scene-switch-button.is-active { color: #fff8e0; border-color: #315d4d; background: #315d4d; }
+.scene-switch-button.is-active span { color: #315d4d; background: #e9d28b; }
+.scene-switch-button.is-locked { border-style: dashed; opacity: 0.64; }
+.scene-switch-button:disabled { cursor: not-allowed; }
+
 .region-chip {
   min-height: 29px;
   padding: 0 9px;
@@ -3126,6 +3274,23 @@ body.region-switching .app-shell {
   line-height: 1.65;
 }
 
+.day-report-card {
+  margin-top: 13px;
+  padding: 12px 14px;
+  border: 1px solid rgba(78, 125, 91, 0.2);
+  border-radius: 10px;
+  display: grid;
+  gap: 4px;
+  color: #55715e;
+  background: rgba(211, 232, 193, 0.42);
+  font-size: 10px;
+  line-height: 1.6;
+}
+
+.day-report-card strong { color: #37604c; font-size: 10px; }
+.day-report-card span { color: #6b7e70; }
+.day-report-card--ai { border-color: rgba(80, 139, 128, 0.22); background: rgba(198, 230, 221, 0.42); }
+
 .region-locked-card {
   margin-top: 14px;
   padding: 30px 22px;
@@ -3236,15 +3401,25 @@ body.region-switching .app-shell {
 .sprite-role { min-height: 24px; padding: 0 7px; border: 1px solid rgba(54, 93, 74, 0.16); border-radius: 7px; color: #60766a; background: rgba(255, 255, 255, 0.42); cursor: pointer; font-size: 8px; }
 .sprite-role:hover, .sprite-role.is-active { color: #fff8df; border-color: #315e4f; background: #315e4f; }
 
+.animal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 5px;
+}
+
+.animal-actions .shop-buy { min-width: 54px; }
+
 @media (max-width: 900px) {
   .region-nav { min-height: 45px; padding: 5px 8px; gap: 5px; }
-  .region-nav-button { min-width: 83px; min-height: 34px; padding-inline: 8px; gap: 5px; }
+  .region-nav-button { min-width: 83px; min-height: 44px; padding-inline: 8px; gap: 5px; }
   .region-nav-button small { display: none; }
   .region-chip { min-height: 24px; padding-inline: 6px; font-size: 8px; }
   .region-chip span:last-child { display: none; }
   .region-hero { min-height: 84px; padding: 14px; }
   .region-hero-icon { width: 43px; height: 43px; flex-basis: 43px; border-radius: 13px; font-size: 21px; }
   .region-hero h3 { font-size: 20px; }
+  .scene-switch-button { min-width: 92px; min-height: 44px; }
   .region-card-grid, .contract-grid { grid-template-columns: 1fr; }
   .market-row { grid-template-columns: 27px minmax(0, 1fr) 66px 35px 47px; gap: 6px; }
   .sprite-card { grid-template-columns: 37px minmax(0, 1fr); }

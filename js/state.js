@@ -1,18 +1,26 @@
 import {
   ANIMAL_DEFS,
+  BACKPACK_UPGRADES,
   CITY_PROJECTS,
   CROPS,
   DAILY_TASK_POOL,
   DAY_START_MINUTES,
   GOVERNMENT_POLICIES,
+  ISLAND_DAILY_LIMIT,
   ISLAND_SPOTS,
   MARKET_GOODS,
   PLAYER_START,
   PRODUCTS,
+  PRODUCT_QUALITY_LABELS,
+  PRODUCT_QUALITY_MULTIPLIERS,
   REGION_ORDER,
+  REGION_SCENE_MAP,
   SAVE_KEY,
   SAVE_VERSION,
+  SCENE_DEFS,
+  SCENE_REGION_MAP,
   SPRITE_DEFS,
+  TOOL_UPGRADE_LEVELS,
   TRADE_CONTRACTS,
   WORLD,
 } from "./data.js";
@@ -49,10 +57,22 @@ function createAnimals() {
   return ANIMAL_DEFS.map((definition) => ({
     id: definition.id,
     fed: false,
+    talked: false,
+    brushed: false,
+    outside: false,
+    age: 1,
+    daysFed: 0,
     mood: 64,
     affection: 20,
+    health: 92,
+    unhappy: false,
+    sick: false,
+    daysUnhappy: 0,
+    daysSick: 0,
     careDays: 0,
     productCounter: 0,
+    outdoorMinutes: 0,
+    totalOutdoorMinutes: 0,
   }));
 }
 
@@ -74,6 +94,7 @@ export function generateTradeContracts(state) {
     rank: seedFromString(`${anchor}:${contract.id}:${index}`),
     accepted: false,
     completed: false,
+    expiresDay: state.day + 1,
   }))
     .sort((a, b) => a.rank - b.rank)
     .slice(0, state.city?.projects?.marketHall ? 4 : 3)
@@ -139,12 +160,41 @@ export function createInitialState() {
         milk: 0,
         wool: 0,
       },
+      qualityProduce: {
+        egg_S: 0,
+        egg_M: 0,
+        egg_L: 0,
+        milk_S: 0,
+        milk_M: 0,
+        milk_L: 0,
+        wool_S: 0,
+        wool_M: 0,
+        wool_L: 0,
+      },
       resources: {
         seaweed: 0,
         coconut: 0,
         pearl: 0,
         coral: 0,
       },
+    },
+    bag: {
+      level: 0,
+      slots: 2,
+    },
+    toolLevels: {
+      hoe: 0,
+      seed: 0,
+      water: 0,
+      harvest: 0,
+    },
+    shipping: {
+      pending: [],
+      dailyConsignedUnits: 0,
+      dailyConsignedValue: 0,
+      totalUnits: 0,
+      totalValue: 0,
+      settlements: [],
     },
     plots: createPlots(),
     animals: createAnimals(),
@@ -166,6 +216,9 @@ export function createInitialState() {
       contractsFulfilled: 0,
       islandFinds: 0,
       policiesEnacted: 0,
+      talkedAnimals: 0,
+      brushedAnimals: 0,
+      qualityItems: 0,
     },
     daily: null,
     ai: {
@@ -185,6 +238,9 @@ export function createInitialState() {
     },
     world: {
       activeRegion: "farm",
+      scene: "farm",
+      visitedScenes: ["farm"],
+      sceneVisits: { farm: 1 },
       unlockedRegions: ["farm", "city", "trade", "government", "sprites"],
       visits: {
         farm: 1,
@@ -225,12 +281,19 @@ export function createInitialState() {
       lastSessionDay: 0,
     },
     sprites: {
+      available: ["seedling"],
       unlocked: ["seedling"],
       assignments: {
         watering: "seedling",
         animals: null,
         trade: null,
         island: null,
+      },
+      assignmentEfficiency: {
+        watering: 1,
+        animals: 1,
+        trade: 1,
+        island: 1,
       },
       friendship: {
         seedling: 20,
@@ -319,6 +382,119 @@ export function checkDailyTasks(state) {
   return completed;
 }
 
+function animalDefinition(animalId) {
+  return ANIMAL_DEFS.find((entry) => entry.id === animalId);
+}
+
+export function getBagUsage(state) {
+  const stacks = [];
+  for (const [id, count] of Object.entries(state.inventory.produce || {})) {
+    if (count > 0 && !(state.inventory.qualityProduce && Object.keys(state.inventory.qualityProduce).some((qualityId) => qualityId.startsWith(`${id}_`) && state.inventory.qualityProduce[qualityId] > 0))) stacks.push(count);
+  }
+  for (const count of Object.values(state.inventory.qualityProduce || {})) if (count > 0) stacks.push(count);
+  for (const count of Object.values(state.inventory.resources || {})) if (count > 0) stacks.push(count);
+  return stacks.length;
+}
+
+export function hasBagSpace(state, itemId, amount = 1) {
+  const collection = itemId.includes("_") ? state.inventory.qualityProduce : state.inventory.produce;
+  if ((collection[itemId] || 0) > 0) return true;
+  return getBagUsage(state) < state.bag.slots || amount <= 0;
+}
+
+export function animalQuality(animal) {
+  const score = animal.affection + animal.health * 0.55 + Math.min(20, animal.careDays * 1.8) + Math.min(20, animal.totalOutdoorMinutes / 60);
+  if (score >= 125) return "L";
+  if (score >= 78) return "M";
+  return "S";
+}
+
+function qualityProductId(productId, quality) {
+  return `${productId}_${quality}`;
+}
+
+export function qualityProductPrice(productId, quality) {
+  const product = PRODUCTS[productId];
+  return product ? Math.round(product.sellPrice * (PRODUCT_QUALITY_MULTIPLIERS[quality] || 1)) : 0;
+}
+
+export function tickAnimalOutdoor(state, gameMinutes) {
+  const safeMinutes = Math.max(0, Math.min(60, gameMinutes));
+  if (!safeMinutes) return;
+  for (const animal of state.animals) {
+    if (!animal.outside) continue;
+    animal.outdoorMinutes = Math.min(511, animal.outdoorMinutes + safeMinutes);
+    animal.totalOutdoorMinutes = Math.min(65535, animal.totalOutdoorMinutes + safeMinutes);
+  }
+}
+
+export function talkAnimal(state, animalId) {
+  const animal = state.animals.find((entry) => entry.id === animalId);
+  const definition = animalDefinition(animalId);
+  if (!animal || !definition) return { ok: false, message: "没有找到这只动物。" };
+  if (animal.talked) return { ok: false, message: `${definition.name}今天已经听过你的声音了。` };
+  if (state.energy < 1) return { ok: false, message: "体力不够，先歇一会儿吧。" };
+  state.energy -= 1;
+  animal.talked = true;
+  animal.affection = bounded(animal.affection + 3);
+  animal.mood = bounded(animal.mood + 3);
+  animal.unhappy = false;
+  state.stats.talkedAnimals += 1;
+  addMemory(state, `你和${definition.name}说了几句话。它的耳朵朝你转过来，牧心把这段陪伴记下了。`, "social", 2);
+  return { ok: true, message: `${definition.name}安静地听完了你的话。` };
+}
+
+export function brushAnimal(state, animalId) {
+  const animal = state.animals.find((entry) => entry.id === animalId);
+  const definition = animalDefinition(animalId);
+  if (!animal || !definition) return { ok: false, message: "没有找到这只动物。" };
+  if (animal.brushed) return { ok: false, message: `${definition.name}今天已经刷过毛了。` };
+  if (state.energy < 1) return { ok: false, message: "体力不够，刷毛需要慢一点。" };
+  state.energy -= 1;
+  animal.brushed = true;
+  animal.affection = bounded(animal.affection + 4);
+  animal.health = bounded(animal.health + 2);
+  animal.mood = bounded(animal.mood + 2);
+  state.stats.brushedAnimals += 1;
+  addMemory(state, `你替${definition.name}刷了毛。它的皮毛恢复了光泽，健康记录提高。`, "care", 2);
+  return { ok: true, message: `${definition.name}舒服地眯起了眼睛。` };
+}
+
+export function toggleAnimalOutdoor(state, animalId) {
+  const animal = state.animals.find((entry) => entry.id === animalId);
+  const definition = animalDefinition(animalId);
+  if (!animal || !definition) return { ok: false, message: "没有找到这只动物。" };
+  animal.outside = !animal.outside;
+  addMemory(state, `${animal.outside ? "你把" : "你把"}${definition.name}${animal.outside ? "送到牧场外放牧。它会按时间积累放牧时长。" : "召回棚内。"}`, "care");
+  return { ok: true, message: animal.outside ? `${definition.name}开始放牧。` : `${definition.name}回到牲畜棚。` };
+}
+
+export function upgradeBackpack(state) {
+  const upgrade = BACKPACK_UPGRADES.find((entry) => entry.level === state.bag.level + 1);
+  if (!upgrade) return { ok: false, message: "背包已经扩展到 8 格。" };
+  if (state.coins < upgrade.cost) return { ok: false, message: `还差 ${upgrade.cost - state.coins} 金才能升级背包。` };
+  state.coins -= upgrade.cost;
+  state.bag.level = upgrade.level;
+  state.bag.slots = upgrade.slots;
+  addMemory(state, `你花 ${upgrade.cost} 金买下${upgrade.title}，背包容量提高到 ${upgrade.slots} 格。`, "upgrade", 3);
+  return { ok: true, message: `${upgrade.title}已装备，背包现在有 ${upgrade.slots} 格。` };
+}
+
+export function upgradeTool(state, toolId) {
+  const upgrades = TOOL_UPGRADE_LEVELS[toolId];
+  const next = upgrades?.find((entry) => entry.level === (state.toolLevels[toolId] || 0) + 1);
+  if (!next) return { ok: false, message: "这件工具已经达到最高等级。" };
+  if (state.coins < next.cost) return { ok: false, message: `还差 ${next.cost - state.coins} 金才能升级工具。` };
+  state.coins -= next.cost;
+  state.toolLevels[toolId] = next.level;
+  if (toolId === "water" && next.level === 2) {
+    state.maxWater += 4;
+    state.water = state.maxWater;
+  }
+  addMemory(state, `你花 ${next.cost} 金升级了${next.title}。${next.description}`, "upgrade", 3);
+  return { ok: true, message: `${next.title}已装备。` };
+}
+
 export function feedAnimal(state, animalId) {
   const animal = state.animals.find((entry) => entry.id === animalId);
   const definition = ANIMAL_DEFS.find((entry) => entry.id === animalId);
@@ -340,6 +516,8 @@ export function feedAnimal(state, animalId) {
   animal.fed = true;
   animal.mood = Math.min(100, animal.mood + 6);
   animal.affection = Math.min(100, animal.affection + 3);
+  animal.health = bounded(animal.health + 4);
+  animal.unhappy = false;
   animal.careDays += 1;
   bumpCounter(state, "fed");
   addMemory(
@@ -388,8 +566,9 @@ export function useToolOnPlot(state, toolId) {
     if (plot.state === "tilled") {
       return { ok: false, message: "这块地已经开垦过了。" };
     }
-    if (state.energy < 4) return { ok: false, message: "体力不够了。" };
-    state.energy -= 4;
+    const energyCost = Math.max(1, 4 - (state.toolLevels.hoe || 0));
+    if (state.energy < energyCost) return { ok: false, message: "体力不够了。" };
+    state.energy -= energyCost;
     plot.state = "tilled";
     state.minutes = Math.min(24 * 60, state.minutes + 8);
     bumpCounter(state, "tilled");
@@ -413,9 +592,10 @@ export function useToolOnPlot(state, toolId) {
     if (count <= 0) {
       return { ok: false, message: `${crop.seedName}用完了，去村集买一些吧。` };
     }
-    if (state.energy < 1) return { ok: false, message: "体力不够了。" };
+    const energyCost = Math.max(1, 1 - (state.toolLevels.seed || 0));
+    if (state.energy < energyCost) return { ok: false, message: "体力不够了。" };
     state.inventory.seeds[state.selectedSeed] -= 1;
-    state.energy -= 1;
+    state.energy -= energyCost;
     plot.crop = state.selectedSeed;
     plot.growth = 0;
     plot.watered = false;
@@ -446,9 +626,10 @@ export function useToolOnPlot(state, toolId) {
     if (state.water < 1) {
       return { ok: false, message: "水罐空了。旱季时可以去旧水渠补充。" };
     }
-    if (state.energy < 2) return { ok: false, message: "体力不够了。" };
+    const energyCost = Math.max(1, 2 - (state.toolLevels.water || 0));
+    if (state.energy < energyCost) return { ok: false, message: "体力不够了。" };
     state.water -= 1;
-    state.energy -= 2;
+    state.energy -= energyCost;
     plot.watered = true;
     plot.wateredDays += 1;
     state.minutes = Math.min(24 * 60, state.minutes + 6);
@@ -476,9 +657,11 @@ export function useToolOnPlot(state, toolId) {
         message: `${crop.name}还需要 ${crop.days - plot.growth} 个夜晚才能成熟。`,
       };
     }
-    if (state.energy < 2) return { ok: false, message: "体力不够了。" };
+    const energyCost = Math.max(1, 2 - (state.toolLevels.harvest || 0));
+    if (state.energy < energyCost) return { ok: false, message: "体力不够了。" };
+    if (!hasBagSpace(state, crop.id)) return { ok: false, message: "背包没有空位了，先去出货箱整理收成。" };
     const amount = plot.wateredDays >= crop.days ? 2 : 1;
-    state.energy -= 2;
+    state.energy -= energyCost;
     state.inventory.produce[crop.id] += amount;
     plot.crop = null;
     plot.growth = 0;
@@ -518,26 +701,51 @@ export function refillWaterAtCanal(state) {
 
 export function shipProduce(state) {
   let units = 0;
-  let income = 0;
+  let estimatedValue = 0;
+  const consignments = [];
+  const qualityCounts = {};
+  for (const [qualityId, count] of Object.entries(state.inventory.qualityProduce || {})) {
+    if (count <= 0) continue;
+    const [itemId, quality] = qualityId.split("_");
+    if (!PRODUCTS[itemId] || !PRODUCT_QUALITY_MULTIPLIERS[quality]) continue;
+    consignments.push({ itemId, quality, amount: count, unitPrice: qualityProductPrice(itemId, quality) });
+    qualityCounts[itemId] = (qualityCounts[itemId] || 0) + count;
+    state.inventory.qualityProduce[qualityId] = 0;
+  }
   for (const [itemId, count] of Object.entries(state.inventory.produce)) {
     if (count > 0) {
       const product = PRODUCTS[itemId];
-      units += count;
-      income += count * product.sellPrice;
+      if (!product) continue;
+      const remainder = Math.max(0, count - (qualityCounts[itemId] || 0));
+      if (!remainder) {
+        state.inventory.produce[itemId] = 0;
+        continue;
+      }
+      consignments.push({ itemId, quality: null, amount: remainder, unitPrice: product.sellPrice });
       state.inventory.produce[itemId] = 0;
     }
   }
-  if (units === 0) {
-    return { ok: false, message: "出货箱里还没有可以出售的农产品。" };
+  for (const [itemId, count] of Object.entries(state.inventory.resources || {})) {
+    if (count <= 0 || !MARKET_GOODS[itemId]) continue;
+    consignments.push({ itemId, quality: null, amount: count, unitPrice: getMarketPrice(state, itemId) });
+    state.inventory.resources[itemId] = 0;
   }
-  state.coins += income;
-  state.stats.earned += income;
+  for (const consignment of consignments) {
+    units += consignment.amount;
+    estimatedValue += consignment.amount * consignment.unitPrice;
+  }
+  if (units === 0) {
+    return { ok: false, message: "出货箱里还没有可以隔夜结算的农产品。" };
+  }
+  state.shipping.pending.push(...consignments);
+  state.shipping.dailyConsignedUnits += units;
+  state.shipping.dailyConsignedValue += estimatedValue;
   bumpCounter(state, "shipped", units);
-  addMemory(state, `你把 ${units} 份农产品放进合作社的出货箱，换回了 ${income} 金币。`, "economy", 2);
+  addMemory(state, `你把 ${units} 份农产品放进出货箱，估值 ${estimatedValue} 金，结算会在明早完成。`, "economy", 2);
   return {
     ok: true,
-    message: `交付了 ${units} 份产品，获得 ${income} 金币。第二天合作社就会把货送往镇上。`,
-    income,
+    message: `交付了 ${units} 份产品，估值 ${estimatedValue} 金。明早会在日结里到账。`,
+    income: estimatedValue,
     units,
     tasks: checkDailyTasks(state),
   };
@@ -571,6 +779,14 @@ function consumeInventoryItem(state, itemId, amount) {
   let remaining = amount;
   const produceCount = Math.min(state.inventory.produce[itemId] || 0, remaining);
   state.inventory.produce[itemId] -= produceCount;
+  let qualityToRemove = produceCount;
+  for (const quality of ["S", "M", "L"]) {
+    const qualityId = `${itemId}_${quality}`;
+    const removed = Math.min(state.inventory.qualityProduce?.[qualityId] || 0, qualityToRemove);
+    if (state.inventory.qualityProduce?.[qualityId] !== undefined) state.inventory.qualityProduce[qualityId] -= removed;
+    qualityToRemove -= removed;
+    if (!qualityToRemove) break;
+  }
   remaining -= produceCount;
   if (remaining > 0) {
     const resourceCount = Math.min(state.inventory.resources[itemId] || 0, remaining);
@@ -621,6 +837,7 @@ export function acceptTradeContract(state, contractId) {
   const accepted = state.market.contracts.filter((entry) => entry.accepted && !entry.completed).length;
   if (accepted >= 2) return { ok: false, message: "同时处理两份订单已经是极限。" };
   contract.accepted = true;
+  contract.expiresDay = state.day + 1;
   addMemory(state, `你接下了「${contract.title}」订单，交付期限是下一次市场刷新前。`, "economy");
   return { ok: true, message: `已接下「${contract.title}」。` };
 }
@@ -646,9 +863,9 @@ export function fulfillTradeContract(state, contractId) {
   state.stats.contractsFulfilled += 1;
   state.market.reputation += contract.reputation;
   state.government.civicPoints += 1;
-  if (state.market.reputation >= 12 && !state.sprites.unlocked.includes("ember")) {
-    state.sprites.unlocked.push("ember");
-    state.sprites.friendship.ember = 12;
+  if (state.stats.contractsFulfilled >= 3 && !state.sprites.available.includes("ember")) {
+    state.sprites.available.push("ember");
+    addMemory(state, "完成三份贸易订单后，烬烬终于愿意把自己的名字写进工坊名册。", "social", 3);
   }
   addMemory(state, `你完成「${contract.title}」，港口声誉提高了 ${contract.reputation}。`, "economy", 3);
   return { ok: true, message: `订单完成，获得 ${contract.reward} 金和 ${contract.reputation} 点声誉。`, contract };
@@ -668,6 +885,30 @@ export function switchRegion(state, regionId) {
   return { ok: true, regionId };
 }
 
+export function switchScene(state, sceneId, mode = "road") {
+  const scene = SCENE_DEFS[sceneId];
+  if (!scene) return { ok: false, message: "这条路还没有铺好。" };
+  const regionId = SCENE_REGION_MAP[sceneId] || "farm";
+  if (regionId !== "farm" && !state.world.unlockedRegions.includes(regionId)) {
+    return { ok: false, message: sceneId === "island" ? "先修好蓝潮渡轮，再从贸易港乘船出发。" : "这片地点还没有对你开放。" };
+  }
+  state.world.scene = sceneId;
+  state.world.activeRegion = regionId;
+  state.world.sceneVisits[sceneId] = (state.world.sceneVisits[sceneId] || 0) + 1;
+  if (!state.world.visitedScenes.includes(sceneId)) state.world.visitedScenes.push(sceneId);
+  state.player.x = scene.spawn.x;
+  state.player.y = scene.spawn.y;
+  state.player.facing = scene.spawn.facing || "down";
+  if (mode === "quick") state.minutes = Math.min(24 * 60, state.minutes + 4);
+  addMemory(
+    state,
+    `${mode === "quick" ? "你使用已走过的路线快速抵达" : "你沿着道路抵达"}${scene.name}。这里的声音和牧场不同。`,
+    "travel",
+    2,
+  );
+  return { ok: true, sceneId, regionId };
+}
+
 export function investInCity(state, projectId) {
   const project = CITY_PROJECTS[projectId];
   if (!project) return { ok: false, message: "没有这项城市项目。" };
@@ -678,6 +919,7 @@ export function investInCity(state, projectId) {
   state.city.reputation += 6;
   if (projectId === "ferry") {
     if (!state.world.unlockedRegions.includes("island")) state.world.unlockedRegions.push("island");
+    if (!state.sprites.available.includes("tide")) state.sprites.available.push("tide");
     addMemory(state, "蓝潮渡轮重新响起汽笛。海岛不再只是地图边缘的一个名字。", "travel", 3);
   } else if (projectId === "clinic") {
     state.maxEnergy += 10;
@@ -687,7 +929,10 @@ export function investInCity(state, projectId) {
     state.relations.community += 8;
   } else if (projectId === "marketHall") {
     state.market.reputation += 5;
-    state.market.contracts = generateTradeContracts(state);
+    if (!state.sprites.available.includes("golden")) state.sprites.available.push("golden");
+    if (!state.market.contracts.some((contract) => contract.accepted && !contract.completed)) {
+      state.market.contracts = generateTradeContracts(state);
+    }
   }
   addMemory(state, `你投资 ${project.cost} 金建成了${project.title}。城市开始把牧场当成长期伙伴。`, "city", 3);
   return { ok: true, message: `${project.title}已建成。`, projectId };
@@ -711,30 +956,43 @@ export function enactGovernmentPolicy(state, policyId) {
   if (state.government.civicPoints < policy.cost) {
     return { ok: false, message: `公民点不足，还需要 ${policy.cost - state.government.civicPoints} 点。` };
   }
+  if (state.coins < policy.coinCost) {
+    return { ok: false, message: `公共预算不足，还需要 ${policy.coinCost - state.coins} 金。` };
+  }
   state.government.civicPoints -= policy.cost;
+  state.coins -= policy.coinCost;
   state.government.policies[policyId] = true;
   state.stats.policiesEnacted += 1;
   if (policyId === "waterCharter") {
     state.maxWater += 3;
     state.water = state.maxWater;
     state.relations.community = bounded(state.relations.community + 7);
+    state.relations.corporation = bounded(state.relations.corporation - 4);
   } else if (policyId === "fairTrade") {
     state.market.reputation += 5;
+    state.relations.workers = bounded(state.relations.workers + 4);
+    state.relations.corporation = bounded(state.relations.corporation - 5);
   } else if (policyId === "islandSanctuary") {
     state.relations.ecology = bounded(state.relations.ecology + 9);
+    state.relations.corporation = bounded(state.relations.corporation - 4);
   } else if (policyId === "spriteCommons") {
     for (const spriteId of state.sprites.unlocked) {
       state.sprites.friendship[spriteId] = bounded((state.sprites.friendship[spriteId] || 0) + 8);
     }
+    state.relations.workers = bounded(state.relations.workers + 3);
+    state.relations.automation = bounded(state.relations.automation - 5);
   }
-  addMemory(state, `共同议政通过了「${policy.title}」。它把价值判断写成了每天都会生效的规则。`, "government", 4);
-  return { ok: true, message: `政策「${policy.title}」已生效。` };
+  addMemory(state, `共同议政通过了「${policy.title}」，支付 ${policy.coinCost} 金公共预算。它把价值判断写成了每天都会生效的规则。`, "government", 4);
+  return { ok: true, message: `政策「${policy.title}」已生效，公共预算支出 ${policy.coinCost} 金。` };
 }
 
 export function recruitSprite(state, spriteId) {
   const sprite = SPRITE_DEFS[spriteId];
   if (!sprite) return { ok: false, message: "没有找到这只小精灵。" };
   if (state.sprites.unlocked.includes(spriteId)) return { ok: false, message: `${sprite.name}已经是你的伙伴了。` };
+  if (!state.sprites.available.includes(spriteId)) {
+    return { ok: false, message: `${sprite.name}还没有准备好出现。${sprite.unlockText}` };
+  }
   if (spriteId === "tide" && !state.world.unlockedRegions.includes("island")) {
     return { ok: false, message: "先修好蓝潮渡轮，潮潮才找得到回家的路。" };
   }
@@ -761,22 +1019,32 @@ export function assignSprite(state, spriteId, role) {
     if (state.sprites.assignments[key] === spriteId) state.sprites.assignments[key] = null;
   }
   state.sprites.assignments[role] = spriteId;
+  const efficiency = sprite.role === role ? 1 : 0.55;
+  state.sprites.assignmentEfficiency[role] = efficiency;
   state.sprites.friendship[spriteId] = bounded((state.sprites.friendship[spriteId] || 0) + 2);
   state.sprites.dispatches += 1;
-  return { ok: true, message: `${sprite.name}现在负责${role === "watering" ? "田地" : role === "animals" ? "牲畜" : role === "trade" ? "贸易" : "海岛探索"}。` };
+  return {
+    ok: true,
+    message: `${sprite.name}现在负责${role === "watering" ? "田地" : role === "animals" ? "牲畜" : role === "trade" ? "贸易" : "海岛探索"}。${efficiency < 1 ? "这是跨岗分工，效率约为主职的一半。" : "它正在做最擅长的工作。"}`,
+  };
 }
 
 export function exploreIsland(state, spotId) {
   if (!state.world.unlockedRegions.includes("island")) return { ok: false, message: "先去城市修好蓝潮渡轮。" };
   const spot = ISLAND_SPOTS[spotId];
   if (!spot) return { ok: false, message: "这片海岸还没有标记。" };
+  if (Object.keys(state.island.dailyFinds).length >= ISLAND_DAILY_LIMIT) {
+    return { ok: false, message: `今天已经探索了 ${ISLAND_DAILY_LIMIT} 个潮汐点，留一点时间让潮水恢复。` };
+  }
   if (state.island.dailyFinds[spotId]) return { ok: false, message: "今天的潮汐已经把这里搜过了。" };
   if (state.energy < spot.energy) return { ok: false, message: "体力不够，无法安全走到那里。" };
   state.energy -= spot.energy;
   state.minutes = Math.min(24 * 60, state.minutes + spot.energy * 9);
-  const bonus = state.government.policies.islandSanctuary ? 1 : 0;
-  const amount = spot.amount + bonus;
-  state.inventory.resources[spot.resource] += amount;
+  const bonusChance = state.government.policies.islandSanctuary ? 0.2 : 0;
+  const found = !spot.chance || nextRandom(state) < Math.min(0.95, spot.chance + bonusChance);
+  const bonus = state.government.policies.islandSanctuary && found ? 1 : 0;
+  const amount = found ? spot.amount + bonus : 0;
+  if (amount) state.inventory.resources[spot.resource] += amount;
   state.island.dailyFinds[spotId] = true;
   state.island.expeditions += 1;
   state.island.visitedSpots = Array.from(new Set([...state.island.visitedSpots, spotId]));
@@ -787,8 +1055,11 @@ export function exploreIsland(state, spotId) {
     const spriteId = state.sprites.assignments.island;
     state.sprites.friendship[spriteId] = bounded((state.sprites.friendship[spriteId] || 0) + 3);
   }
-  addMemory(state, `你在${spot.title}找到 ${amount} 份${MARKET_GOODS[spot.resource].name}。`, "island", 2);
-  return { ok: true, message: `探索${spot.title}，找到 ${amount} 份${MARKET_GOODS[spot.resource].name}。`, resource: spot.resource, amount };
+  const resultText = amount
+    ? `找到 ${amount} 份${MARKET_GOODS[spot.resource].name}`
+    : "只找到被潮水冲空的礁缝，稀有资源这次没有出现";
+  addMemory(state, `你在${spot.title}${resultText}。`, "island", 2);
+  return { ok: true, message: `探索${spot.title}，${resultText}。`, resource: spot.resource, amount };
 }
 
 export function recordTalk(state, npcName) {
@@ -1012,8 +1283,10 @@ function applySpriteAssignments(state, report) {
   const assignments = state.sprites?.assignments || {};
   if (assignments.watering && state.water > 0) {
     let watered = 0;
+    const efficiency = state.sprites.assignmentEfficiency?.watering || 1;
+    const limit = efficiency >= 1 ? 2 : 1;
     for (const plot of state.plots) {
-      if (watered >= 2 || state.water <= 0) break;
+      if (watered >= limit || state.water <= 0) break;
       if (plot.crop && !plot.watered) {
         plot.watered = true;
         plot.wateredDays += 1;
@@ -1022,41 +1295,52 @@ function applySpriteAssignments(state, report) {
         bumpCounter(state, "watered");
       }
     }
-    if (watered) report.helperActions.push(`芽芽替你留下了 ${watered} 格露水`);
+    if (watered) report.helperActions.push(`芽芽替你留下了 ${watered} 格露水${efficiency < 1 ? "（跨岗效率较低）" : ""}`);
   }
 
   if (assignments.animals && state.feed > 0) {
+    const efficiency = state.sprites.assignmentEfficiency?.animals || 1;
     const animal = state.animals
       .filter((entry) => !entry.fed)
       .sort((a, b) => a.mood - b.mood)[0];
     if (animal) {
       animal.fed = true;
       state.feed -= 1;
-      animal.mood = Math.min(100, animal.mood + 4);
-      animal.affection = Math.min(100, animal.affection + 2);
+      animal.mood = Math.min(100, animal.mood + (efficiency >= 1 ? 4 : 2));
+      animal.affection = Math.min(100, animal.affection + (efficiency >= 1 ? 2 : 1));
       bumpCounter(state, "fed");
-      report.helperActions.push("烬烬照顾了心情最低的牲畜");
+      report.helperActions.push(`烬烬照顾了心情最低的牲畜${efficiency < 1 ? "（跨岗效率较低）" : ""}`);
     }
   }
 
   if (assignments.trade) {
-    state.market.reputation += state.government.policies.spriteCommons ? 2 : 1;
-    report.helperActions.push("小精灵整理了贸易账本");
+    const efficiency = state.sprites.assignmentEfficiency?.trade || 1;
+    state.market.reputation += state.government.policies.spriteCommons ? (efficiency >= 1 ? 2 : 1) : efficiency >= 1 ? 1 : 0;
+    report.helperActions.push(`小精灵整理了贸易账本${efficiency < 1 ? "（跨岗效率较低）" : ""}`);
   }
 
   if (assignments.island && state.world.unlockedRegions.includes("island")) {
+    const efficiency = state.sprites.assignmentEfficiency?.island || 1;
     const resourceId = state.government.policies.islandSanctuary ? "coconut" : "seaweed";
-    state.inventory.resources[resourceId] += 1;
-    state.stats.islandFinds += 1;
-    report.helperActions.push(`潮潮带回了 1 份${MARKET_GOODS[resourceId].name}`);
+    if (efficiency >= 1) {
+      state.inventory.resources[resourceId] += 1;
+      state.stats.islandFinds += 1;
+      report.helperActions.push(`潮潮带回了 1 份${MARKET_GOODS[resourceId].name}`);
+    } else {
+      report.helperActions.push("小精灵跨岗探索失败，潮汐路线需要更熟练的伙伴");
+    }
   }
 
   for (const spriteId of state.sprites.unlocked) {
     state.sprites.friendship[spriteId] = bounded((state.sprites.friendship[spriteId] || 0) + 1);
   }
+
+  if (report.helperActions.length) {
+    addMemory(state, `小精灵日结：${report.helperActions.join("；")}。`, "care", 2);
+  }
 }
 
-function refreshMarket(state) {
+function refreshMarket(state, report = null) {
   const previousPrices = state.market.prices || createMarketPrices();
   let trendTotal = 0;
   for (const [id, good] of Object.entries(MARKET_GOODS)) {
@@ -1070,47 +1354,136 @@ function refreshMarket(state) {
   }
   state.market.trend = trendTotal > 12 ? "rising" : trendTotal < -12 ? "falling" : "steady";
   state.market.lastRefreshDay = state.day;
-  state.market.contracts = generateTradeContracts(state);
+  const activeContracts = [];
+  for (const contract of state.market.contracts || []) {
+    if (!contract.accepted || contract.completed) continue;
+    if (state.day > (contract.expiresDay || state.day)) {
+      state.market.reputation = Math.max(0, state.market.reputation - 2);
+      state.government.civicPoints = Math.max(0, state.government.civicPoints - 1);
+      report?.expiredContracts?.push(contract.title);
+      addMemory(state, `你错过了「${contract.title}」订单。港口声誉下降，客户开始要求更明确的交付承诺。`, "risk", 3);
+    } else {
+      activeContracts.push(contract);
+    }
+  }
+  const limit = state.city.projects.marketHall ? 4 : 3;
+  const fresh = generateTradeContracts(state).filter(
+    (contract) => !activeContracts.some((active) => active.id === contract.id),
+  );
+  state.market.contracts = [...activeContracts, ...fresh.slice(0, Math.max(0, limit - activeContracts.length))];
+}
+
+export function settleShipping(state, report) {
+  const pending = state.shipping.pending || [];
+  if (!pending.length) return { units: 0, value: 0, items: [] };
+  let units = 0;
+  let value = 0;
+  const items = [];
+  for (const item of pending) {
+    const itemValue = item.amount * item.unitPrice;
+    units += item.amount;
+    value += itemValue;
+    items.push({ ...item, value: itemValue });
+  }
+  state.coins += value;
+  state.stats.earned += value;
+  state.shipping.totalUnits += units;
+  state.shipping.totalValue += value;
+  state.shipping.settlements.unshift({ day: state.day, units, value });
+  state.shipping.settlements = state.shipping.settlements.slice(0, 12);
+  state.shipping.pending = [];
+  state.shipping.dailyConsignedUnits = 0;
+  state.shipping.dailyConsignedValue = 0;
+  addMemory(state, `隔夜出货箱结算了 ${units} 份产品，共 ${value} 金。稳定的收入也需要等到第二天才真正到账。`, "economy", 3);
+  if (report) report.shipping = { units, value, items };
+  return { units, value, items };
 }
 
 export function advanceDay(state) {
+  const closingDay = state.day;
   const report = {
     products: [],
     grown: 0,
     matured: 0,
     animalsUnfed: [],
     helperActions: [],
+    expiredContracts: [],
+    livestock: [],
+    shipping: { units: 0, value: 0, items: [] },
+    systemNotes: [],
     weather: "sunny",
   };
+
+  settleShipping(state, report);
 
   applySpriteAssignments(state, report);
 
   for (const animal of state.animals) {
+    animal.age += 1;
     if (animal.fed) {
+      animal.daysFed += 1;
       animal.productCounter += 1;
-      const definition = ANIMAL_DEFS.find((entry) => entry.id === animal.id);
+      const definition = animalDefinition(animal.id);
       if (animal.productCounter >= definition.productEvery) {
         animal.productCounter = 0;
+        const quality = animalQuality(animal);
+        const qualityId = qualityProductId(definition.product, quality);
         state.inventory.produce[definition.product] += 1;
+        state.inventory.qualityProduce[qualityId] += 1;
+        state.stats.qualityItems += 1;
         report.products.push({
           name: definition.name,
           product: PRODUCTS[definition.product].name,
           text: definition.productText,
+          quality,
         });
       }
       animal.mood = Math.min(100, animal.mood + 3);
+      animal.health = bounded(animal.health + 3);
+      if (animal.unhappy && animal.health > 55) animal.unhappy = false;
     } else {
       animal.mood = Math.max(0, animal.mood - 9);
       animal.affection = Math.max(0, animal.affection - 4);
+      animal.health = Math.max(0, animal.health - 7);
+      animal.unhappy = true;
+      animal.daysUnhappy = Math.min(7, animal.daysUnhappy + 1);
       report.animalsUnfed.push(animal.id);
       addMemory(
         state,
-        `${ANIMAL_DEFS.find((entry) => entry.id === animal.id).name}昨天没有进食。它的活动量下降了。`,
+        `${animalDefinition(animal.id).name}昨天没有进食。它的健康与情绪都下降了。`,
         "risk",
         3,
       );
     }
+    if (animal.unhappy && animal.daysUnhappy >= 2 && !animal.sick && nextRandom(state) < 0.18) {
+      animal.sick = true;
+      addMemory(state, `${animalDefinition(animal.id).name}连续不开心后生病了，需要更多照料。`, "risk", 3);
+    }
+    if (animal.sick) {
+      animal.daysSick = Math.min(7, animal.daysSick + 1);
+      if (animal.fed && animal.brushed && nextRandom(state) < 0.35) {
+        animal.sick = false;
+        animal.daysSick = 0;
+      }
+    } else {
+      animal.daysSick = 0;
+    }
+    report.livestock = report.livestock || [];
+    report.livestock.push({
+      id: animal.id,
+      name: animalDefinition(animal.id).name,
+      age: animal.age,
+      affection: animal.affection,
+      health: animal.health,
+      unhappy: animal.unhappy,
+      sick: animal.sick,
+      outdoorMinutes: animal.outdoorMinutes,
+    });
     animal.fed = false;
+    animal.talked = false;
+    animal.brushed = false;
+    animal.outdoorMinutes = 0;
+    if (!animal.unhappy) animal.daysUnhappy = 0;
   }
 
   for (const plot of state.plots) {
@@ -1144,7 +1517,7 @@ export function advanceDay(state) {
 
   state.island.dailyFinds = {};
   state.world.activeRegion = "farm";
-  refreshMarket(state);
+  refreshMarket(state, report);
 
   if (weather === "rain") {
     state.water = state.maxWater;
@@ -1172,6 +1545,11 @@ export function advanceDay(state) {
   if (state.story.developmentChoice && !state.story.governanceChoice) {
     state.story.step = "aiAudit";
   }
+
+  report.systemNotes = state.ai.memories
+    .filter((memory) => memory.day === closingDay)
+    .slice(0, 4)
+    .map((memory) => memory.text);
 
   return report;
 }
@@ -1249,7 +1627,16 @@ export function loadGame() {
       inventory: {
         seeds: { ...base.inventory.seeds, ...(parsed.inventory?.seeds || {}) },
         produce: { ...base.inventory.produce, ...(parsed.inventory?.produce || {}) },
+        qualityProduce: { ...base.inventory.qualityProduce, ...(parsed.inventory?.qualityProduce || {}) },
         resources: { ...base.inventory.resources, ...(parsed.inventory?.resources || {}) },
+      },
+      bag: { ...base.bag, ...(parsed.bag || {}) },
+      toolLevels: { ...base.toolLevels, ...(parsed.toolLevels || {}) },
+      shipping: {
+        ...base.shipping,
+        ...(parsed.shipping || {}),
+        pending: Array.isArray(parsed.shipping?.pending) ? parsed.shipping.pending : base.shipping.pending,
+        settlements: Array.isArray(parsed.shipping?.settlements) ? parsed.shipping.settlements : base.shipping.settlements,
       },
       stats: { ...base.stats, ...(parsed.stats || {}) },
       ai: {
@@ -1262,6 +1649,10 @@ export function loadGame() {
         ...base.world,
         ...(parsed.world || {}),
         visits: { ...base.world.visits, ...(parsed.world?.visits || {}) },
+        sceneVisits: { ...base.world.sceneVisits, ...(parsed.world?.sceneVisits || {}) },
+        visitedScenes: Array.isArray(parsed.world?.visitedScenes)
+          ? Array.from(new Set(parsed.world.visitedScenes))
+          : base.world.visitedScenes,
         unlockedRegions: Array.isArray(parsed.world?.unlockedRegions)
           ? Array.from(new Set(parsed.world.unlockedRegions))
           : base.world.unlockedRegions,
@@ -1296,10 +1687,14 @@ export function loadGame() {
       sprites: {
         ...base.sprites,
         ...(parsed.sprites || {}),
+        available: Array.isArray(parsed.sprites?.available)
+          ? Array.from(new Set(parsed.sprites.available))
+          : base.sprites.available,
         unlocked: Array.isArray(parsed.sprites?.unlocked)
           ? Array.from(new Set(parsed.sprites.unlocked))
           : base.sprites.unlocked,
         assignments: { ...base.sprites.assignments, ...(parsed.sprites?.assignments || {}) },
+        assignmentEfficiency: { ...base.sprites.assignmentEfficiency, ...(parsed.sprites?.assignmentEfficiency || {}) },
         friendship: { ...base.sprites.friendship, ...(parsed.sprites?.friendship || {}) },
       },
       story: {
@@ -1330,6 +1725,9 @@ export function loadGame() {
       merged.market.contracts = generateTradeContracts(merged);
     }
     if (!merged.world.unlockedRegions.includes("farm")) merged.world.unlockedRegions.unshift("farm");
+    if (!SCENE_DEFS[merged.world.scene]) merged.world.scene = "farm";
+    if (!merged.world.visitedScenes.includes("farm")) merged.world.visitedScenes.unshift("farm");
+    merged.sprites.available = Array.from(new Set([...(merged.sprites.available || []), ...(merged.sprites.unlocked || [])]));
     return merged;
   } catch (error) {
     console.warn("Unable to load game", error);

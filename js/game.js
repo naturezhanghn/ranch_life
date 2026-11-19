@@ -1,22 +1,30 @@
 import {
   ANIMAL_DEFS,
+  BACKPACK_UPGRADES,
   CANAL_LORE,
   CITY_PROJECTS,
   CROPS,
   ELDER_DIALOGUE,
   ENDINGS,
   GOVERNMENT_POLICIES,
+  ISLAND_DAILY_LIMIT,
   ISLAND_SPOTS,
   MARKET_GOODS,
   INTERACTIONS,
   PRODUCTS,
   REGIONS,
+  REGION_SCENE_MAP,
   REAL_SECONDS_PER_GAME_MINUTE,
+  SCENE_DEFS,
+  SCENE_INTERACTIONS,
+  SCENE_NPCS,
+  SCENE_REGION_MAP,
   SHOP_SEEDS,
   SPRITE_DEFS,
   STORY_OBJECTIVES,
   TIPS,
   TOOLS,
+  TOOL_UPGRADE_LEVELS,
   WORLD,
 } from "./data.js";
 import {
@@ -27,6 +35,7 @@ import {
   applyGovernanceChoice,
   acceptTradeContract,
   assignSprite,
+  animalQuality,
   buyFeed,
   buySeed,
   checkDailyTasks,
@@ -46,6 +55,13 @@ import {
   investInCity,
   loadGame,
   recruitSprite,
+  brushAnimal,
+  talkAnimal,
+  toggleAnimalOutdoor,
+  tickAnimalOutdoor,
+  upgradeBackpack,
+  upgradeTool,
+  getBagUsage,
   recordClue,
   recordTalk,
   refillWaterAtCanal,
@@ -53,6 +69,7 @@ import {
   saveGame,
   sellAtMarket,
   shipProduce,
+  switchScene,
   switchRegion,
   useToolOnPlot,
 } from "./state.js";
@@ -174,11 +191,17 @@ function renderRegionNav() {
   if (!dom.regionNav) return;
   dom.regionNav.querySelectorAll("[data-region]").forEach((button) => {
     const regionId = button.dataset.region;
+    const sceneId = REGION_SCENE_MAP[regionId] || "farm";
     const unlocked = state.world.unlockedRegions.includes(regionId);
-    button.classList.toggle("is-active", state.world.activeRegion === regionId);
-    button.classList.toggle("is-locked", !unlocked);
+    const visited = state.world.visitedScenes?.includes(sceneId);
+    button.classList.toggle("is-active", currentSceneId() === sceneId);
+    button.classList.toggle("is-locked", !unlocked || !visited);
     button.disabled = !active;
-    button.title = unlocked ? `${REGIONS[regionId].name} · 打开界面` : `${REGIONS[regionId].name} · ${regionStatus(regionId)}`;
+    button.title = !unlocked
+      ? `${REGIONS[regionId].name} · ${regionStatus(regionId)}`
+      : visited
+        ? `${REGIONS[regionId].name} · 快速传送`
+        : `${REGIONS[regionId].name} · 先从道路进入`;
   });
 }
 
@@ -288,7 +311,7 @@ function closeModal() {
   pendingMorningEvent = null;
   dom.liveRegion.textContent = "";
   if (wasRegionPanel && state?.world) {
-    state.world.activeRegion = "farm";
+    state.world.activeRegion = SCENE_REGION_MAP[state.world.scene] || "farm";
     updateHUD(true);
     saveGame(state);
   }
@@ -315,7 +338,11 @@ function beginPlay({ fresh = false, loadedState = null } = {}) {
   } else if (loadedState) {
     state = loadedState;
   }
-  if (state.world) state.world.activeRegion = "farm";
+  if (state.world) {
+    const loadedScene = SCENE_DEFS[state.world.scene] ? state.world.scene : "farm";
+    state.world.scene = loadedScene;
+    state.world.activeRegion = SCENE_REGION_MAP[loadedScene] || "farm";
+  }
   active = true;
   inputLocked = false;
   audio.setEnabled(state.settings.sound);
@@ -369,7 +396,7 @@ function updateHUD(force = false) {
   dom.clock.textContent = formatClock(state.minutes);
   dom.weatherLabel.classList.toggle("is-rain", state.weather === "rain");
   dom.weatherLabel.innerHTML = `<span class="weather-icon" aria-hidden="true">${weather.icon}</span><span>${weather.label}</span>`;
-  const region = REGIONS[state.world.activeRegion] || REGIONS.farm;
+  const region = REGIONS[SCENE_REGION_MAP[currentSceneId()] || state.world.activeRegion] || REGIONS.farm;
   dom.regionChip.innerHTML = `<span aria-hidden="true">${region.icon}</span><span>${region.shortName}</span>`;
   dom.regionChip.className = `region-chip region-chip--${region.accent}`;
   renderRegionNav();
@@ -462,13 +489,44 @@ function getInteractionLabel(interaction) {
   return interaction.label;
 }
 
+function currentSceneId() {
+  return state.world?.scene || "farm";
+}
+
+function scheduledNpcPosition(npc, minutes = state.minutes) {
+  const entries = npc.scenes || [];
+  const match = entries.find((entry) => minutes >= entry.from && minutes < entry.to);
+  return match || entries[entries.length - 1] || null;
+}
+
+function scenePortalInteractions(sceneId) {
+  return (SCENE_DEFS[sceneId]?.portals || []).map((portal) => ({
+    ...portal,
+    keycap: "E",
+    portal: true,
+  }));
+}
+
 function availableInteractions() {
-  return INTERACTIONS.filter((interaction) => {
-    if (interaction.id === "investor") {
-      return state.story.step === "meetInvestor";
-    }
-    return true;
-  });
+  const sceneId = currentSceneId();
+  const base = sceneId === "farm"
+    ? INTERACTIONS.filter((interaction) => interaction.id !== "investor" || state.story.step === "meetInvestor")
+    : (SCENE_INTERACTIONS[sceneId] || []);
+  const npcs = SCENE_NPCS.map((npc) => {
+    const position = scheduledNpcPosition(npc);
+    if (!position || position.scene !== sceneId) return null;
+    return {
+      id: `npc_${npc.id}`,
+      x: position.x,
+      y: position.y,
+      radius: 46,
+      label: `和${npc.name}聊聊`,
+      keycap: "E",
+      npcId: npc.id,
+      npc,
+    };
+  }).filter(Boolean);
+  return [...base, ...scenePortalInteractions(sceneId), ...npcs];
 }
 
 function findNearestInteraction() {
@@ -510,14 +568,16 @@ function update(delta) {
 
   if (!modalOpen) {
     updateMovement(delta);
-    state.minutes += delta / REAL_SECONDS_PER_GAME_MINUTE;
+    const gameMinutes = delta / REAL_SECONDS_PER_GAME_MINUTE;
+    tickAnimalOutdoor(state, gameMinutes);
+    state.minutes += gameMinutes;
     if (state.minutes >= 24 * 60) {
       state.minutes = 24 * 60;
       sleepAndAdvance(true);
     }
   }
 
-  runtime.targetPlot = active ? getTargetPlot(state) : null;
+  runtime.targetPlot = active && currentSceneId() === "farm" ? getTargetPlot(state) : null;
   updateInteractionHint();
 
   timeSinceHud += delta;
@@ -631,7 +691,7 @@ function canMoveTo(x, y) {
     return false;
   }
 
-  const blockers = [
+  const farmBlockers = [
     WORLD.house,
     WORLD.aiShed,
     WORLD.pasture,
@@ -641,12 +701,26 @@ function canMoveTo(x, y) {
     WORLD.shippingBin,
     { x: 831, y: 483, w: 141, h: 59 },
   ];
+  const sceneId = currentSceneId();
+  const blockers = sceneId === "farm" ? farmBlockers : SCENE_DEFS[sceneId]?.blockers || [];
   if (blockers.some((rect) => circleHitsRect(x, y, radius, rect, 2))) return false;
 
-  const pond = WORLD.pond;
-  const pondDistance =
-    ((x - pond.x) / (pond.rx + radius)) ** 2 + ((y - pond.y) / (pond.ry + radius)) ** 2;
-  if (pondDistance < 1) return false;
+  for (const npc of SCENE_NPCS) {
+    const position = scheduledNpcPosition(npc);
+    if (position?.scene === sceneId && Math.hypot(x - position.x, y - position.y) < radius + 14) return false;
+  }
+  if (sceneId === "farm") {
+    for (const npc of [{ x: 398, y: 257 }, { x: 705, y: 287 }, { x: 280, y: 681 }]) {
+      if (Math.hypot(x - npc.x, y - npc.y) < radius + 14) return false;
+    }
+  }
+
+  if (sceneId === "farm") {
+    const pond = WORLD.pond;
+    const pondDistance =
+      ((x - pond.x) / (pond.rx + radius)) ** 2 + ((y - pond.y) / (pond.ry + radius)) ** 2;
+    if (pondDistance < 1) return false;
+  }
 
   return true;
 }
@@ -656,6 +730,12 @@ function performAction() {
   const nearest = findNearestInteraction();
   if (nearest) {
     handleInteraction(nearest.id);
+    return;
+  }
+
+  if (currentSceneId() !== "farm") {
+    audio.play("error");
+    showToast("这里没有农田工具目标。找到门口、地标或 NPC 后按行动键。", { strong: "场景探索" });
     return;
   }
 
@@ -693,6 +773,15 @@ function checkStoryToast() {
 }
 
 function handleInteraction(id) {
+  const sceneInteraction = availableInteractions().find((interaction) => interaction.id === id);
+  if (sceneInteraction?.portal) {
+    travelToScene(sceneInteraction.target, "road");
+    return;
+  }
+  if (sceneInteraction?.npcId) {
+    openSceneNpcDialogue(sceneInteraction.npcId);
+    return;
+  }
   switch (id) {
     case "sleep":
       openSleepDialog();
@@ -724,9 +813,87 @@ function handleInteraction(id) {
     case "investor":
       openInvestorDialogue();
       break;
+    case "city_market":
+      openRegionHub("city");
+      break;
+    case "city_council":
+      travelToScene("council", "road");
+      break;
+    case "city_workshop":
+      travelToScene("workshop", "road");
+      break;
+    case "city_mayor":
+      openSceneNpcDialogue("mayor");
+      break;
+    case "port_trade":
+      openRegionHub("trade");
+      break;
+    case "port_ferry":
+      if (state.world.unlockedRegions.includes("island")) travelToScene("island", "road");
+      else openRegionHub("city");
+      break;
+    case "port_shipping":
+      openShippingBin();
+      break;
+    case "port_sailor":
+      openSceneNpcDialogue("merchant");
+      break;
+    case "council_government":
+      openRegionHub("government");
+      break;
+    case "council_water":
+      openCanal();
+      break;
+    case "council_clerk":
+      openSceneNpcDialogue("mayor");
+      break;
+    case "workshop_sprites":
+      openRegionHub("sprites");
+      break;
+    case "workshop_keeper":
+      openSceneNpcDialogue("spriteKeeper");
+      break;
+    case "island_tidePool":
+    case "island_silverBeach":
+    case "island_moonReef":
+    case "island_redGarden":
+      handleIslandSpotInteraction(sceneInteraction?.spot);
+      break;
     default:
       break;
   }
+}
+
+function handleIslandSpotInteraction(spotId) {
+  if (!spotId) return;
+  const result = exploreIsland(state, spotId);
+  if (result.ok) {
+    audio.play("water");
+    triggerEffect("island", state.player.x, state.player.y);
+    saveGame(state);
+    updateHUD(true);
+    showToast(result.message, { strong: "海岛探索" });
+  } else {
+    audio.play("error");
+    showToast(result.message, { strong: "潮汐路线" });
+  }
+}
+
+function openSceneNpcDialogue(npcId) {
+  const npc = SCENE_NPCS.find((entry) => entry.id === npcId);
+  if (!npc) return;
+  recordNpcTalk(npc.id, npc.name);
+  const copy = {
+    mayor: "“市政不是一张免费 buff 清单。每一条政策都有人出钱、出时间，也有人需要承担它的副作用。”",
+    merchant: "“你可以把货交给稳定的出货箱，也可以接受航线的波动。港口记得每一次准时交付，也记得每一次失约。”",
+    spriteKeeper: "“精灵不是会自动完成一切的机器。它们有自己的天赋，跨岗能帮忙，但效率会下降。”",
+  }[npcId] || "“在这座地方，时间会把每个人带到不同的门口。”";
+  openModal({
+    kicker: `${npc.role} · 第 ${formatClock(state.minutes)}`,
+    title: npc.name,
+    body: `${speakerBlock({ name: npc.name, role: npc.role, text: copy })}<div class="weather-note">日程：${state.minutes < 11 * 60 ? "上午" : state.minutes < 16 * 60 ? "午后" : "傍晚"}。再过一段时间，${npc.name}会去另一个场景。</div>`,
+    footer: `<button type="button" class="button button--primary" data-action="close">记下这句话</button>`,
+  });
 }
 
 function recordNpcTalk(npcId, npcName) {
@@ -921,11 +1088,9 @@ function openAnimalPanel(notice = "") {
           }</span>
           <span class="shop-row-copy">
             <strong>${definition.name} · ${definition.species}</strong>
-            <small>心情 ${animal.mood} · 亲密 ${animal.affection} · ${
-              animal.fed ? "吃饱了" : "在等你"
-            }</small>
+            <small>年龄 ${animal.age} 天 · 健康 ${animal.health} · 心情 ${animal.mood} · 亲密 ${animal.affection} · 潜在品质 ${animalQualityLabel(animal)} · ${animal.sick ? "生病" : animal.unhappy ? "不开心" : animal.fed ? "吃饱了" : "在等你"}</small>
           </span>
-          ${action}
+          <span class="animal-actions">${action}<button type="button" class="shop-buy" data-action="talkAnimal" data-value="${animal.id}" ${animal.talked ? "disabled" : ""}>交谈</button><button type="button" class="shop-buy" data-action="brushAnimal" data-value="${animal.id}" ${animal.brushed ? "disabled" : ""}>刷毛</button><button type="button" class="shop-buy" data-action="toggleAnimalOutdoor" data-value="${animal.id}">${animal.outside ? "召回" : "放牧"}</button></span>
         </div>
       `;
     })
@@ -970,6 +1135,20 @@ function handleFeedAnimal(animalId) {
       duration: 4200,
     });
   }
+  openAnimalPanel(result.message);
+}
+
+function handleAnimalCare(action, animalId) {
+  const careAction = action === "talkAnimal" ? talkAnimal : action === "brushAnimal" ? brushAnimal : toggleAnimalOutdoor;
+  const result = careAction(state, animalId);
+  if (!result.ok) {
+    audio.play("error");
+    showToast(result.message);
+    return;
+  }
+  audio.play(action === "toggleAnimalOutdoor" ? "ui" : "success");
+  saveGame(state);
+  updateHUD(true);
   openAnimalPanel(result.message);
 }
 
@@ -1121,6 +1300,10 @@ function inventoryQuantity(itemId) {
   return (state.inventory.produce[itemId] || 0) + (state.inventory.resources[itemId] || 0);
 }
 
+function animalQualityLabel(animal) {
+  return `${animalQuality(animal)}级`;
+}
+
 function formatRequirements(requirements) {
   return Object.entries(requirements)
     .map(([itemId, amount]) => `${MARKET_GOODS[itemId]?.name || itemId} × ${amount}`)
@@ -1164,6 +1347,13 @@ function renderCityPanel() {
       `;
     })
     .join("");
+  const backpackUpgrade = BACKPACK_UPGRADES.find((entry) => entry.level === state.bag.level + 1);
+  const backpackMarkup = `<article class="region-card project-card ${backpackUpgrade ? "" : "is-complete"}"><div class="region-card-icon" aria-hidden="true">▣</div><div class="region-card-copy"><strong>背包 ${state.bag.slots} 格</strong><span>${backpackUpgrade ? `${backpackUpgrade.title} · ${backpackUpgrade.description}` : "已经达到 8 格上限。"}</span></div><button type="button" class="shop-buy" data-action="upgradeBackpack" ${!backpackUpgrade || state.coins < backpackUpgrade.cost ? "disabled" : ""}>${backpackUpgrade ? `✦ ${backpackUpgrade.cost}` : "满级"}</button></article>`;
+  const toolMarkup = Object.entries(TOOL_UPGRADE_LEVELS).map(([toolId, upgrades]) => {
+    const next = upgrades.find((entry) => entry.level === (state.toolLevels[toolId] || 0) + 1);
+    const tool = TOOLS.find((entry) => entry.id === toolId);
+    return `<article class="region-card project-card"><div class="region-card-icon" aria-hidden="true">${tool?.icon || "⌁"}</div><div class="region-card-copy"><strong>${tool?.name || toolId} Lv.${state.toolLevels[toolId] || 0}</strong><span>${next ? `${next.title} · ${next.description}` : "已经达到最高等级。"}</span></div><button type="button" class="shop-buy" data-action="upgradeTool" data-value="${toolId}" ${!next || state.coins < next.cost ? "disabled" : ""}>${next ? `✦ ${next.cost}` : "满级"}</button></article>`;
+  }).join("");
   return `
     ${regionHero("city", "河港市把你的农产品、城市项目和公共生活放在同一张地图上。", [
       regionMetric("城市声誉", Math.round(state.city.reputation)),
@@ -1172,6 +1362,8 @@ function renderCityPanel() {
     ].join(""))}
     <div class="region-section-heading"><span>城市建设</span><small>钱包 ✦ ${Math.floor(state.coins)}</small></div>
     <div class="region-card-grid">${projects}</div>
+    <div class="region-section-heading"><span>装备工坊</span><small>当前占用 ${getBagUsage(state)} / ${state.bag.slots} 格</small></div>
+    <div class="region-card-grid">${backpackMarkup}${toolMarkup}</div>
     <div class="region-callout region-callout--city">
       <div><strong>今天去市民议事厅</strong><span>听完不同意见，获得公共决策需要的公民点。</span></div>
       <button type="button" class="button button--secondary" data-action="townHall" ${state.city.lastTownHallDay === state.day ? "disabled" : ""}>
@@ -1205,9 +1397,9 @@ function renderIslandPanel() {
           <div class="region-card-copy">
             <strong>${spot.title}</strong>
             <span>${spot.description}</span>
-            <small>预计 ${spot.energy} 体力 · ${MARKET_GOODS[spot.resource].name} × ${spot.amount}${state.government.policies.islandSanctuary ? " +保育奖励" : ""} · 持有 ${total}</small>
+            <small>预计 ${spot.energy} 体力 · ${spot.chance ? `发现率 ${Math.round((spot.chance + (state.government.policies.islandSanctuary ? 0.2 : 0)) * 100)}% · ` : ""}${MARKET_GOODS[spot.resource].name} × ${spot.amount}${state.government.policies.islandSanctuary ? " +保育奖励" : ""} · 持有 ${total}</small>
           </div>
-          <button type="button" class="shop-buy" data-action="islandExplore" data-value="${spot.id}" ${found || state.energy < spot.energy ? "disabled" : ""}>
+          <button type="button" class="shop-buy" data-action="islandExplore" data-value="${spot.id}" ${found || state.energy < spot.energy || Object.keys(state.island.dailyFinds).length >= ISLAND_DAILY_LIMIT ? "disabled" : ""}>
             ${found ? "已探索" : "出发"}
           </button>
         </article>
@@ -1216,7 +1408,7 @@ function renderIslandPanel() {
     .join("");
   return `
     ${regionHero("island", "每一次探索都消耗当天的体力，但会留下可用于高价订单的海岛资源。", [
-      regionMetric("今日远足", `${Object.keys(state.island.dailyFinds).length} / ${Object.keys(ISLAND_SPOTS).length}`),
+      regionMetric("今日远足", `${Object.keys(state.island.dailyFinds).length} / ${ISLAND_DAILY_LIMIT}`),
       regionMetric("累计远征", state.island.expeditions),
       regionMetric("稀有发现", state.inventory.resources.pearl || 0, "is-gold"),
     ].join(""))}
@@ -1251,7 +1443,7 @@ function renderTradePanel() {
         <article class="contract-card ${contract.completed ? "is-complete" : contract.accepted ? "is-active" : ""}">
           <div class="contract-topline"><strong>${contract.title}</strong><span>${status}</span></div>
           <p>${contract.description}</p>
-          <small>${contract.client} · 需求 ${formatRequirements(contract.requirements)}</small>
+          <small>${contract.client} · 需求 ${formatRequirements(contract.requirements)}${contract.accepted && !contract.completed ? ` · 截止第 ${contract.expiresDay} 天` : ""}</small>
           <div class="contract-footer"><b>奖励 ✦ ${contract.reward} · 声誉 +${contract.reputation}</b>
             ${contract.completed ? "" : contract.accepted ? `<button type="button" class="shop-buy" data-action="tradeFulfill" data-value="${contract.id}" ${canDeliver ? "" : "disabled"}>交付</button>` : `<button type="button" class="shop-buy" data-action="tradeAccept" data-value="${contract.id}">接单</button>`}
           </div>
@@ -1281,8 +1473,8 @@ function renderGovernmentPanel() {
         <article class="region-card policy-card ${activePolicy ? "is-complete" : ""}">
           <div class="region-card-icon region-card-icon--ink" aria-hidden="true">${policy.icon}</div>
           <div class="region-card-copy"><strong>${policy.title}</strong><span>${policy.description}</span></div>
-          <button type="button" class="shop-buy" data-action="enactPolicy" data-value="${policy.id}" ${activePolicy || state.government.civicPoints < policy.cost ? "disabled" : ""}>
-            ${activePolicy ? "已生效" : `公民点 ${policy.cost}`}
+          <button type="button" class="shop-buy" data-action="enactPolicy" data-value="${policy.id}" ${activePolicy || state.government.civicPoints < policy.cost || state.coins < policy.coinCost ? "disabled" : ""}>
+            ${activePolicy ? "已生效" : `点数 ${policy.cost} · ✦ ${policy.coinCost}`}
           </button>
         </article>
       `;
@@ -1308,16 +1500,21 @@ function renderSpritesPanel() {
   const roleLabels = { watering: "田地", animals: "牲畜", trade: "贸易", island: "海岛" };
   const assignments = state.sprites.assignments || {};
   const roleButtons = (spriteId) => Object.entries(roleLabels)
-    .map(([role, label]) => `<button type="button" class="sprite-role ${assignments[role] === spriteId ? "is-active" : ""}" data-action="spriteAssign" data-value="${spriteId}|${role}">${label}</button>`)
+    .map(([role, label]) => {
+      const primary = SPRITE_DEFS[spriteId].role === role;
+      const efficiency = primary ? 100 : 55;
+      return `<button type="button" class="sprite-role ${assignments[role] === spriteId ? "is-active" : ""}" data-action="spriteAssign" data-value="${spriteId}|${role}">${label} ${efficiency}%</button>`;
+    })
     .join("");
   const roster = Object.values(SPRITE_DEFS)
     .map((sprite) => {
       const unlocked = state.sprites.unlocked.includes(sprite.id);
+      const available = state.sprites.available.includes(sprite.id);
       return `
-        <article class="sprite-card ${unlocked ? "is-unlocked" : "is-locked"}" style="--sprite-color:${sprite.color}">
+        <article class="sprite-card ${unlocked ? "is-unlocked" : available ? "is-available" : "is-locked"}" style="--sprite-color:${sprite.color}">
           <div class="sprite-avatar" aria-hidden="true">${sprite.icon}</div>
-          <div class="sprite-copy"><strong>${sprite.name}</strong><span>${sprite.talent}</span><small>${unlocked ? `友好度 ${state.sprites.friendship[sprite.id] || 0}` : sprite.unlockText}</small></div>
-          ${unlocked ? `<div class="sprite-roles">${roleButtons(sprite.id)}</div>` : `<button type="button" class="shop-buy" data-action="spriteRecruit" data-value="${sprite.id}" ${state.coins < sprite.cost ? "disabled" : ""}>${sprite.cost ? `邀请 ✦ ${sprite.cost}` : "遇见"}</button>`}
+          <div class="sprite-copy"><strong>${sprite.name}</strong><span>${sprite.talent}</span><small>${unlocked ? `已招募 · 友好度 ${state.sprites.friendship[sprite.id] || 0}` : available ? `可招募 · ${sprite.cost ? `需要 ${sprite.cost} 金` : "无需花费"}` : `尚未出现 · ${sprite.unlockText}`}</small></div>
+          ${unlocked ? `<div class="sprite-roles">${roleButtons(sprite.id)}</div>` : available ? `<button type="button" class="shop-buy" data-action="spriteRecruit" data-value="${sprite.id}" ${state.coins < sprite.cost ? "disabled" : ""}>${sprite.cost ? `邀请 ✦ ${sprite.cost}` : "遇见"}</button>` : `<span class="clue-status">待解锁</span>`}
         </article>
       `;
     })
@@ -1347,15 +1544,46 @@ function renderRegionBody(regionId) {
   return `${regionHero("farm", "界面已经切回牧场。关闭这张世界卡片，继续用 WASD 走动。")}<div class="region-callout"><div><strong>回到土地</strong><span>日常操作会让城市、贸易、政府和小精灵系统持续产生变化。</span></div><button type="button" class="button button--primary" data-action="close">继续走动</button></div>`;
 }
 
+function renderSceneSwitchRail() {
+  return `
+    <div class="scene-switch-rail" aria-label="场景入口">
+      ${Object.entries(REGION_SCENE_MAP).map(([id, sceneId]) => {
+        const visited = state.world.visitedScenes?.includes(sceneId);
+        const unlocked = state.world.unlockedRegions.includes(id);
+        return `<button type="button" class="scene-switch-button ${currentSceneId() === sceneId ? "is-active" : ""} ${!visited || !unlocked ? "is-locked" : ""}" data-action="regionSwitch" data-value="${id}" ${!unlocked ? "disabled" : ""}><span>${REGIONS[id].icon}</span><b>${REGIONS[id].shortName}</b><small>${!unlocked ? "锁定" : visited ? "前往" : "沿路"}</small></button>`;
+      }).join("")}
+    </div>
+  `;
+}
+
+function travelToScene(sceneId, mode = "road") {
+  const scene = SCENE_DEFS[sceneId];
+  if (!scene) return;
+  const alreadyVisited = state.world.visitedScenes?.includes(sceneId);
+  if (mode === "quick" && !alreadyVisited) {
+    showToast(`还没有走过${scene.name}。请从当前地图找到道路入口。`, { strong: "世界导航" });
+    return;
+  }
+  if (modalOpen) {
+    regionPanelOpen = false;
+    closeModal();
+  }
+  const result = switchScene(state, sceneId, mode);
+  if (!result.ok) {
+    showToast(result.message, { strong: "路线未开放" });
+    return;
+  }
+  triggerEffect("travel", state.player.x, state.player.y);
+  updateHUD(true);
+  updateInteractionHint();
+  saveGame(state);
+  showToast(`抵达${scene.name}。${scene.subtitle}`, { strong: "场景切换" });
+}
+
 function openRegionHub(regionId = state.world.activeRegion) {
   const region = REGIONS[regionId] || REGIONS.farm;
   if (regionId === "farm") {
-    if (modalOpen) closeModal();
-    state.world.activeRegion = "farm";
-    updateHUD(true);
-    triggerEffect("travel", state.player.x, state.player.y);
-    showToast("回到月溪牧场。土地、牲畜和今天的时间都在等你。", { strong: "世界导航" });
-    saveGame(state);
+    travelToScene("farm", "road");
     return;
   }
   if (!state.world.unlockedRegions.includes(regionId)) {
@@ -1364,7 +1592,7 @@ function openRegionHub(regionId = state.world.activeRegion) {
       kicker: region.kicker,
       title: region.name,
       wide: true,
-      body: renderRegionBody(regionId),
+      body: `${renderSceneSwitchRail()}${renderRegionBody(regionId)}`,
       footer: `<button type="button" class="button button--ghost" data-action="close">返回当前界面</button>`,
     });
     return;
@@ -1379,7 +1607,7 @@ function openRegionHub(regionId = state.world.activeRegion) {
     kicker: region.kicker,
     title: region.name,
     wide: true,
-    body: renderRegionBody(regionId),
+    body: `${renderSceneSwitchRail()}${renderRegionBody(regionId)}`,
     footer: `<span class="pause-label">世界界面 · 时间已暂停</span><button type="button" class="button button--ghost" data-action="close">返回牧场</button>`,
   });
 }
@@ -1932,6 +2160,9 @@ function openSleepDialog(auto = false) {
       : state.story.step === "waitForInvestor"
         ? "明天，汇川农业的林屿会来。"
         : "";
+  const helperNote = state.sprites.assignments?.watering
+    ? `小精灵${SPRITE_DEFS[state.sprites.assignments.watering]?.name || "伙伴"}今晚会负责${state.sprites.assignmentEfficiency?.watering < 1 ? "一块" : "两块"}田的露水。它不会替你完成所有照料，日结里会记录它实际做了什么。`
+    : "";
 
   if (auto) {
     sleepAndAdvance(true);
@@ -1955,6 +2186,7 @@ function openSleepDialog(auto = false) {
           : `<div class="weather-note">三只动物都吃饱了，牧心把今天标记为“稳定的一天”。</div>`
       }
       ${special ? `<div class="clue-verification">${special}</div>` : ""}
+      ${helperNote ? `<div class="weather-note">${helperNote}</div>` : ""}
       <p class="story-lead" style="margin-top:15px;">
         睡觉后，浇水过的作物会生长，喂食过的动物会在清晨留下产品。
         明天的时间会从 06:00 重新开始。
@@ -2004,7 +2236,7 @@ function showDaySummary(report, nextEvent = null, auto = false) {
   const weather = weatherPresentation[report.weather] || weatherPresentation.sunny;
   const productList = report.products.length
     ? report.products
-        .map((product) => `${product.name}留下了${product.product}`)
+        .map((product) => `${product.name}留下了${product.quality ? `${product.quality}级` : ""}${product.product}`)
         .join("；")
     : "牲畜棚里还没有新的产品。";
   const unfedNames = report.animalsUnfed.map(
@@ -2022,6 +2254,19 @@ function showDaySummary(report, nextEvent = null, auto = false) {
       <div class="weather-note">
         今日天气：${weather.icon} ${weather.label}。${productList}
       </div>
+      ${
+        report.helperActions?.length
+          ? `<div class="day-report-card day-report-card--helpers"><strong>小精灵日结</strong><span>${report.helperActions.join("；")}。</span></div>`
+          : ""
+      }
+      ${
+        report.expiredContracts?.length
+          ? `<div class="clue-verification">过期订单：${report.expiredContracts.join("、")}。港口声誉和公民点都受到了影响。</div>`
+          : ""
+      }
+      ${report.shipping?.units ? `<div class="day-report-card"><strong>出货箱结算</strong><span>昨日交付 ${report.shipping.units} 份，到账 ${report.shipping.value} 金。</span></div>` : ""}
+      ${report.livestock?.length ? `<div class="day-report-card"><strong>牲畜日结</strong><span>${report.livestock.map((animal) => `${animal.name} · ${animal.sick ? "生病" : animal.unhappy ? "不开心" : "状态稳定"} · 健康 ${Math.round(animal.health)} · 亲密 ${Math.round(animal.affection)} · 放牧 ${Math.round(animal.outdoorMinutes)} 分钟`).join("；")}</span></div>` : ""}
+      ${report.systemNotes?.length ? `<div class="day-report-card day-report-card--ai"><strong>牧心记录</strong><span>${report.systemNotes.join("；")}</span></div>` : ""}
       ${
         unfedNames.length
           ? `<div class="clue-verification">${unfedNames.join("、")}昨天没有进食，心情下降了。牧心把这条记录标为“关系风险”。</div>`
@@ -2105,41 +2350,56 @@ function showInvestorArrival() {
 }
 
 function openShippingBin() {
-  const rows = Object.entries(state.inventory.produce)
-    .filter(([, count]) => count > 0)
-    .map(([id, count]) => {
-      const product = PRODUCTS[id];
-      return `
-        <div class="shop-row">
-          <span class="item-swatch" aria-hidden="true">${product.icon}</span>
-          <span class="shop-row-copy">
-            <strong>${product.name} × ${count}</strong>
-            <small>${product.kind === "animal" ? "牲畜产品" : "当季作物"} · ${product.sellPrice} 金 / 份</small>
-          </span>
-          <span class="clue-status">${product.sellPrice * count} 金</span>
-        </div>
-      `;
-    })
-    .join("");
-  const total = Object.entries(state.inventory.produce).reduce(
-    (sum, [id, count]) => sum + (PRODUCTS[id]?.sellPrice || 0) * count,
-    0,
-  );
+  const rows = [];
+  for (const [qualityId, count] of Object.entries(state.inventory.qualityProduce || {})) {
+    if (count <= 0) continue;
+    const [id, quality] = qualityId.split("_");
+    const product = PRODUCTS[id];
+    const price = product ? Math.round(product.sellPrice * ({ S: 1, M: 1.35, L: 1.8 }[quality] || 1)) : 0;
+    rows.push(`<div class="shop-row"><span class="item-swatch" aria-hidden="true">${product?.icon || "✦"}</span><span class="shop-row-copy"><strong>${product?.name || id} · ${quality}级 × ${count}</strong><small>牲畜品质产品 · ${price} 金 / 份</small></span><span class="clue-status">${price * count} 金</span></div>`);
+  }
+  for (const [id, count] of Object.entries(state.inventory.produce)) {
+    const product = PRODUCTS[id];
+    if (!product || count <= 0) continue;
+    const qualityCount = Object.entries(state.inventory.qualityProduce || {})
+      .filter(([qualityId]) => qualityId.startsWith(`${id}_`))
+      .reduce((sum, [, amount]) => sum + amount, 0);
+    const baseCount = Math.max(0, count - qualityCount);
+    if (!baseCount) continue;
+    rows.push(`<div class="shop-row"><span class="item-swatch" aria-hidden="true">${product.icon}</span><span class="shop-row-copy"><strong>${product.name} × ${baseCount}</strong><small>${product.kind === "animal" ? "牲畜产品" : "当季作物"} · ${product.sellPrice} 金 / 份</small></span><span class="clue-status">${product.sellPrice * baseCount} 金</span></div>`);
+  }
+  for (const [id, count] of Object.entries(state.inventory.resources || {})) {
+    if (count <= 0 || !MARKET_GOODS[id]) continue;
+    const price = getMarketPrice(state, id);
+    rows.push(`<div class="shop-row"><span class="item-swatch" aria-hidden="true">${MARKET_GOODS[id].icon}</span><span class="shop-row-copy"><strong>${MARKET_GOODS[id].name} × ${count}</strong><small>海岛资源 · ${price} 金 / 份</small></span><span class="clue-status">${price * count} 金</span></div>`);
+  }
+  const qualityProductPriceForUi = (id, quality) => Math.round((PRODUCTS[id]?.sellPrice || 0) * ({ S: 1, M: 1.35, L: 1.8 }[quality] || 1));
+  const total = rows.length
+    ? Object.entries(state.inventory.qualityProduce || {}).reduce((sum, [qualityId, count]) => {
+        const [id, quality] = qualityId.split("_");
+        return sum + count * qualityProductPriceForUi(id, quality);
+      }, 0) + Object.entries(state.inventory.produce).reduce((sum, [id, count]) => {
+        const qualityCount = Object.entries(state.inventory.qualityProduce || {}).filter(([qualityId]) => qualityId.startsWith(`${id}_`)).reduce((value, [, amount]) => value + amount, 0);
+        return sum + Math.max(0, count - qualityCount) * (PRODUCTS[id]?.sellPrice || 0);
+      }, 0) + Object.entries(state.inventory.resources || {}).reduce((sum, [id, count]) => sum + count * getMarketPrice(state, id), 0)
+    : 0;
+  const pendingValue = state.shipping.pending.reduce((sum, item) => sum + item.amount * item.unitPrice, 0);
   openModal({
     kicker: "牧场合作社 · 出货箱",
     title: "把今天的收成交给明天",
     wide: true,
     body: `
       <div class="wallet-line">
-        <span>本箱估值</span>
+        <span>今日待交付估值</span>
         <strong>✦ ${total}</strong>
-        <span>统一按合作社价格结算</span>
+        <span>已在箱内待结算 ✦ ${pendingValue}</span>
       </div>
       <div class="shop-grid">
-        ${rows || '<div class="empty-note">出货箱里还空着。收获作物或照料牲畜后再来看看。</div>'}
+        ${rows.join("") || '<div class="empty-note">出货箱里还空着。收获作物或照料牲畜后再来看看。</div>'}
       </div>
+      <div class="day-summary-grid"><div class="summary-tile"><strong>${state.shipping.dailyConsignedUnits}</strong><span>今日交付</span></div><div class="summary-tile"><strong>${state.shipping.totalUnits}</strong><span>累计件数</span></div><div class="summary-tile"><strong>${state.shipping.totalValue}</strong><span>累计金币</span></div></div>
       <div class="weather-note">
-        出货收入会立刻结算。牧心会把这次交易和你对“家庭收入”的关注记入长期记忆。
+        出货收入会在隔夜日结到账。品质越高，结算单价越高，牧心会同时记住你对稳定收入和照料质量的取舍。
       </div>
     `,
     footer: `
@@ -2216,7 +2476,7 @@ function openMenu() {
           ${relationRow("企业影响", state.relations.corporation, "metric-track--amber")}
         </div>
         <div>
-          <div class="section-title">篮子里的东西</div>
+          <div class="section-title">背包 · ${getBagUsage(state)} / ${state.bag.slots} 格</div>
           <div class="inventory-grid">
             ${inventoryRows || '<div class="empty-note">篮子里还没有农产品。</div>'}
           </div>
@@ -2346,6 +2606,27 @@ function handleModalClick(event) {
     case "feedAnimal":
       handleFeedAnimal(value);
       break;
+    case "talkAnimal":
+    case "brushAnimal":
+    case "toggleAnimalOutdoor":
+      handleAnimalCare(action, value);
+      break;
+    case "upgradeBackpack": {
+      const result = upgradeBackpack(state);
+      if (result.ok) {
+        audio.play("success");
+        refreshRegionPanel(result.message);
+      } else showToast(result.message);
+      break;
+    }
+    case "upgradeTool": {
+      const result = upgradeTool(state, value);
+      if (result.ok) {
+        audio.play("success");
+        refreshRegionPanel(result.message);
+      } else showToast(result.message);
+      break;
+    }
     case "buySeed": {
       const result = buySeed(state, value);
       if (result.ok) {
@@ -2432,7 +2713,7 @@ function handleModalClick(event) {
       break;
     }
     case "regionSwitch":
-      openRegionHub(value);
+      travelToScene(REGION_SCENE_MAP[value] || value, "road");
       break;
     case "cityProject": {
       const result = investInCity(state, value);
@@ -2598,17 +2879,17 @@ function handleKeyDown(event) {
   } else if (key === "m") {
     openMenu();
   } else if (key === "f") {
-    openRegionHub("farm");
+    travelToScene("farm", "quick");
   } else if (key === "c") {
-    openRegionHub("city");
+    travelToScene("city", "quick");
   } else if (key === "i") {
-    openRegionHub("island");
+    travelToScene("island", "quick");
   } else if (key === "t") {
-    openRegionHub("trade");
+    travelToScene("port", "quick");
   } else if (key === "g") {
-    openRegionHub("government");
+    travelToScene("council", "quick");
   } else if (key === "p") {
-    openRegionHub("sprites");
+    travelToScene("workshop", "quick");
   } else if (["1", "2", "3", "4"].includes(key)) {
     selectTool(TOOLS[Number(key) - 1].id);
   } else if (key === "escape") {
@@ -2676,7 +2957,7 @@ function bindEvents() {
   dom.aiButton.addEventListener("click", openAiPanel);
   dom.regionNav.addEventListener("click", (event) => {
     const button = event.target.closest("[data-region]");
-    if (button) openRegionHub(button.dataset.region);
+    if (button) travelToScene(REGION_SCENE_MAP[button.dataset.region] || "farm", "quick");
   });
   dom.soundButton.addEventListener("click", () => {
     toggleSound(false);
