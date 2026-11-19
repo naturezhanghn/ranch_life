@@ -1,0 +1,39 @@
+{
+  "model": "gpt-image-2.5-flare",
+  "provider": "gravitex",
+  "model_id": "gpt-image-2.5-flare",
+  "usage": {
+    "input_tokens": 207,
+    "input_tokens_details": {
+      "image_tokens": 0,
+      "text_tokens": 207
+    },
+    "output_tokens": 439,
+    "output_tokens_details": {
+      "image_tokens": 439,
+      "text_tokens": 0
+    },
+    "total_tokens": 646
+  },
+  "task": "t2i",
+  "prompt": "Use case: stylized-concept. Asset type: original browser farming game prop atlas. Create a clean 2x2 reference sheet of four independent groups with no text, no logos, no recognizable copyrighted characters, and no copied game art. Top left: gentle wetland bird silhouettes, reed clumps, safe capture net icon, and non-violent tracking markers for a 15-second island encounter. Top right: tidepool fishing float, shell hooks, seaweed, small pearl glints, and driftwood props. Bottom left: friendly old quarry path props, mineral sample rocks, rope marker, lantern, and harmless cave warning sign. Bottom right: compact trade-port delivery props, wooden cargo crate, ferry ticket board, handcart, route pennants, and festival lanterns. Pixel-friendly shapes with painterly hand-made texture, warm coastal farming color palette, readable at 64px, separated into four quadrants with generous empty margins, transparent-looking plain background, original design for Canvas rendering.",
+  "requested_seed": null,
+  "script_sha256": "ff57baa31b2a2f654c9b3b6f03f1fbcf3ee3149220341ffc924924a2bc611b9c",
+  "effective_seed": null,
+  "negative_prompt": "text, watermark, UI screenshot, brand, logo, copyrighted character, existing game style, gore, weapon, photorealism",
+  "quality": "medium",
+  "requested_size": [
+    1024,
+    1024
+  ],
+  "num_images": 1,
+  "output_sizes": [
+    [
+      1024,
+      1024
+    ]
+  ],
+  "timestamp_utc": "2026-11-19T14:41:47Z",
+  "output": "/inspire/ssd/project/sais-bio/public/zhangziran/game/assets/generated/gameplay-elements-sheet.png",
+  "output_sha256": "99dddcc1d2abf01a5387024715b3a2f1924f6ebbff04d6e8d5759c7bd070e191"
+}

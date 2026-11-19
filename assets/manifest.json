@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "generatedAt": "2026-11-19",
+  "entries": [
+    {
+      "id": "world-landmark-sheet",
+      "path": "assets/generated/world-landmark-sheet.png",
+      "scene": "farm,city,port,council,workshop,island",
+      "kind": "reference-sheet",
+      "source": "generated",
+      "license": "original-project-asset",
+      "width": 1024,
+      "height": 1024,
+      "fallback": "programmatic-landmarks"
+    },
+    {
+      "id": "gameplay-elements-sheet",
+      "path": "assets/generated/gameplay-elements-sheet.png",
+      "scene": "island,port,city",
+      "kind": "reference-sheet",
+      "source": "generated",
+      "license": "original-project-asset",
+      "width": 1024,
+      "height": 1024,
+      "fallback": "programmatic-gameplay-props"
+    }
+  ]
+}

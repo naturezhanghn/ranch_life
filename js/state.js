@@ -92,6 +92,28 @@ function createMarketPrices() {
   );
 }
 
+const DAILY_TASK_COUNTER_DEFAULTS = {
+  watered: 0,
+  fed: 0,
+  harvested: 0,
+  talked: 0,
+  shipped: 0,
+  tilled: 0,
+  planted: 0,
+  foraged: 0,
+  explored: 0,
+  sold: 0,
+  contracts: 0,
+  talkedAnimals: 0,
+  townHall: 0,
+};
+
+const DAILY_TASK_DEFAULTS = {
+  category: "care",
+  scene: "farm",
+  bonus: 0,
+};
+
 export function generateTradeContracts(state) {
   const anchor = `${state.day}:${state.rngState}:${state.market?.reputation || 0}`;
   return TRADE_CONTRACTS.map((contract, index) => ({
@@ -107,31 +129,103 @@ export function generateTradeContracts(state) {
     .map(({ rank, ...contract }) => contract);
 }
 
+function taskMatchesScene(task, sceneId) {
+  if (!task.scene || task.scene === "any") return true;
+  return Array.isArray(task.scene) ? task.scene.includes(sceneId) : task.scene === sceneId;
+}
+
+function taskWeight(task, state) {
+  const base = 1 + Math.max(0, Number(task.bonus) || 0);
+  const seasonWeight = Array.isArray(task.seasons) && task.seasons.includes(state.season) ? 1 : 0;
+  const sceneWeight = taskMatchesScene(task, state.world?.scene || "farm") ? 1.25 : 0;
+  return base + seasonWeight + sceneWeight;
+}
+
+function pickWeightedTask(candidates, state, anchor, slot) {
+  const totalWeight = candidates.reduce((total, task) => total + taskWeight(task, state), 0);
+  if (!totalWeight) return candidates[0];
+  let cursor = (seedFromString(`${anchor}:slot:${slot}`) / 4294967296) * totalWeight;
+  for (const task of candidates) {
+    cursor -= taskWeight(task, state);
+    if (cursor <= 0) return task;
+  }
+  return candidates.at(-1);
+}
+
 export function generateDailyTasks(state) {
   const anchor = `${state.day}:${state.rngState}:${state.story.chapter}`;
-  const ranked = DAILY_TASK_POOL.map((task, index) => ({
-    task,
-    rank: seedFromString(`${anchor}:${task.id}:${index}`),
-  }))
-    .sort((a, b) => a.rank - b.rank)
-    .slice(0, 3)
-    .map(({ task }) => ({
-      ...task,
-      done: false,
-    }));
+  const remaining = DAILY_TASK_POOL.map((task, index) => ({
+    ...task,
+    index,
+  }));
+  const selected = [];
+  const categories = new Set();
+  for (let slot = 0; slot < 3 && remaining.length; slot += 1) {
+    const distinctCategoryCandidates = remaining.filter((task) => !categories.has(task.category));
+    const candidates = distinctCategoryCandidates.length >= 3 - slot ? distinctCategoryCandidates : remaining;
+    const picked = pickWeightedTask(candidates, state, anchor, slot);
+    selected.push(picked);
+    categories.add(picked.category);
+    remaining.splice(remaining.indexOf(picked), 1);
+  }
 
   return {
-    counters: {
-      watered: 0,
-      fed: 0,
-      harvested: 0,
-      talked: 0,
-      shipped: 0,
-      tilled: 0,
-      planted: 0,
-    },
-    tasks: ranked,
+    counters: { ...DAILY_TASK_COUNTER_DEFAULTS },
+    tasks: selected.map((task) => ({
+      ...task,
+      seasons: Array.isArray(task.seasons) ? [...task.seasons] : [],
+      done: false,
+      rewarded: false,
+    })),
     rewarded: false,
+  };
+}
+
+function normalizeDailyTask(task, index = 0) {
+  const source = task && typeof task === "object" ? task : {};
+  const template = DAILY_TASK_POOL.find((entry) => entry.id === source.id) || {};
+  const category = typeof source.category === "string" && source.category
+    ? source.category
+    : template.category || DAILY_TASK_DEFAULTS.category;
+  const scene = typeof source.scene === "string" && source.scene
+    ? source.scene
+    : template.scene || DAILY_TASK_DEFAULTS.scene;
+  const rawBonus = source.bonus ?? template.bonus ?? DAILY_TASK_DEFAULTS.bonus;
+  const bonus = Number.isFinite(Number(rawBonus)) ? Number(rawBonus) : DAILY_TASK_DEFAULTS.bonus;
+  const reward = Number.isFinite(Number(source.reward ?? template.reward))
+    ? Number(source.reward ?? template.reward)
+    : 0;
+  const target = Number.isFinite(Number(source.target ?? template.target))
+    ? Math.max(1, Number(source.target ?? template.target))
+    : 1;
+  return {
+    ...template,
+    ...source,
+    id: source.id || template.id || `legacy-${index}`,
+    category,
+    scene,
+    seasons: Array.isArray(source.seasons)
+      ? [...source.seasons]
+      : Array.isArray(template.seasons)
+        ? [...template.seasons]
+        : [],
+    bonus,
+    reward,
+    target,
+    done: source.done === true,
+    rewarded: source.rewarded === true || source.done === true,
+  };
+}
+
+function normalizeDailyState(daily, state) {
+  const source = daily && typeof daily === "object" ? daily : {};
+  const generated = generateDailyTasks(state);
+  const sourceTasks = Array.isArray(source.tasks) && source.tasks.length ? source.tasks : generated.tasks;
+  return {
+    ...source,
+    counters: { ...DAILY_TASK_COUNTER_DEFAULTS, ...(source.counters || {}) },
+    tasks: sourceTasks.map((task, index) => normalizeDailyTask(task, index)),
+    rewarded: source.rewarded === true,
   };
 }
 
@@ -367,7 +461,7 @@ export function addMemory(state, text, type = "observation", importance = 1) {
 }
 
 export function bumpCounter(state, counter, amount = 1) {
-  if (typeof state.daily?.counters[counter] === "number") {
+  if (typeof state.daily?.counters?.[counter] === "number") {
     state.daily.counters[counter] += amount;
   }
   if (typeof state.stats[counter] === "number") {
@@ -377,11 +471,12 @@ export function bumpCounter(state, counter, amount = 1) {
 
 export function checkDailyTasks(state) {
   const completed = [];
-  for (const task of state.daily.tasks) {
-    if (task.done) continue;
-    const value = state.daily.counters[task.counter] || 0;
+  for (const task of state.daily?.tasks || []) {
+    if (task.done || task.rewarded) continue;
+    const value = state.daily?.counters?.[task.counter] || 0;
     if (value >= task.target) {
       task.done = true;
+      task.rewarded = true;
       state.coins += task.reward;
       state.stats.earned += task.reward;
       completed.push(task);
@@ -1785,9 +1880,7 @@ export function loadGame() {
         ...animal,
       }));
     }
-    if (!merged.daily?.tasks?.length) {
-      merged.daily = generateDailyTasks(merged);
-    }
+    merged.daily = normalizeDailyState(merged.daily, merged);
     if (!merged.market.contracts?.length) {
       merged.market.contracts = generateTradeContracts(merged);
     }
