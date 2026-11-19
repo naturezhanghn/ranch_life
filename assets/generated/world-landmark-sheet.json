@@ -1,0 +1,36 @@
+{
+  "model": "gpt-image-2.5-flare",
+  "provider": "gravitex",
+  "model_id": "gpt-image-2.5-flare",
+  "usage": {
+    "output_tokens_details": {
+      "text_tokens": 0,
+      "image_tokens": 439
+    },
+    "total_tokens": 559,
+    "input_tokens": 120,
+    "output_tokens": 439,
+    "input_tokens_details": {
+      "text_tokens": 120,
+      "image_tokens": 0
+    }
+  },
+  "task": "t2i",
+  "prompt": "Original hand-painted 2D farming RPG environment prop sheet for a Chinese coastal town. Six clearly separated labeled visual clusters in one square sheet: Moon Creek farm gate with fields and barn, Riverport city civic hall entrance, trade harbor warehouse and ferry pier, council hall interior doorway with water charter board, tiny magical sprite workshop with glowing garden, and blue tidal island beach with exploration markers. Warm seasonal watercolor-and-gouache look, clean game-ready silhouettes, readable building shape language, no characters, no text, no logos, no reference to existing games, no screenshots.",
+  "requested_seed": null,
+  "script_sha256": "ff57baa31b2a2f654c9b3b6f03f1fbcf3ee3149220341ffc924924a2bc611b9c",
+  "effective_seed": null,
+  "negative_prompt": null,
+  "quality": "medium",
+  "requested_size": 1024,
+  "num_images": 1,
+  "output_sizes": [
+    [
+      1024,
+      1024
+    ]
+  ],
+  "timestamp_utc": "2026-11-19T13:57:01Z",
+  "output": "/inspire/ssd/project/sais-bio/public/zhangziran/game/assets/generated/world-landmark-sheet.png",
+  "output_sha256": "0888642ae535718424d96fab2435aa41bf4a39c2c94da6d8d17ed44687af04fe"
+}

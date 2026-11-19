@@ -425,6 +425,19 @@ body.modal-open .app-shell {
   background: #8caa69;
 }
 
+#phaserCanvas {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  display: none;
+  touch-action: none;
+}
+
+body.phaser-runtime #gameCanvas { visibility: hidden; }
+body.phaser-runtime #phaserCanvas { display: block; }
+
 .stage-vignette {
   position: absolute;
   inset: 0;

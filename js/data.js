@@ -278,6 +278,46 @@ export const SCENE_NPCS = [
       { from: 16 * 60, to: 22 * 60, scene: "workshop", x: 760, y: 566 },
     ],
   },
+  {
+    id: "farmerLuo",
+    name: "罗婶",
+    role: "上游村种植户",
+    scenes: [
+      { from: 6 * 60, to: 10 * 60, scene: "city", x: 260, y: 526 },
+      { from: 10 * 60, to: 14 * 60, scene: "port", x: 310, y: 540 },
+      { from: 14 * 60, to: 22 * 60, scene: "city", x: 260, y: 526 },
+    ],
+  },
+  {
+    id: "archivist",
+    name: "顾遥",
+    role: "地方档案员",
+    scenes: [
+      { from: 6 * 60, to: 12 * 60, scene: "council", x: 860, y: 366 },
+      { from: 12 * 60, to: 17 * 60, scene: "city", x: 770, y: 275 },
+      { from: 17 * 60, to: 22 * 60, scene: "council", x: 860, y: 366 },
+    ],
+  },
+  {
+    id: "cook",
+    name: "阿澜",
+    role: "港口厨房主理人",
+    scenes: [
+      { from: 6 * 60, to: 11 * 60, scene: "port", x: 1114, y: 286 },
+      { from: 11 * 60, to: 16 * 60, scene: "city", x: 430, y: 275 },
+      { from: 16 * 60, to: 22 * 60, scene: "port", x: 1114, y: 286 },
+    ],
+  },
+  {
+    id: "islandChild",
+    name: "小满",
+    role: "蓝潮海岛见习采集员",
+    scenes: [
+      { from: 6 * 60, to: 12 * 60, scene: "island", x: 372, y: 342 },
+      { from: 12 * 60, to: 17 * 60, scene: "island", x: 590, y: 590 },
+      { from: 17 * 60, to: 22 * 60, scene: "port", x: 500, y: 542 },
+    ],
+  },
 ];
 
 export const PLAYER_START = { x: 286, y: 282, facing: "down" };

@@ -649,6 +649,7 @@ function updateCamera(delta) {
 }
 
 function updateMovement(delta) {
+  if (window.__RANCH_PHASER_INPUT__) return;
   let dx = 0;
   let dy = 0;
   if (keys.has("w") || keys.has("arrowup") || touchDirections.has("up")) dy -= 1;
@@ -3055,6 +3056,7 @@ window.__RANCH_DEBUG__ = {
   getState: () => state,
   getRuntime: () => runtime,
   actions: {
+    performAction: () => performAction(),
     getTargetPlot: () => getTargetPlot(state),
     advanceDay: () => {
       const report = advanceDay(state);
@@ -3073,3 +3075,9 @@ bindEvents();
 resizeViewport();
 updateHUD(true);
 window.requestAnimationFrame(loop);
+
+if (new URLSearchParams(window.location.search).get("phaser") === "1") {
+  import("./phaser-bridge.js").then(({ startPhaserBridge }) => startPhaserBridge()).catch((error) => {
+    console.error("Unable to start Phaser migration slice", error);
+  });
+}
