@@ -3,6 +3,7 @@ import {
   BACKPACK_UPGRADES,
   CANAL_LORE,
   CITY_PROJECTS,
+  COLLECTION_DEFS,
   CROPS,
   ELDER_DIALOGUE,
   ENDINGS,
@@ -935,6 +936,9 @@ function handleInteraction(id) {
     case "workshop_sprites":
       openRegionHub("sprites");
       break;
+    case "workshop_garden":
+      openCollectionBook();
+      break;
     case "workshop_keeper":
       openSceneNpcDialogue("spriteKeeper");
       break;
@@ -976,6 +980,43 @@ function handleSceneFind(findId, sceneId) {
   }
   updateHUD(true);
   saveGame(state);
+}
+
+function openCollectionBook() {
+  const groups = Object.entries(COLLECTION_DEFS).map(([groupId, group]) => {
+    const known = new Map(
+      state.collection.entries
+        .filter((entry) => entry.group === groupId)
+        .map((entry) => [entry.id, entry]),
+    );
+    const found = known.size;
+    const rows = group.entries
+      .map((entry) => {
+        const discovered = known.get(entry.id);
+        return `
+          <div class="clue-card ${discovered ? "is-found" : "is-locked"}">
+            <span class="clue-icon">${discovered ? "✦" : "？"}</span>
+            <span class="clue-copy">
+              <strong>${discovered ? entry.label : "尚未发现的地方内容"}</strong>
+              <span>${discovered ? `来源：${entry.source} · 第 ${discovered.firstSeenDay} 天` : `来自：${entry.source}`}</span>
+            </span>
+            <span class="clue-status">${discovered ? "已收录" : "轮廓"}</span>
+          </div>
+        `;
+      })
+      .join("");
+    return `
+      <div class="region-section-heading"><span>${group.name}</span><small>${found} / ${group.entries.length}</small></div>
+      <div class="clue-list">${rows}</div>
+    `;
+  }).join("");
+  openModal({
+    kicker: "工坊花园 · 共同地方志",
+    title: "土地不是一张空白地图",
+    wide: true,
+    body: `${groups}<div class="weather-note">未发现的条目只显示轮廓；去真实场景里靠近不显眼的地标、雨后的山货节点，或和居民聊一次每日话题。</div>`,
+    footer: `<button type="button" class="button button--primary" data-action="close">合上地方志</button>`,
+  });
 }
 
 function startSceneMinigame(type) {
@@ -2737,6 +2778,9 @@ function openMenu() {
           </div>
           <div class="section-title">设置</div>
           <div class="settings-list">
+            <button type="button" class="settings-action" data-action="openCollection">
+              <span>共同地方志</span><span>${state.collection.entries.length} 条已收录</span>
+            </button>
             <button type="button" class="settings-action" data-action="toggleSound">
               <span>环境声音</span><span>${state.settings.sound ? "开启" : "关闭"}</span>
             </button>
@@ -3117,6 +3161,9 @@ function handleModalClick(event) {
     }
     case "toggleSound":
       toggleSound(true);
+      break;
+    case "openCollection":
+      openCollectionBook();
       break;
     case "toggleBlur":
       showToast("当前网页版本已经使用完整画面细节。");

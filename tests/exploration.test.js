@@ -101,4 +101,22 @@ test("three consecutive contract deliveries raise the market tier without double
   assert.ok(breakfast.reward > baseBreakfast);
 });
 
+test("discoveries feed the shared collection book exactly once", () => {
+  const state = createInitialState();
+  state.season = "春";
+  state.day = 2;
+  state.seasonDay = 2;
+  generateForageNodes(state, "rain", 1);
+  collectForageNode(state, state.forage.nodes[0].id);
+  discoverSceneFind(state, "farm", "old_gate");
+  resolveNpcTopic(state, "mayor", "common");
+  assert.equal(state.collection.entries.length, 3);
+  assert.equal(state.collection.stats.forage.found, 1);
+  assert.equal(state.collection.stats.places.found, 1);
+  assert.equal(state.collection.stats.people.found, 1);
+  const before = state.collection.entries.length;
+  discoverSceneFind(state, "farm", "old_gate");
+  assert.equal(state.collection.entries.length, before);
+});
+
 console.log(`\n${passed} exploration tests passed.`);

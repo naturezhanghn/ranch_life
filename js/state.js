@@ -2,6 +2,7 @@ import {
   ANIMAL_DEFS,
   BACKPACK_UPGRADES,
   CITY_PROJECTS,
+  COLLECTION_DEFS,
   CROPS,
   DAILY_TASK_POOL,
   DAY_START_MINUTES,
@@ -322,6 +323,11 @@ export function createInitialState() {
       claimed: {},
       combo: 0,
       expiresDay: 0,
+    },
+    collection: {
+      entries: [],
+      stats: {},
+      firstSeenDay: {},
     },
     town: { eventsSeen: [], birthdayGifts: {}, festivalBonus: 0 },
     plots: createPlots(),
@@ -1845,6 +1851,7 @@ export function collectForageNode(state, nodeId) {
   state.forage.claimed[node.id] = true;
   state.forage.combo += 1;
   state.inventory.resources[node.itemId] = (state.inventory.resources[node.itemId] || 0) + 1;
+  recordCollection(state, "forage", node.itemId, node.name, node.scene === "farm" ? "牧场" : node.scene === "city" ? "城市花园" : "港口礁石");
   const comboBonus = state.forage.combo === 3 ? 12 : 0;
   if (comboBonus) {
     state.coins += comboBonus;
@@ -1864,6 +1871,48 @@ export function collectForageNode(state, nodeId) {
   };
 }
 
+export function recordCollection(state, group, entryId, label, source) {
+  const definition = COLLECTION_DEFS[group];
+  if (!definition) return { ok: false, message: "这页地方志还没有准备好。" };
+  const key = `${group}:${entryId}`;
+  if (state.collection.entries.some((entry) => entry.key === key)) {
+    return { ok: false, message: "这条内容已经收录进地方志了。" };
+  }
+  state.collection.entries.push({
+    key,
+    group,
+    id: entryId,
+    label,
+    source: source || definition.name,
+    firstSeenDay: state.day,
+  });
+  state.collection.firstSeenDay[key] = state.day;
+  const total = definition.entries.length;
+  const found = state.collection.entries.filter((entry) => entry.group === group).length;
+  const previous = state.collection.stats[group] || {};
+  const completed = found >= total;
+  state.collection.stats[group] = {
+    found,
+    total,
+    completed,
+    rewarded: previous.rewarded === true,
+  };
+  if (completed && !previous.rewarded) {
+    state.collection.stats[group].rewarded = true;
+    state.government.civicPoints += 1;
+    state.ai.trust = bounded(state.ai.trust + 2);
+    addMemory(state, `地方志「${definition.name}」已经集齐。你获得 1 公民点，牧心也把这条长期兴趣记进了记忆。`, "history", 4);
+  }
+  return {
+    ok: true,
+    key,
+    found,
+    total,
+    completed,
+    message: `地方志新增：${label}。${completed ? `「${definition.name}」已集齐。` : ""}`,
+  };
+}
+
 export function discoverSceneFind(state, sceneId, findId) {
   const find = (SCENE_FINDS[sceneId] || []).find((entry) => entry.id === findId);
   if (!find) return { ok: false, message: "这里没有值得调查的旧物。" };
@@ -1872,6 +1921,7 @@ export function discoverSceneFind(state, sceneId, findId) {
     return { ok: false, message: "这处线索已经记进地方志了。" };
   }
   state.world.sceneFinds[sceneId][findId] = true;
+  recordCollection(state, "places", `${sceneId}:${find.id}`, find.label, SCENE_DEFS[sceneId]?.name || sceneId);
   state.minutes = Math.min(24 * 60, state.minutes + 12);
   if (find.reward?.coins) {
     state.coins += find.reward.coins;
@@ -1908,6 +1958,7 @@ export function resolveNpcTopic(state, npcId, choiceId) {
   const choice = topic.choices.find((entry) => entry.id === choiceId);
   if (!choice) return { ok: false, message: "这个回答还没有准备好。" };
   state.social.topicDay[npcId] = state.day;
+  recordCollection(state, "people", npcId, topic.prompt, SCENE_NPCS.find((entry) => entry.id === npcId)?.name || npcId);
   state.relations.npc[npcId] = bounded((state.relations.npc[npcId] || 8) + choice.delta, 0, 100);
   if (choice.community) state.relations.community = bounded(state.relations.community + choice.community);
   if (choice.ecology) state.relations.ecology = bounded(state.relations.ecology + choice.ecology);
@@ -2262,6 +2313,15 @@ export function loadGame() {
         collected: { ...base.forage.collected, ...(parsed.forage?.collected || {}) },
         nodes: Array.isArray(parsed.forage?.nodes) ? parsed.forage.nodes : base.forage.nodes,
         claimed: { ...base.forage.claimed, ...(parsed.forage?.claimed || {}) },
+      },
+      collection: {
+        ...base.collection,
+        ...(parsed.collection || {}),
+        entries: Array.isArray(parsed.collection?.entries)
+          ? parsed.collection.entries
+          : base.collection.entries,
+        stats: { ...base.collection.stats, ...(parsed.collection?.stats || {}) },
+        firstSeenDay: { ...base.collection.firstSeenDay, ...(parsed.collection?.firstSeenDay || {}) },
       },
       town: { ...base.town, ...(parsed.town || {}), eventsSeen: Array.isArray(parsed.town?.eventsSeen) ? parsed.town.eventsSeen : base.town.eventsSeen, birthdayGifts: { ...base.town.birthdayGifts, ...(parsed.town?.birthdayGifts || {}) } },
       stats: { ...base.stats, ...(parsed.stats || {}) },

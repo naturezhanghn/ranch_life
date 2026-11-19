@@ -555,6 +555,37 @@ export const SCENE_FINDS = {
   ],
 };
 
+export const COLLECTION_DEFS = {
+  places: {
+    name: "地图里的旧痕迹",
+    entries: Object.entries(SCENE_FINDS).flatMap(([scene, finds]) =>
+      finds.map((find) => ({
+        id: `${scene}:${find.id}`,
+        label: `${find.label} · ${SCENE_DEFS[scene]?.name || scene}`,
+        source: SCENE_DEFS[scene]?.name || scene,
+      })),
+    ),
+  },
+  forage: {
+    name: "季节山货",
+    entries: Object.entries(FORAGE_TABLE).flatMap(([season, items]) =>
+      items.map((item) => ({
+        id: item.id,
+        label: `${item.name} · ${season}季`,
+        source: "雨后山货",
+      })),
+    ),
+  },
+  people: {
+    name: "居民与话题",
+    entries: Object.entries(NPC_TOPICS).map(([npcId, topic]) => ({
+      id: npcId,
+      label: topic.prompt,
+      source: SCENE_NPCS.find((npc) => npc.id === npcId)?.name || npcId,
+    })),
+  },
+};
+
 export const GIFT_TAGS = {
   turnip: ["vegetable", "humble"],
   potato: ["vegetable", "humble"],
