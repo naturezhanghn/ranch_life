@@ -149,6 +149,19 @@
         <div class="stage-vignette" aria-hidden="true"></div>
         <div class="stage-grain" aria-hidden="true"></div>
 
+        <div class="minigame-layer" id="minigameLayer" hidden>
+          <canvas
+            id="minigameCanvas"
+            width="960"
+            height="540"
+            aria-label="小游戏画面。点击、轻触或使用方向键和空格完成操作。"
+          ></canvas>
+          <button type="button" class="minigame-close" id="minigameClose" aria-label="退出小游戏">
+            ×
+          </button>
+          <div class="minigame-announcement" id="minigameAnnouncement" aria-live="polite"></div>
+        </div>
+
         <div class="objective-card" id="objectiveCard">
           <button class="objective-main" id="objectiveButton" type="button">
           <span class="objective-kicker">主线 · 土地醒来</span>
