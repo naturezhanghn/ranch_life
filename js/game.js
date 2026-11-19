@@ -3004,7 +3004,11 @@ function bindEvents() {
       event.preventDefault();
       touchDirections.add(direction);
       button.classList.add("is-pressed");
-      button.setPointerCapture?.(event.pointerId);
+      try {
+        button.setPointerCapture?.(event.pointerId);
+      } catch (error) {
+        // Some synthetic or interrupted pointer streams have no active capture target.
+      }
     };
     const release = (event) => {
       event.preventDefault();

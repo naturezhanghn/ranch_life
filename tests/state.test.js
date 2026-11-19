@@ -287,7 +287,9 @@ test("dynamic trade contracts consume resources and pay reputation", () => {
 
 test("government policies and sprite assignments create daily automation", () => {
   const state = freshState();
+  const beforeCoins = state.coins;
   assert.equal(enactGovernmentPolicy(state, "waterCharter").ok, true);
+  assert.equal(state.coins, beforeCoins - 40);
   assert.equal(state.maxWater, 27);
   assert.equal(recruitSprite(state, "ember").ok, false);
   assert.equal(assignSprite(state, "seedling", "watering").ok, true);
@@ -297,6 +299,19 @@ test("government policies and sprite assignments create daily automation", () =>
   const report = advanceDay(state);
   assert.ok(report.helperActions.some((entry) => entry.includes("露水")));
   assert.equal(state.plots[0].growth, 1);
+});
+
+test("sleep returns the player to the farm scene and spawn", () => {
+  const state = freshState();
+  switchScene(state, "city", "road");
+  state.player.x = 900;
+  state.player.y = 500;
+  advanceDay(state);
+  assert.equal(state.world.scene, "farm");
+  assert.equal(state.world.activeRegion, "farm");
+  assert.equal(state.player.x, 240);
+  assert.equal(state.player.y, 275);
+  assert.equal(state.player.facing, "down");
 });
 
 test("scene travel keeps one shared day, energy, and wallet state", () => {

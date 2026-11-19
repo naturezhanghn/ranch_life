@@ -1545,6 +1545,8 @@ export function advanceDay(state) {
   state.minutes = DAY_START_MINUTES;
   state.energy = state.maxEnergy;
   state.stats.slept += 1;
+  state.world.scene = "farm";
+  state.world.activeRegion = "farm";
   state.player.x = 240;
   state.player.y = 275;
   state.player.facing = "down";
