@@ -46,6 +46,7 @@ Development. The real Canvas scene base remains the default runtime; four miniga
 - Gameplay card 13 is implemented: one shared weekly board across city/port/council offers two season-rotated public requests, caps two accepted requests per week, tracks delivered counts, and expires unfinished requests at the next-week boundary with civic/reputation penalties and a fresh board. The board is reachable from three physical scene interactions and the pause menu.
 - Gameplay card 18 is implemented: port shipping offers合作社慢船/近海快线/远洋货轮 with distinct departure times, arrival days, fees, price multipliers, and risk. Cargo stays in the box while the trip is in transit; adding cargo after departure is rejected; morning settlement includes route fee and volatility, and the shipping panel shows the current manifest and next departure.
 - Gameplay card 25 is implemented: the summer-day-14 tide-lantern festival changes the port with three physical stalls/lantern markers. Completing any two on-site activities pays 80金+1公民点+2社区 once; flags are stored per festival year and the map returns to normal the next day.
+- Gameplay card 15 is implemented: five NPC birthdays are registered by season/day. Birthday gifts double the preference/ordinary/dislike relationship delta, record `town.birthdayGifts[npc]`, keep the one-gift-per-day cap, and show birthday context in both the NPC dialogue and gift panel.
 - The branch is synchronized with `main` at `f09b381`. The merge keeps main's `FORAGE_NODE_DEFS`/`expiresMinute` implementation, legacy-node recovery, 8-minute collection time cost, and ecology gain, while retaining the shared collection hook.
 
 ## Important files
@@ -115,6 +116,7 @@ Review the next queued gameplay card (08: seasonal routes) against the merged ma
 - Card 13 verification: `npm test` (40 state + 9 minigame + 9 exploration); desktop board showed two requests, accepted and delivered “学校汤锅” for +120金/+1公民点, and removed its deliver action. 390×844 board buttons measured ~45px with no overflow or console errors.
 - Card 18 verification: `npm test` (41 state + 9 minigame + 9 exploration); state tests cover delayed arrival, route fee, missed departure rejection, and retained cargo. Desktop shipping panel showed 3 routes and sent 2 turnips on the ocean route with arrival day 3; 390×844 route cards measured 73–87px with no overflow or console errors.
 - Card 25 verification: `npm test` (42 state + 9 minigame + 9 exploration); desktop festival smoke completed soup and lantern activities, paid the 80金/1公民点 reward once, and rendered markers without overflow; 390×844 touch completed the soup activity with no console errors.
+- Card 15 verification: `npm test` (42 state + 9 minigame + 10 exploration); Chromium birthday smoke showed the birthday note in dialogue and gift panel, a favorite birthday turnip raised relationship from 8 to 18, recorded day 12, and produced no console errors.
 - This branch remains isolated until review and explicit merge approval.
 
 ## Latest social/economy slice

@@ -88,6 +88,24 @@ test("gift preferences consume inventory once and return a themed thank-you", ()
   assert.equal(giveGift(state, "mayor", "turnip").ok, false);
 });
 
+test("birthday gifts double the relationship delta and record the day", () => {
+  const state = createInitialState();
+  state.season = "春";
+  state.seasonDay = 12;
+  state.day = 12;
+  state.inventory.produce.turnip = 1;
+  const civicBefore = state.government.civicPoints;
+  const relationBefore = state.relations.npc.mayor || 8;
+  const result = giveGift(state, "mayor", "turnip");
+  assert.equal(result.ok, true);
+  assert.equal(result.birthday, true);
+  assert.equal(result.delta, 10);
+  assert.equal(state.relations.npc.mayor, relationBefore + 10);
+  assert.equal(state.town.birthdayGifts.mayor, 12);
+  assert.equal(state.government.civicPoints, civicBefore + 1);
+  assert.equal(giveGift(state, "mayor", "turnip").ok, false);
+});
+
 test("three consecutive contract deliveries raise the market tier without double paying", () => {
   const state = createInitialState();
   state.inventory.produce.egg = 3;

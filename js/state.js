@@ -1,6 +1,7 @@
 import {
   ANIMAL_DEFS,
   BACKPACK_UPGRADES,
+  BIRTHDAYS,
   BRIDGE_QUEST,
   CITY_PROJECTS,
   COLLECTION_DEFS,
@@ -2779,6 +2780,11 @@ export function resolveNpcTopic(state, npcId, choiceId) {
   };
 }
 
+export function isNpcBirthday(state, npcId) {
+  const birthday = BIRTHDAYS[npcId];
+  return Boolean(birthday && birthday.season === state.season && birthday.day === state.seasonDay);
+}
+
 export function giveGift(state, npcId, itemId) {
   if ((state.social.giftDay[npcId] || 0) === state.day) {
     return { ok: false, message: "今天已经给这个人送过礼物了。关系需要一点时间才能继续生长。" };
@@ -2790,9 +2796,12 @@ export function giveGift(state, npcId, itemId) {
   const tags = GIFT_TAGS[itemId] || [];
   const favorite = tags.some((tag) => preference.likes.includes(tag));
   const disliked = tags.some((tag) => preference.dislikes.includes(tag));
-  const delta = favorite ? 5 : disliked ? -2 : 1;
+  const birthday = isNpcBirthday(state, npcId);
+  const baseDelta = favorite ? 5 : disliked ? -2 : 1;
+  const delta = birthday ? baseDelta * 2 : baseDelta;
   consumeInventoryItem(state, itemId, 1);
   state.social.giftDay[npcId] = state.day;
+  if (birthday) state.town.birthdayGifts[npcId] = state.day;
   state.social.giftHistory.push({ day: state.day, npcId, itemId, delta });
   state.social.giftHistory = state.social.giftHistory.slice(-24);
   state.social.giftLog.unshift({ day: state.day, npcId, itemId, delta });
@@ -2812,7 +2821,7 @@ export function giveGift(state, npcId, itemId) {
   const itemName = MARKET_GOODS[itemId]?.name || PRODUCTS[itemId]?.name || itemId;
   addMemory(
     state,
-    `你把${itemName}送给${SCENE_NPCS.find((entry) => entry.id === npcId)?.name || "一位居民"}，关系变化 ${delta > 0 ? "+" : ""}${delta}${reward ? `，${reward}` : ""}。`,
+    `你把${itemName}送给${SCENE_NPCS.find((entry) => entry.id === npcId)?.name || "一位居民"}${birthday ? "（生日）" : ""}，关系变化 ${delta > 0 ? "+" : ""}${delta}${reward ? `，${reward}` : ""}。`,
     "social",
     2,
   );
@@ -2822,12 +2831,14 @@ export function giveGift(state, npcId, itemId) {
     relation: state.relations.npc[npcId],
     favorite,
     disliked,
+    birthday,
     reward,
+    giftResult: { delta, favorite, disliked, birthday },
     message: favorite
-      ? `这份礼物正合心意。关系 +5${reward ? `，${reward}` : ""}。`
+      ? `这份礼物正合心意。关系 +${delta}${reward ? `，${reward}` : ""}${birthday ? "；生日加成已计入。" : "。"}`
       : disliked
-        ? "对方收下了，但显然不太喜欢。关系 -2。"
-        : "对方收下了礼物。关系 +1。",
+        ? `对方收下了，但显然不太喜欢。关系 ${delta}${birthday ? "（生日仍然让这份失礼更明显）" : ""}。`
+        : `对方收下了礼物。关系 +${delta}${birthday ? "；生日加成已计入。" : "。"}`
   };
 }
 

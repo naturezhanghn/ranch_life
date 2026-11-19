@@ -2299,6 +2299,14 @@ export const FESTIVALS = {
   },
 };
 
+export const BIRTHDAYS = {
+  mayor: { season: "春", day: 12 },
+  merchant: { season: "夏", day: 8 },
+  spriteKeeper: { season: "秋", day: 3 },
+  islandChild: { season: "夏", day: 20 },
+  quarryForeman: { season: "冬", day: 5 },
+};
+
 export const TIPS = [
   "浇水后的作物会在过夜时生长。雨天会自动浇灌所有田地。",
   "照料牲畜后，它们会在第二天留下鸡蛋、牛奶或羊毛。",
