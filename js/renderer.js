@@ -1,4 +1,16 @@
-import { CROPS, INTERACTIONS, SCENE_DEFS, SCENE_INTERACTIONS, SCENE_NPCS, TOOLS, WORLD } from "./data.js";
+import {
+  BRIDGE_QUEST,
+  CROPS,
+  FESTIVALS,
+  INTERACTIONS,
+  SCENE_DEFS,
+  SCENE_FINDS,
+  SCENE_INTERACTIONS,
+  SCENE_SEASON_VARIANTS,
+  scheduledNpcPositions,
+  TOOLS,
+  WORLD,
+} from "./data.js";
 
 const TAU = Math.PI * 2;
 
@@ -45,9 +57,11 @@ export class WorldRenderer {
       return;
     }
 
+    const farmSeasonVariant = SCENE_SEASON_VARIANTS.farm?.[state.season] || null;
     ctx.clearRect(0, 0, WORLD.width, WORLD.height);
     this.drawGround(ctx, state, time);
     this.drawPaths(ctx, time);
+    this.drawSeasonalRoute(ctx, state, "farm", farmSeasonVariant, time);
     this.drawCanal(ctx, state, time);
     this.drawField(ctx, state, time, runtime);
     this.drawPasture(ctx, state, time);
@@ -60,8 +74,13 @@ export class WorldRenderer {
     this.drawShippingBin(ctx, time);
     this.drawCanalGate(ctx, state, time);
     this.drawStaticProps(ctx, time);
+    this.drawSeasonalBlockers(ctx, state, farmSeasonVariant, time);
     this.drawScenePortals(ctx, SCENE_DEFS.farm, time);
     this.drawForageNode(ctx, state, time);
+    this.drawSceneFinds(ctx, state, time);
+    this.drawSeasonalLandmark(ctx, state, "farm", farmSeasonVariant, time);
+    this.drawBridgeQuestMarker(ctx, state, "farm", time);
+    this.drawFestivalMarkers(ctx, state, "farm", time);
 
     const drawables = [];
     const sisterY = 257;
@@ -107,8 +126,10 @@ export class WorldRenderer {
 
     this.drawFieldHighlight(ctx, state, runtime, time);
     this.drawInteractionHighlight(ctx, state, runtime, time);
+    this.drawFeedbackLabel(ctx, state);
     this.drawForegroundFlora(ctx, time);
     this.drawFloatingAtmosphere(ctx, state, time);
+    this.drawSeasonalAtmosphere(ctx, state, farmSeasonVariant, time);
     this.drawWeather(ctx, state, time);
     this.drawLighting(ctx, state, time);
     this.drawEffects(ctx, runtime, time, delta);
@@ -118,24 +139,32 @@ export class WorldRenderer {
   renderScene(ctx, state, runtime, time, delta) {
     const sceneId = state.world.scene;
     const scene = SCENE_DEFS[sceneId] || SCENE_DEFS.city;
+    const seasonVariant = SCENE_SEASON_VARIANTS[sceneId]?.[state.season] || null;
+    const palette = seasonVariant?.palette || scene.palette;
     ctx.clearRect(0, 0, WORLD.width, WORLD.height);
     const gradient = ctx.createLinearGradient(0, 0, 0, WORLD.height);
-    gradient.addColorStop(0, scene.palette[0]);
-    gradient.addColorStop(1, scene.palette[1]);
+    gradient.addColorStop(0, palette[0]);
+    gradient.addColorStop(1, palette[1]);
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, WORLD.width, WORLD.height);
 
     this.drawSceneGround(ctx, sceneId, time);
+    this.drawSeasonalRoute(ctx, state, sceneId, seasonVariant, time);
     this.drawSceneStructures(ctx, sceneId, time);
+    this.drawSeasonalBlockers(ctx, state, seasonVariant, time);
     this.drawScenePortals(ctx, scene, time);
     this.drawSceneLandmarks(ctx, state, sceneId, time);
+    this.drawSceneFinds(ctx, state, time);
+    this.drawSeasonalLandmark(ctx, state, sceneId, seasonVariant, time);
+    this.drawBridgeQuestMarker(ctx, state, sceneId, time);
+    this.drawFestivalMarkers(ctx, state, sceneId, time);
 
     const drawables = [];
-    for (const npc of SCENE_NPCS) {
-      const position = this.scheduledNpcPosition(npc, state.minutes);
-      if (position?.scene === sceneId) {
-        drawables.push({ y: position.y, draw: () => this.drawSceneNpc(ctx, npc, position, time) });
-      }
+    for (const position of scheduledNpcPositions(state.minutes, sceneId)) {
+      drawables.push({
+        y: position.y,
+        draw: () => this.drawSceneNpc(ctx, position.npc, position, time),
+      });
     }
     drawables.push({
       y: state.player.y,
@@ -148,16 +177,13 @@ export class WorldRenderer {
     });
 
     this.drawSceneInteractionHighlight(ctx, state, runtime, time);
+    this.drawFeedbackLabel(ctx, state);
     this.drawSceneAtmosphere(ctx, sceneId, time);
+    this.drawSeasonalAtmosphere(ctx, state, seasonVariant, time);
     this.drawWeather(ctx, state, time);
     this.drawLighting(ctx, state, time);
     this.drawEffects(ctx, runtime, time, delta);
     this.drawDebugVignette(ctx);
-  }
-
-  scheduledNpcPosition(npc, minutes) {
-    const entry = npc.scenes.find((candidate) => minutes >= candidate.from && minutes < candidate.to);
-    return entry || npc.scenes[npc.scenes.length - 1];
   }
 
   drawSceneGround(ctx, sceneId, time) {
@@ -205,6 +231,190 @@ export class WorldRenderer {
         ctx.fillStyle = index % 3 === 0 ? "rgba(235, 208, 142, 0.13)" : "rgba(39, 43, 40, 0.15)";
         ctx.beginPath();
         ctx.ellipse(x, y, 8 + (index % 4) * 4, 3 + (index % 2) * 3, index, 0, TAU);
+        ctx.fill();
+      }
+    }
+    ctx.restore();
+  }
+
+  drawSeasonalRoute(ctx, state, sceneId, variant, time) {
+    const scene = SCENE_DEFS[sceneId];
+    if (!variant?.landmark || !scene?.spawn) return;
+    const from = scene.spawn;
+    const to = variant.landmark;
+    const midX = (from.x + to.x) / 2;
+    const midY = Math.min(from.y, to.y) - 54;
+    ctx.save();
+    ctx.strokeStyle = "rgba(255, 244, 197, 0.28)";
+    ctx.lineWidth = 3;
+    ctx.setLineDash([10, 12]);
+    ctx.lineDashOffset = -time * 8;
+    ctx.beginPath();
+    ctx.moveTo(from.x, from.y);
+    ctx.quadraticCurveTo(midX, midY, to.x, to.y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    for (let step = 0.24; step < 1; step += 0.24) {
+      const inverse = 1 - step;
+      const x = inverse * inverse * from.x + 2 * inverse * step * midX + step * step * to.x;
+      const y = inverse * inverse * from.y + 2 * inverse * step * midY + step * step * to.y;
+      ctx.globalAlpha = 0.35;
+      ctx.fillStyle = "#fff3c4";
+      ctx.beginPath();
+      ctx.arc(x, y, 2.5, 0, TAU);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  drawSeasonalBlockers(ctx, state, variant, time) {
+    if (!variant?.blockers?.length) return;
+    ctx.save();
+    for (const blocker of variant.blockers) {
+      const snow = state.season === "冬";
+      ctx.fillStyle = snow ? "rgba(226, 238, 238, 0.88)" : "rgba(72, 87, 64, 0.75)";
+      roundedRect(ctx, blocker.x, blocker.y, blocker.w, blocker.h, 14);
+      ctx.fill();
+      ctx.globalAlpha = snow ? 0.5 : 0.28;
+      ctx.fillStyle = snow ? "#ffffff" : "#d8b873";
+      for (let index = 0; index < 4; index += 1) {
+        ctx.beginPath();
+        ctx.arc(blocker.x + 16 + index * (blocker.w - 32) / 3, blocker.y + 10 + Math.sin(time + index) * 2, 5, 0, TAU);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 0.85;
+      ctx.fillStyle = snow ? "#eef7f5" : "#f3e4bb";
+      ctx.font = "700 9px 'PingFang SC', sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText(blocker.label, blocker.x + blocker.w / 2, blocker.y + blocker.h / 2 + 3);
+      ctx.globalAlpha = 1;
+    }
+    ctx.restore();
+  }
+
+  drawSeasonalLandmark(ctx, state, sceneId, variant, time) {
+    if (!variant?.landmark) return;
+    const landmark = variant.landmark;
+    const claimKey = `${state.season}:${sceneId}:${landmark.id}`;
+    const claimed = (state.seasonRoutes?.claims?.[claimKey] || 0) === state.day;
+    const pulse = 1 + Math.sin(time * 2 + landmark.x * 0.02) * 0.1;
+    ctx.save();
+    ctx.globalAlpha = claimed ? 0.28 : 0.65;
+    ctx.strokeStyle = "#fff3bd";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(landmark.x, landmark.y, 24 * pulse, 0, TAU);
+    ctx.stroke();
+    ctx.globalAlpha = claimed ? 0.4 : 0.9;
+    ctx.fillStyle = "#f7e6a6";
+    ctx.beginPath();
+    ctx.arc(landmark.x, landmark.y, 7, 0, TAU);
+    ctx.fill();
+    this.drawPlaceTag(
+      ctx,
+      landmark.x,
+      landmark.y - 34,
+      `${claimed ? "已走过" : "本季"} · ${variant.label}`,
+      "rgba(255, 247, 216, 0.9)",
+      "#5b5231",
+    );
+    ctx.restore();
+  }
+
+  drawBridgeQuestMarker(ctx, state, sceneId, time) {
+    const sign = BRIDGE_QUEST.signs[sceneId];
+    if (!sign) return;
+    const quest = state.quests || {};
+    const step = quest.activeId && !quest.expired && !quest.completed
+      ? BRIDGE_QUEST.steps[quest.stepIndex]
+      : null;
+    const activeHere = step?.scene === sceneId;
+    ctx.save();
+    ctx.fillStyle = "rgba(83, 59, 36, 0.7)";
+    ctx.fillRect(sign.x - 3, sign.y - 22, 6, 28);
+    ctx.fillStyle = activeHere ? "#f0d27f" : "rgba(225, 208, 166, 0.8)";
+    roundedRect(ctx, sign.x - 33, sign.y - 42, 66, 23, 5);
+    ctx.fill();
+    ctx.strokeStyle = activeHere ? "#fff1b6" : "rgba(112, 90, 53, 0.65)";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.fillStyle = "#4f4a35";
+    ctx.font = "700 9px 'PingFang SC', sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("桥", sign.x, sign.y - 30);
+    if (activeHere) {
+      const pulse = 1 + Math.sin(time * 2.4 + sign.x * 0.01) * 0.1;
+      ctx.strokeStyle = "rgba(255, 235, 164, 0.9)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(step.x, step.y, 26 * pulse, 0, TAU);
+      ctx.stroke();
+      this.drawPlaceTag(ctx, step.x, step.y - 44, step.label, "rgba(255, 247, 216, 0.94)", "#5b5231");
+    }
+    ctx.restore();
+  }
+
+  drawFestivalMarkers(ctx, state, sceneId, time) {
+    const festival = Object.values(FESTIVALS).find((entry) => (
+      entry.season === state.season && entry.day === state.seasonDay && entry.scene === sceneId
+    ));
+    if (!festival) return;
+    ctx.save();
+    for (const activity of festival.activities) {
+      const completed = state.festival?.activityFlags?.[activity.id];
+      ctx.globalAlpha = completed ? 0.38 : 0.86;
+      ctx.fillStyle = completed ? "#b7c7b3" : "#d69b57";
+      ctx.beginPath();
+      ctx.moveTo(activity.x - 30, activity.y - 8);
+      ctx.lineTo(activity.x, activity.y - 48);
+      ctx.lineTo(activity.x + 30, activity.y - 8);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = "rgba(255, 240, 187, 0.78)";
+      ctx.fillRect(activity.x - 25, activity.y - 8, 50, 6);
+      ctx.fillStyle = completed ? "#647568" : "#fff2bd";
+      ctx.globalAlpha = 0.82;
+      ctx.beginPath();
+      ctx.arc(activity.x, activity.y - 54 + Math.sin(time * 2 + activity.x) * 2, 5, 0, TAU);
+      ctx.fill();
+      this.drawPlaceTag(
+        ctx,
+        activity.x,
+        activity.y - 70,
+        completed ? `${festival.name} · 已完成` : activity.label,
+        "rgba(255, 247, 216, 0.92)",
+        "#6b4a2d",
+      );
+      ctx.globalAlpha = 1;
+    }
+    ctx.restore();
+  }
+
+  drawSeasonalAtmosphere(ctx, state, variant, time) {
+    if (!variant) return;
+    const palette = {
+      春: ["#f1d7d5", "petal"],
+      夏: ["#d8f0bd", "spark"],
+      秋: ["#e8c27d", "leaf"],
+      冬: ["#eef8f8", "snow"],
+    }[state.season] || ["#f1d7d5", "petal"];
+    ctx.save();
+    ctx.fillStyle = palette[0];
+    for (let index = 0; index < 22; index += 1) {
+      const drift = time * (5 + index % 4);
+      const x = ((index * 137 + drift) % 1320) - 20;
+      const y = 80 + ((index * 83 + Math.sin(time * 0.5 + index) * 24 + drift * (0.3 + (index % 3) * 0.18)) % 540);
+      ctx.globalAlpha = state.season === "冬" ? 0.4 : 0.28;
+      if (palette[1] === "leaf") {
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(time * 0.6 + index);
+        ctx.fillRect(-3, -1.2, 6, 2.4);
+        ctx.restore();
+      } else {
+        ctx.beginPath();
+        ctx.arc(x, y, state.season === "夏" ? 1.3 : 2, 0, TAU);
         ctx.fill();
       }
     }
@@ -383,6 +593,64 @@ export class WorldRenderer {
     this.drawInteractionHighlight(ctx, state, runtime, time);
   }
 
+  drawFeedbackLabel(ctx, state) {
+    const event = state.feedback?.lastEvent;
+    if (!event || Date.now() > (event.expiresAt || 0)) return;
+    const remaining = Math.max(0, (event.expiresAt - Date.now()) / 1000);
+    const alpha = Math.min(1, remaining / 0.5);
+    const colors = {
+      success: ["rgba(214, 238, 190, 0.94)", "#2f5c46", "#d8f0b8"],
+      warning: ["rgba(248, 224, 173, 0.95)", "#6b4d28", "#c9903d"],
+      info: ["rgba(218, 235, 224, 0.94)", "#365e52", "#8eb9a4"],
+    }[event.severity] || ["rgba(218, 235, 224, 0.94)", "#365e52", "#8eb9a4"];
+    const message = event.message.length > 30 ? `${event.message.slice(0, 30)}…` : event.message;
+    const x = Math.max(150, Math.min(WORLD.width - 150, state.player.x));
+    const y = Math.max(100, state.player.y - 74);
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.font = "700 11px 'PingFang SC', sans-serif";
+    const width = Math.max(180, Math.min(340, ctx.measureText(message).width + 28));
+    ctx.fillStyle = colors[0];
+    roundedRect(ctx, x - width / 2, y - 24, width, 38, 11);
+    ctx.fill();
+    ctx.strokeStyle = colors[2];
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.fillStyle = colors[1];
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(message, x, y - 10);
+    ctx.font = "700 7px 'PingFang SC', sans-serif";
+    ctx.globalAlpha = alpha * 0.68;
+    ctx.fillText(event.eventId, x, y + 4);
+    ctx.restore();
+  }
+
+  drawSceneFinds(ctx, state, time) {
+    const sceneId = state.world?.scene || "farm";
+    for (const find of SCENE_FINDS[sceneId] || []) {
+      if (state.world.sceneFinds?.[sceneId]?.[find.id]) continue;
+      const pulse = 0.75 + Math.sin(time * 1.8 + find.x * 0.02) * 0.12;
+      ctx.save();
+      ctx.globalAlpha = 0.24;
+      ctx.fillStyle = "#f2ddb0";
+      ctx.beginPath();
+      ctx.arc(find.x, find.y + 8, 18 * pulse, 0, TAU);
+      ctx.fill();
+      ctx.globalAlpha = 0.58;
+      ctx.strokeStyle = "#f3e0b1";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(find.x, find.y - 7);
+      ctx.lineTo(find.x + 7, find.y);
+      ctx.lineTo(find.x, find.y + 7);
+      ctx.lineTo(find.x - 7, find.y);
+      ctx.closePath();
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
   drawForageNode(ctx, state, time) {
     const node = (state.forage?.nodes || []).find((entry) => (
       entry.scene === "farm"
@@ -407,10 +675,12 @@ export class WorldRenderer {
   }
 
   drawGround(ctx, state, time) {
+    const variant = SCENE_SEASON_VARIANTS.farm?.[state.season];
+    const palette = variant?.palette || ["#89a96b", "#88a762", "#75985a"];
     const gradient = ctx.createLinearGradient(0, 0, 0, WORLD.height);
-    gradient.addColorStop(0, "#89a96b");
-    gradient.addColorStop(0.55, "#88a762");
-    gradient.addColorStop(1, "#75985a");
+    gradient.addColorStop(0, palette[0]);
+    gradient.addColorStop(0.55, palette[0]);
+    gradient.addColorStop(1, palette[1]);
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, WORLD.width, WORLD.height);
 
@@ -1934,11 +2204,12 @@ export class WorldRenderer {
     const sceneId = state.world?.scene || "farm";
     const base = sceneId === "farm" ? INTERACTIONS : SCENE_INTERACTIONS[sceneId] || [];
     const portalEntries = (SCENE_DEFS[sceneId]?.portals || []).map((portal) => portal);
-    const npcEntries = SCENE_NPCS.map((npc) => {
-      const position = this.scheduledNpcPosition(npc, state.minutes);
-      if (!position || position.scene !== sceneId) return null;
-      return { id: `npc_${npc.id}`, x: position.x, y: position.y, radius: 46 };
-    }).filter(Boolean);
+    const npcEntries = scheduledNpcPositions(state.minutes, sceneId).map((position) => ({
+      id: `npc_${position.npc.id}`,
+      x: position.x,
+      y: position.y,
+      radius: 46,
+    }));
     return [...base, ...portalEntries, ...npcEntries].find((entry) => entry.id === interactionId) || null;
   }
 

@@ -28,6 +28,28 @@ Development. The real Canvas scene base remains the default runtime; four miniga
 - Old saves receive `minigames` defaults; active sessions are intentionally cleared on load.
 - The game-space slice is merged into `main`; its branch remains available for audit.
 - Deployment source commit: `e94ff22` on `main`; live URL: `https://naturezhanghn.github.io/ranch_life/`.
+- Gameplay cards 02–04 are implemented on the isolated `bailian/game-space` branch: rain-window forage nodes, scene find clues, and NPC daily topic choices.
+- Rainy-day forage nodes now spawn across farm/city/port layouts with one-time claims, energy/time cost, a three-node combo bonus, shared inventory, and day-end reset.
+- Scene finds are hidden landmarks in every scene; investigating them advances time, adds lore memory, grants coins, and completing a scene unlocks a civic point plus AI trust.
+- NPCs have one daily contextual topic. Choosing a response updates `relations.npc`, community/ecology where relevant, and `social.topicDay`; repeat conversations are blocked for the day.
+- Gameplay card 05 is implemented: gift tags and NPC preferences are data-driven; gifts consume inventory once per NPC/day, change `relations.npc`, return a seed/civic thank-you, and build a bounded gift history/log.
+- Gameplay card 06 is implemented: three consecutive contract deliveries raise `market.tier`, raise future contract rewards, preserve the one-night expiry behavior, and reset the streak on expiry.
+- Gameplay card 07 is implemented: scene finds, forage, and NPC topics append to one shared collection book; unknown entries render as silhouettes, category completion grants civic points/AI trust, and the book is reachable from the workshop garden or pause menu.
+- Gameplay card 08 is implemented: every scene has four season variants with their own palette, route label, exclusive landmark, and small optional blockers. Seasonal landmarks grant the season's forage item once per day, advance six minutes, add ecology, and enter the collection book. The farm legacy renderer and the non-farm scene renderer both draw the seasonal route, landmark, blocker, and particles.
+- Gameplay card 09 is implemented: after sleep, the morning report shows three facts and two explanations. `resolveDailyRecap` pays either AI trust +2 or civic point +1 and community +1, exactly once. The pause menu exposes an unresolved recap so closing the morning card does not silently lose the choice; an unopened recap is marked as a deliberate blank at the next day boundary.
+- Gameplay card 10 is implemented: after the ending, three post-game modifier cards start a seven-day constrained epilogue without rewriting the first-week ending. Public Ledger cuts order payout by 20% and tracks public recaps; Hand Care disables sprite automation and tracks all-fed days; Dry Season caps water at 12 and tracks seven days of community trust. Completion/failure unlocks a short epilogue reachable from the ending or pause menu.
+- Gameplay card 24 is implemented: mayor, merchant, sprite keeper, and farmer Luo each have three time slots with two waypoints. Positions interpolate at 39–46% of player speed with a ping-pong path, and one shared resolver enforces at most one NPC within 72px of any scene portal. Renderer, interaction radius, and collision all use the same resolver.
+- Gameplay card 26 is implemented: all touch controls share one `pointerdown/up/cancel/leave` state machine with pointer capture, multi-touch direction sets, a 180ms action dedupe, and a blur reset. Direction buttons are now 44px with 6px gaps; controls respect safe-area insets and report orientation/safe-area state for diagnostics.
+- Gameplay card 27 is implemented: `emitFeedback` creates one event contract (`eventId`, `kind`, `sourceScene`, `severity`, `message`, `dedupeKey`, `id`) with a 1.6s dedupe window and 2.6s visual TTL. Travel blocks, activity blocks/completion, forage expiry/claims, seasonal gathers, and expired contracts emit through it. Canvas labels, toasts (`data-feedback-id`), and morning feedback records all reference the same event id.
+- Gameplay card 11 is implemented: a four-station bridge route runs farm repair → port delivery → council stamp → city reward, with physical signposts, collision rectangles, progress modal, retained materials, a seven-day deadline, and a seven-day retry window. Each station uses a Canvas marker and the shared feedback contract.
+- Gameplay cards 22–23 are implemented: the hunt is a 15-second nonlethal Canvas encounter with a 180ms action cooldown, rare golden birds, one rare capture per day, a season multiplier capped at 1.08, pearl inventory reward, +2 max daily reputation, and a 1–3 stamina failure penalty. A rare capture is worth at most ~127 coins at reference prices, below the 1.2× two-normal-island-haul ceiling.
+- Gameplay card 13 is implemented: one shared weekly board across city/port/council offers two season-rotated public requests, caps two accepted requests per week, tracks delivered counts, and expires unfinished requests at the next-week boundary with civic/reputation penalties and a fresh board. The board is reachable from three physical scene interactions and the pause menu.
+- Gameplay card 18 is implemented: port shipping offers合作社慢船/近海快线/远洋货轮 with distinct departure times, arrival days, fees, price multipliers, and risk. Cargo stays in the box while the trip is in transit; adding cargo after departure is rejected; morning settlement includes route fee and volatility, and the shipping panel shows the current manifest and next departure.
+- Gameplay card 25 is implemented: the summer-day-14 tide-lantern festival changes the port with three physical stalls/lantern markers. Completing any two on-site activities pays 80金+1公民点+2社区 once; flags are stored per festival year and the map returns to normal the next day.
+- Gameplay card 15 is implemented: five NPC birthdays are registered by season/day. Birthday gifts double the preference/ordinary/dislike relationship delta, record `town.birthdayGifts[npc]`, keep the one-gift-per-day cap, and show birthday context in both the NPC dialogue and gift panel.
+- Gameplay card 28 is implemented: save schema is now v3; every save rotates the previous payload into `ranch-life-common-ground-save-v1-backup` with a checksum, corrupt primary JSON falls back to that backup, and load clamps illegal day/season/seasonDay/minutes/coins/energy/water/player values while filling new quest/festival/weekly fields from defaults.
+- Gameplay card 29 is implemented: `assets/manifest.json` now records `size`, `version`, `maxBytes`, runtime/fallback metadata; `tools/check_assets.js` verifies required fields, unique ids, scene ids, existing files, exact size, and per-entry byte caps. It runs in `npm run build` and the GitHub Actions CI workflow. All runtime art remains programmatic with manifest fallbacks.
+- The branch is synchronized with `main` at `f09b381`. The merge keeps main's `FORAGE_NODE_DEFS`/`expiresMinute` implementation, legacy-node recovery, 8-minute collection time cost, and ecology gain, while retaining the shared collection hook.
 
 ## Important files
 
@@ -51,13 +73,15 @@ Development. The real Canvas scene base remains the default runtime; four miniga
 - Phaser smoke still required after each adapter change, including farm movement, action, scene dispatch, save/reload, and portrait/landscape resize
 - Node16 Playwright 1.38 audits run through `/tmp/ranch-browser-test/node_modules/playwright` against the existing 4174 server. Mobile controls, mobile scene flow, desktop scene flow, console errors, overflow, touch controls, city→council/workshop entrances, island on-site exploration, and trade port were verified.
 - Regression coverage now includes sleep returning `world.scene` and player spawn to farm, policy `coinCost` deduction, retained/expired order behavior, and safe pointer capture handling.
-- `npm test` now covers 30 state tests plus 7 minigame tests, including day-report,牧心 settlement, rain-node expiry, one-time collection, separate node identity, legacy-node recovery, and energy-boundary feedback.
+- `npm test` now covers 30 state tests plus 7 minigame tests plus 6 exploration/social tests, including day-report,牧心 settlement, rain-node expiry, legacy-node recovery, one-time collection, separate node identity, gift preferences, contract chains, scene finds, NPC topics, collection rewards, and energy-boundary feedback.
 - Task 02 browser smoke passed on desktop and 390×844 mobile. Farm and city forage nodes were visible and collectible with the action key, with no console errors.
 - Isolated review of bailian commit `fc1f256` passed its 26 state, 7 minigame, 3 exploration, and syntax checks. It was not merged because its forage state contract overlaps the current `80863fa` implementation. Review feedback was sent for task 24 waypoint interpolation and 72px entrance safety, task 26 unified pointer state, and task 27 feedback deduplication and mobile text sizing.
 - Isolated review of bailian commit `0ac6247` found 26 state and 7 minigame tests green, but the fifth exploration contract-chain test is flaky. It passed 3 of 5 repeated runs because a random contract ranking can omit `harbor-breakfast`. The branch still lacks task 24 waypoint interpolation and 72px entrance safety, plus task 27 feedback event IDs and deduplication. Gifts and NPC topics remain triggered by physical NPC interactions. No branch files were merged.
 - Merged `main` verification: 25 state tests + 7 minigame tests pass; desktop and 390×844 real scene-triggered overlay paths pass with no console errors.
 - Minigame completion settlement was exercised in Chromium: hunt reward, ecology update, active-session cleanup, and overlay close all passed.
 - Live deployment check: `js/minigames.js` is served from Pages, and desktop/mobile overlay plus settlement smoke tests pass with no console errors.
+- Exploration smoke on desktop and 390×844: scene find discovery, rainy forage claim, NPC daily topic choice, gift panel consumption, save-state changes, and touch input all pass with no console errors or horizontal overflow.
+- 844×390 landscape smoke: touch movement, workshop collection book, 77px action control, and 18 visible entries pass with no console errors or horizontal overflow.
 
 ## Risks
 
@@ -70,7 +94,7 @@ Development. The real Canvas scene base remains the default runtime; four miniga
 
 ## Next safest task
 
-Run the opt-in Phaser farm slice against the merged code before migrating additional scenes; then review the first completed card from the tmux queue before accepting the next card.
+Review the next queued gameplay card (08: seasonal routes) against the merged main, then add one isolated branch slice and browser acceptance test before merging.
 
 ## Last slice
 
@@ -79,3 +103,34 @@ Run the opt-in Phaser farm slice against the merged code before migrating additi
 - Added deterministic hunt/fishing/mining/delivery state machines and a reusable Canvas overlay.
 - Added daily gating, energy costs, AI memory entries, result settlement, accepted-contract delivery logic, and save migration.
 - Verified: `npm run check`; `npm test` (25 state + 7 minigame); scene-triggered desktop/mobile path from `scene-minigame-path.js`; overlay smoke from `minigame-smoke.js`; completion settlement smoke from `minigame-completion-test.js`; `npm run story-paths` still reports all five endings reachable.
+
+## Latest slice
+
+- Synchronized the isolated branch with `main` at `f09b381`; the state merge retains both the hardened forage migration and the shared collection book.
+- Final combined verification before card 08: `npm run check`; `npm test` (30 state + 7 minigame + 6 exploration); desktop and 390×844 exploration smoke; 844×390 landscape smoke. No console errors or horizontal overflow.
+- Card 08 verification: `npm test` (30 state + 7 minigame + 8 exploration); four-season desktop smoke confirmed distinct palettes, correct landmark hints, one exclusive resource per season, and no overflow; 390×844 touch gathering and `?phaser=1` farm movement/action passed with no console errors.
+- Card 09 verification: `npm test` (32 state + 7 minigame + 8 exploration); auto-sleep desktop smoke showed 2 options and 3 facts, paid AI +2 once, then verified the public path from the pause-menu recap; 390×844 tap smoke showed stacked 86px options, public +1 civic point, no overflow, and no console errors.
+- Card 10 verification: `npm test` (35 state + 7 minigame + 8 exploration); ending smoke showed 3 modifier cards, preserved `common` ending, selected Public Ledger, and displayed progress in the pause menu; 390×844 tap smoke selected Hand Care with 129px cards and no overflow; `?phaser=1` remains unaffected.
+- Card 24 verification: `npm test` (35 state + 7 minigame + 9 exploration); the mayor moved 74.5px over five game minutes, waypoint NPCs stayed out of blockers, and sampled doors never held more than one NPC. Desktop and 390×844 dialogue smoke reached the moving mayor with no console errors or overflow.
+- Card 26 verification: `npm test` (35 state + 7 minigame + 9 exploration); 390×844 multi-touch diagonal movement, one-finger release, cancel, blur, and 180ms action dedupe passed. Direction hot zones measured ~44px with a 6px gap; 844×390 orientation switched to `landscape` with no horizontal overflow or console errors.
+- Card 27 verification: `npm test` (36 state + 7 minigame + 9 exploration); desktop travel-block smoke produced one deduped `travel_unvisited` event, matched toast `data-feedback-id`, and showed `contract_expired` plus `travel_unvisited` in the morning report; 390×844 toast ID matched the event, font size was 11px, and overflow was false.
+- Card 11 verification: `npm test` (38 state + 7 minigame + 9 exploration); desktop four-station smoke paid 40金+2矿铜, consumed 2 eggs, stamped the council step, paid 90金+1公民点+2社区, and retained 2 bridge materials. Mobile signpost action button measured ~45px with no overflow or console errors.
+- Cards 22–23 verification: `npm test` (38 state + 9 minigame + 9 exploration); Chromium local hunt showed a 15s timer, rare golden bird capture, one pearl in shared inventory, and clean overlay teardown with no console errors. Same-day rare cap, next-day reset, and stamina penalty are covered by minigame tests.
+- Card 13 verification: `npm test` (40 state + 9 minigame + 9 exploration); desktop board showed two requests, accepted and delivered “学校汤锅” for +120金/+1公民点, and removed its deliver action. 390×844 board buttons measured ~45px with no overflow or console errors.
+- Card 18 verification: `npm test` (41 state + 9 minigame + 9 exploration); state tests cover delayed arrival, route fee, missed departure rejection, and retained cargo. Desktop shipping panel showed 3 routes and sent 2 turnips on the ocean route with arrival day 3; 390×844 route cards measured 73–87px with no overflow or console errors.
+- Card 25 verification: `npm test` (42 state + 9 minigame + 9 exploration); desktop festival smoke completed soup and lantern activities, paid the 80金/1公民点 reward once, and rendered markers without overflow; 390×844 touch completed the soup activity with no console errors.
+- Card 15 verification: `npm test` (42 state + 9 minigame + 10 exploration); Chromium birthday smoke showed the birthday note in dialogue and gift panel, a favorite birthday turnip raised relationship from 8 to 18, recorded day 12, and produced no console errors.
+- Card 28 verification: `npm test` (44 state + 9 minigame + 10 exploration); regression tests cover corrupt-primary backup recovery, illegal-number clamping, sparse old saves, and new-system defaults.
+- Card 29 verification: `npm run check:assets` reports 2 valid entries; `npm test` remains green; CI now runs the manifest check before tests.
+- This branch remains isolated until review and explicit merge approval.
+
+## Latest social/economy slice
+
+- Implemented cards 05 gift preferences and 06 contract tiers/streak.
+- Added `GIFT_TAGS`, `GIFT_PREFERENCES`, `MARKET_TIERS`, `social.giftDay`, `social.giftHistory`, `social.giftLog`, and market chain state with old-save defaults.
+- Verified: `npm run check`; `npm test` (29 state + 7 minigame + 6 exploration); desktop/390×844 exploration smoke including a 46px mobile gift action row, no console errors.
+
+## Latest collection slice
+
+- Implemented card 07: shared collection entries/stats/first-seen days, silhouettes for unknowns, category completion rewards, and a workshop-garden/pause-menu local-history screen.
+- Verified: `npm run check`; `npm test` (29 state + 7 minigame + 6 exploration); desktop/mobile smoke passed for the new collection screen before merge.

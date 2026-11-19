@@ -1,17 +1,27 @@
 import {
   ANIMAL_DEFS,
   BACKPACK_UPGRADES,
+  BIRTHDAYS,
+  BRIDGE_QUEST,
   CANAL_LORE,
   CITY_PROJECTS,
+  COLLECTION_DEFS,
   CROPS,
   ELDER_DIALOGUE,
   ENDINGS,
+  FESTIVALS,
   GOVERNMENT_POLICIES,
+  GIFT_PREFERENCES,
+  GIFT_TAGS,
   HOUSE_UPGRADES,
   ISLAND_DAILY_LIMIT,
   ISLAND_SPOTS,
   MARKET_GOODS,
   MINIGAME_DEFS,
+  MARKET_TIERS,
+  NPC_TOPICS,
+  POST_GAME_MODIFIERS,
+  SCENE_FINDS,
   INTERACTIONS,
   PRODUCTS,
   REGIONS,
@@ -21,6 +31,8 @@ import {
   SCENE_INTERACTIONS,
   SCENE_NPCS,
   SCENE_REGION_MAP,
+  SHIPPING_ROUTES,
+  scheduledNpcPositions,
   SHOP_SEEDS,
   SPRITE_DEFS,
   STORY_OBJECTIVES,
@@ -35,14 +47,18 @@ import {
   applyDevelopmentChoice,
   applyDroughtChoice,
   applyGovernanceChoice,
+  advanceBridgeQuest,
   abortMinigame,
   acceptTradeContract,
+  acceptWeeklyRequest,
   assignSprite,
   animalQuality,
   buyFeed,
   buySeed,
   beginMinigame,
   checkDailyTasks,
+  choosePostGameModifier,
+  collectSeasonalLandmark,
   collectForage,
   clearSave,
   createInitialState,
@@ -50,15 +66,23 @@ import {
   feedAnimal,
   formatClock,
   getAiPrediction,
+  getActiveFestival,
   getClueCount,
   getMarketPrice,
   getMinigameAvailability,
+  getNpcTopic,
+  getPostGameModifier,
+  getSceneSeasonVariant,
+  giveGift,
   getTargetPlot,
   enactGovernmentPolicy,
+  emitFeedback,
   exploreIsland,
   fulfillTradeContract,
   holdTownHall,
   investInCity,
+  isNpcBirthday,
+  joinFestivalActivity,
   loadGame,
   recruitSprite,
   brushAnimal,
@@ -69,13 +93,21 @@ import {
   upgradeTool,
   upgradeHouse,
   getBagUsage,
+  getBridgeQuestStep,
   recordClue,
   recordTalk,
   refillWaterAtCanal,
   resolveEnding,
+  resolveDailyRecap,
   resolveMinigame,
+  discoverSceneFind,
+  deliverWeeklyRequest,
+  ensureWeeklyBoard,
+  resolveNpcTopic,
+  startBridgeQuest,
   saveGame,
   sellAtMarket,
+  selectShippingRoute,
   shipProduce,
   switchScene,
   switchRegion,
@@ -160,6 +192,13 @@ let mobileCamera = { x: 0, y: 0, initialized: false };
 
 const keys = new Set();
 const touchDirections = new Set();
+const touchPointers = new Map();
+const touchInputState = {
+  lastActionAt: 0,
+  acceptedActions: 0,
+  orientation: "",
+  safeAreaInsets: {},
+};
 const runtime = {
   moving: false,
   walkPhase: 0,
@@ -268,6 +307,7 @@ function showToast(message, options = {}) {
   if (!message) return;
   const toast = document.createElement("div");
   toast.className = "toast";
+  if (options.feedbackId) toast.dataset.feedbackId = options.feedbackId;
   toast.innerHTML = options.strong
     ? `<strong>${escapeHtml(options.strong)}</strong> ${escapeHtml(message)}`
     : escapeHtml(message);
@@ -280,6 +320,12 @@ function showToast(message, options = {}) {
     window.setTimeout(() => toast.remove(), 260);
   }, options.duration || 3200);
   dom.liveRegion.textContent = `${options.strong || ""} ${message}`.trim();
+}
+
+function showFeedbackToast(event, strong = "牧场反馈", duration = 3200) {
+  if (!event) return false;
+  showToast(event.message, { strong, duration, feedbackId: event.id });
+  return true;
 }
 
 function applyTaskCompletions(tasks = []) {
@@ -517,12 +563,6 @@ function currentSceneId() {
   return state.world?.scene || "farm";
 }
 
-function scheduledNpcPosition(npc, minutes = state.minutes) {
-  const entries = npc.scenes || [];
-  const match = entries.find((entry) => minutes >= entry.from && minutes < entry.to);
-  return match || entries[entries.length - 1] || null;
-}
-
 function scenePortalInteractions(sceneId) {
   return (SCENE_DEFS[sceneId]?.portals || []).map((portal) => ({
     ...portal,
@@ -547,21 +587,93 @@ function availableInteractions() {
   const base = sceneId === "farm"
     ? INTERACTIONS.filter((interaction) => interaction.id !== "investor" || state.story.step === "meetInvestor")
     : (SCENE_INTERACTIONS[sceneId] || []);
-  const npcs = SCENE_NPCS.map((npc) => {
-    const position = scheduledNpcPosition(npc);
-    if (!position || position.scene !== sceneId) return null;
-    return {
-      id: `npc_${npc.id}`,
-      x: position.x,
-      y: position.y,
-      radius: 46,
-      label: `和${npc.name}聊聊`,
+  const sceneFinds = (SCENE_FINDS[sceneId] || [])
+    .filter((find) => !state.world.sceneFinds?.[sceneId]?.[find.id])
+    .map((find) => ({
+      id: `find_${sceneId}_${find.id}`,
+      x: find.x,
+      y: find.y,
+      radius: 48,
+      label: find.label,
       keycap: "E",
-      npcId: npc.id,
-      npc,
-    };
-  }).filter(Boolean);
-  return [...base.filter(forageInteractionIsAvailable), ...scenePortalInteractions(sceneId), ...npcs];
+      findId: find.id,
+      sceneId,
+    }));
+  const npcs = scheduledNpcPositions(state.minutes, sceneId).map((position) => ({
+    id: `npc_${position.npc.id}`,
+    x: position.x,
+    y: position.y,
+    radius: 46,
+    label: `和${position.npc.name}聊聊`,
+    keycap: "E",
+    npcId: position.npc.id,
+    npc: position.npc,
+  }));
+  const seasonVariant = getSceneSeasonVariant(state, sceneId);
+  const seasonLandmark = seasonVariant?.landmark;
+  const seasonClaimed = seasonLandmark
+    ? (state.seasonRoutes?.claims?.[`${state.season}:${sceneId}:${seasonLandmark.id}`] || 0) === state.day
+    : true;
+  const seasonal = seasonLandmark && !seasonClaimed
+    ? [{
+        id: `seasonal_${sceneId}`,
+        x: seasonLandmark.x,
+        y: seasonLandmark.y,
+        radius: seasonLandmark.radius || 56,
+        label: seasonLandmark.label,
+        keycap: "E",
+        seasonalGather: true,
+        sceneId,
+      }]
+    : [];
+  const bridgeStep = getBridgeQuestStep(state);
+  const bridgeSign = BRIDGE_QUEST.signs[sceneId];
+  const bridge = bridgeStep?.scene === sceneId
+    ? [{
+        id: "bridge_quest_step",
+        x: bridgeStep.x,
+        y: bridgeStep.y,
+        radius: 52,
+        label: bridgeStep.label,
+        keycap: "E",
+        bridgeQuest: true,
+        bridgeStep,
+      }]
+    : bridgeSign
+      ? [{
+          id: "bridge_quest_sign",
+          x: bridgeSign.x,
+          y: bridgeSign.y,
+          radius: 50,
+          label: bridgeSign.label,
+          keycap: "E",
+          bridgeQuest: true,
+          bridgeSign,
+        }]
+      : [];
+  const festival = getActiveFestival(state);
+  const festivalInteractions = festival && festival.scene === sceneId && !festival.rewardClaimed
+    ? festival.activities
+        .filter((activity) => !festival.flags[activity.id])
+        .map((activity) => ({
+          id: `festival_${activity.id}`,
+          x: activity.x,
+          y: activity.y,
+          radius: 54,
+          label: activity.label,
+          keycap: "E",
+          festivalActivity: activity.id,
+        }))
+    : [];
+  return [
+    ...base.filter(forageInteractionIsAvailable),
+    ...sceneFinds,
+    ...scenePortalInteractions(sceneId),
+    ...npcs,
+    ...seasonal,
+    ...bridge,
+    ...festivalInteractions,
+  ];
 }
 
 function findNearestInteraction() {
@@ -743,12 +855,16 @@ function canMoveTo(x, y) {
     { x: 831, y: 483, w: 141, h: 59 },
   ];
   const sceneId = currentSceneId();
-  const blockers = sceneId === "farm" ? farmBlockers : SCENE_DEFS[sceneId]?.blockers || [];
+  const seasonalBlockers = getSceneSeasonVariant(state, sceneId)?.blockers || [];
+  const blockers = sceneId === "farm"
+    ? [...farmBlockers, ...seasonalBlockers]
+    : [...(SCENE_DEFS[sceneId]?.blockers || []), ...seasonalBlockers];
+  const bridgeSign = BRIDGE_QUEST.signs[sceneId];
+  if (bridgeSign) blockers.push({ x: bridgeSign.x - 7, y: bridgeSign.y - 16, w: 14, h: 22 });
   if (blockers.some((rect) => circleHitsRect(x, y, radius, rect, 2))) return false;
 
-  for (const npc of SCENE_NPCS) {
-    const position = scheduledNpcPosition(npc);
-    if (position?.scene === sceneId && Math.hypot(x - position.x, y - position.y) < radius + 14) return false;
+  for (const position of scheduledNpcPositions(state.minutes, sceneId)) {
+    if (Math.hypot(x - position.x, y - position.y) < radius + 14) return false;
   }
   if (sceneId === "farm") {
     for (const npc of [{ x: 398, y: 257 }, { x: 705, y: 287 }, { x: 280, y: 681 }]) {
@@ -813,6 +929,101 @@ function checkStoryToast() {
   }
 }
 
+function openBridgeQuestInfo() {
+  const quest = state.quests || {};
+  const step = getBridgeQuestStep(state);
+  const canStart = currentSceneId() === "farm"
+    && !quest.completed
+    && (!quest.activeId || (quest.expired && state.day >= (quest.retryDay || 0)));
+  const progress = BRIDGE_QUEST.steps.map((entry, index) => {
+    const done = quest.completedSteps?.includes(entry.id);
+    const current = step?.id === entry.id;
+    return `<div class="clue-card ${done ? "is-found" : current ? "is-current" : "is-locked"}">
+      <span class="clue-icon">${done ? "✓" : current ? "→" : "○"}</span>
+      <span class="clue-copy"><strong>${entry.actionLabel}</strong><span>${SCENE_DEFS[entry.scene]?.name || entry.scene} · ${entry.detail}</span></span>
+      <span class="clue-status">${done ? "已完成" : current ? "当前" : "未到"}</span>
+    </div>`;
+  }).join("");
+  openModal({
+    kicker: "共同工程 · 旧渠木桥",
+    title: BRIDGE_QUEST.title,
+    wide: true,
+    body: `
+      <p class="story-lead">${BRIDGE_QUEST.description}</p>
+      <div class="weather-note">${quest.expired ? `桥材和已完成步骤仍在。下一周第 ${quest.retryDay} 天可以重新接上。` : quest.deadlineDay ? `本期期限：第 ${quest.deadlineDay} 天清晨。` : "从牧场路牌开始这条四站路线。"}</div>
+      <div class="clue-list">${progress}</div>
+      <div class="day-report-card"><strong>已保留的桥材</strong><span>${quest.bridgeMaterials || 0} 份矿铜 · 已完成 ${quest.completedSteps?.length || 0} / ${BRIDGE_QUEST.steps.length} 步</span></div>
+    `,
+    footer: canStart
+      ? `<button type="button" class="button button--ghost" data-action="close">先看看</button><button type="button" class="button button--primary" data-action="acceptBridgeQuest">${quest.expired ? "重新接上修桥路线" : "接下修桥路线"}</button>`
+      : `<button type="button" class="button button--primary" data-action="close">继续走动</button>`,
+  });
+}
+
+function openWeeklyBoard() {
+  ensureWeeklyBoard(state);
+  const board = state.weekly;
+  const rows = board.requests.map((request) => {
+    const requirements = Object.entries(request.requirements)
+      .map(([itemId, amount]) => `${MARKET_GOODS[itemId]?.name || PRODUCTS[itemId]?.name || itemId}×${amount}`)
+      .join(" · ");
+    const status = request.completed
+      ? "已交付"
+      : request.expired
+        ? "已过期"
+        : request.accepted
+          ? "已接下"
+          : "待接";
+    const action = request.completed || request.expired
+      ? ""
+      : request.accepted
+        ? `<button type="button" class="button button--primary" data-action="deliverWeekly" data-value="${request.id}">交付</button>`
+        : `<button type="button" class="button button--secondary" data-action="acceptWeekly" data-value="${request.id}">接下</button>`;
+    return `
+      <div class="clue-card ${request.completed ? "is-found" : request.accepted ? "is-current" : "is-locked"}">
+        <span class="clue-icon">${request.completed ? "✓" : request.accepted ? "→" : "○"}</span>
+        <span class="clue-copy">
+          <strong>${request.title} · ${status}</strong>
+          <span>${request.description}</span>
+          <span>需要：${requirements} · 奖励 ${request.reward} 金 / ${request.civic} 公民点 / ${request.reputation} 声誉</span>
+          <span>期限：第 ${request.deadlineDay} 天清晨</span>
+        </span>
+        <span class="clue-status">${action}</span>
+      </div>
+    `;
+  }).join("");
+  openModal({
+    kicker: `本周公告板 · ${state.season}季 · 第 ${Math.floor((state.day - 1) / 7) + 1} 周`,
+    title: "把牧场接进公共生活",
+    wide: true,
+    body: `
+      <p class="story-lead">城市、港口和议事厅共用这一块公告板。接下的请求会在周末结算，交付物直接进入公共厨房、诊所或早班。</p>
+      <div class="clue-list">${rows}</div>
+      <div class="weather-note">一周最多同时接两项。未交付的请求会在周末扣除公民点和声誉；已收集的物资不会凭空消失。</div>
+    `,
+    footer: `<button type="button" class="button button--ghost" data-action="close">先回去安排生产</button>`,
+  });
+}
+
+function handleBridgeQuestInteraction(interaction) {
+  if (!interaction.bridgeStep) {
+    openBridgeQuestInfo();
+    return;
+  }
+  const result = advanceBridgeQuest(state);
+  if (result.ok) {
+    audio.play("success");
+    triggerEffect("memory", state.player.x, state.player.y);
+    applyTaskCompletions(checkDailyTasks(state));
+  } else {
+    audio.play("error");
+  }
+  showFeedbackToast(state.feedback?.lastEvent, "旧渠木桥", 4200);
+  updateHUD(true);
+  updateInteractionHint();
+  saveGame(state);
+}
+
 function handleInteraction(id) {
   const sceneInteraction = availableInteractions().find((interaction) => interaction.id === id);
   if (sceneInteraction?.portal) {
@@ -827,6 +1038,46 @@ function handleInteraction(id) {
     startSceneMinigame(sceneInteraction.minigame);
     return;
   }
+  if (sceneInteraction?.findId) {
+    handleSceneFind(sceneInteraction.findId, sceneInteraction.sceneId);
+    return;
+  }
+  if (sceneInteraction?.seasonalGather) {
+    const result = collectSeasonalLandmark(state, currentSceneId());
+    if (result.ok) {
+      audio.play("forage");
+      triggerEffect("forage", state.player.x, state.player.y);
+      applyTaskCompletions(checkDailyTasks(state));
+      showFeedbackToast(state.feedback?.lastEvent, "季节路线", 4600);
+    } else {
+      audio.play("error");
+      showFeedbackToast(state.feedback?.lastEvent, "季节路线");
+    }
+    updateHUD(true);
+    updateInteractionHint();
+    saveGame(state);
+    return;
+  }
+  if (sceneInteraction?.bridgeQuest) {
+    handleBridgeQuestInteraction(sceneInteraction);
+    return;
+  }
+  if (sceneInteraction?.festivalActivity) {
+    const result = joinFestivalActivity(state, sceneInteraction.festivalActivity);
+    if (result.ok) {
+      audio.play("success");
+      triggerEffect("festival", state.player.x, state.player.y);
+      showFeedbackToast(state.feedback?.lastEvent, "潮灯节", 4600);
+      applyTaskCompletions(checkDailyTasks(state));
+    } else {
+      audio.play("error");
+      showToast(result.message, { strong: "潮灯节" });
+    }
+    updateHUD(true);
+    updateInteractionHint();
+    saveGame(state);
+    return;
+  }
   switch (id) {
     case "sleep":
       openSleepDialog();
@@ -834,8 +1085,8 @@ function handleInteraction(id) {
     case "forage":
     case "city_forage": {
       const result = collectForage(state, id);
-      if (result.ok) { saveGame(state); updateHUD(true); showToast(result.message, { strong: "季节山货" }); }
-      else showToast(result.message);
+      if (result.ok) { saveGame(state); updateHUD(true); }
+      showFeedbackToast(state.feedback?.lastEvent, "季节山货");
       break;
     }
     case "ai":
@@ -867,6 +1118,11 @@ function handleInteraction(id) {
       break;
     case "city_market":
       openRegionHub("city");
+      break;
+    case "city_weekly":
+    case "port_weekly":
+    case "council_weekly":
+      openWeeklyBoard();
       break;
     case "city_council":
       travelToScene("council", "road");
@@ -902,6 +1158,9 @@ function handleInteraction(id) {
     case "workshop_sprites":
       openRegionHub("sprites");
       break;
+    case "workshop_garden":
+      openCollectionBook();
+      break;
     case "workshop_keeper":
       openSceneNpcDialogue("spriteKeeper");
       break;
@@ -916,6 +1175,57 @@ function handleInteraction(id) {
   }
 }
 
+function handleSceneFind(findId, sceneId) {
+  const result = discoverSceneFind(state, sceneId, findId);
+  if (result.ok) {
+    audio.play("memory");
+    triggerEffect("forage", state.player.x, state.player.y);
+    showToast(result.message, { strong: "地方志", duration: 5200 });
+  } else {
+    audio.play("error");
+    showToast(result.message, { strong: "地方志" });
+  }
+  updateHUD(true);
+  saveGame(state);
+}
+
+function openCollectionBook() {
+  const groups = Object.entries(COLLECTION_DEFS).map(([groupId, group]) => {
+    const known = new Map(
+      state.collection.entries
+        .filter((entry) => entry.group === groupId)
+        .map((entry) => [entry.id, entry]),
+    );
+    const found = known.size;
+    const rows = group.entries
+      .map((entry) => {
+        const discovered = known.get(entry.id);
+        return `
+          <div class="clue-card ${discovered ? "is-found" : "is-locked"}">
+            <span class="clue-icon">${discovered ? "✦" : "？"}</span>
+            <span class="clue-copy">
+              <strong>${discovered ? entry.label : "尚未发现的地方内容"}</strong>
+              <span>${discovered ? `来源：${entry.source} · 第 ${discovered.firstSeenDay} 天` : `来自：${entry.source}`}</span>
+            </span>
+            <span class="clue-status">${discovered ? "已收录" : "轮廓"}</span>
+          </div>
+        `;
+      })
+      .join("");
+    return `
+      <div class="region-section-heading"><span>${group.name}</span><small>${found} / ${group.entries.length}</small></div>
+      <div class="clue-list">${rows}</div>
+    `;
+  }).join("");
+  openModal({
+    kicker: "工坊花园 · 共同地方志",
+    title: "土地不是一张空白地图",
+    wide: true,
+    body: `${groups}<div class="weather-note">未发现的条目只显示轮廓；去真实场景里靠近不显眼的地标、雨后的山货节点，或和居民聊一次每日话题。</div>`,
+    footer: `<button type="button" class="button button--primary" data-action="close">合上地方志</button>`,
+  });
+}
+
 function startSceneMinigame(type) {
   if (!MINIGAME_DEFS[type]) {
     showToast("这个活动还没有准备好。");
@@ -924,12 +1234,28 @@ function startSceneMinigame(type) {
   const availability = getMinigameAvailability(state, type);
   if (!availability.ok) {
     audio.play("error");
-    showToast(availability.message, { strong: MINIGAME_DEFS[type].title });
+    const event = emitFeedback(state, {
+      eventId: "activity_blocked",
+      kind: "activity",
+      severity: "warning",
+      sourceScene: currentSceneId(),
+      message: availability.message,
+      dedupeKey: `activity_blocked:${type}:${state.day}`,
+    });
+    showFeedbackToast(event, MINIGAME_DEFS[type].title);
     return;
   }
   if (availability.def.scene !== currentSceneId()) {
     audio.play("error");
-    showToast(`请先前往${SCENE_DEFS[availability.def.scene]?.name || "对应地点"}。`);
+    const event = emitFeedback(state, {
+      eventId: "activity_wrong_scene",
+      kind: "activity",
+      severity: "warning",
+      sourceScene: currentSceneId(),
+      message: `请先前往${SCENE_DEFS[availability.def.scene]?.name || "对应地点"}。`,
+      dedupeKey: `activity_wrong_scene:${type}:${state.day}`,
+    });
+    showFeedbackToast(event, MINIGAME_DEFS[type].title);
     return;
   }
   const started = beginMinigame(state, type);
@@ -949,11 +1275,28 @@ function startSceneMinigame(type) {
       if (resolved.ok) {
         applyTaskCompletions(checkDailyTasks(state));
         audio.play("success");
-        showToast(resolved.message, { strong: MINIGAME_DEFS[type].title, duration: 4600 });
+        const event = emitFeedback(state, {
+          eventId: "activity_complete",
+          kind: "activity",
+          severity: "success",
+          sourceScene: currentSceneId(),
+          message: resolved.message,
+          dedupeKey: `activity_complete:${type}:${state.day}`,
+          ttlMs: 3600,
+        });
+        showFeedbackToast(event, MINIGAME_DEFS[type].title, 4600);
         addMemory(state, `小游戏结算：${MINIGAME_DEFS[type].title}完成，结果已写入当日记录。`, "activity", 2);
       } else {
         audio.play("error");
-        showToast(resolved.message, { strong: MINIGAME_DEFS[type].title });
+        const event = emitFeedback(state, {
+          eventId: "activity_failed",
+          kind: "activity",
+          severity: "warning",
+          sourceScene: currentSceneId(),
+          message: resolved.message,
+          dedupeKey: `activity_failed:${type}:${state.day}`,
+        });
+        showFeedbackToast(event, MINIGAME_DEFS[type].title);
       }
       updateHUD(true);
       saveGame(state);
@@ -961,7 +1304,15 @@ function startSceneMinigame(type) {
     onAbort: () => {
       abortMinigame(state);
       audio.play("error");
-      showToast("你暂时离开了活动，今天的机会已经用掉。", { strong: MINIGAME_DEFS[type].title });
+      const event = emitFeedback(state, {
+        eventId: "activity_aborted",
+        kind: "activity",
+        severity: "warning",
+        sourceScene: currentSceneId(),
+        message: "你暂时离开了活动，今天的机会已经用掉。",
+        dedupeKey: `activity_aborted:${type}:${state.day}`,
+      });
+      showFeedbackToast(event, MINIGAME_DEFS[type].title);
       updateHUD(true);
       saveGame(state);
     },
@@ -991,6 +1342,34 @@ function openSceneNpcDialogue(npcId) {
   const npc = SCENE_NPCS.find((entry) => entry.id === npcId);
   if (!npc) return;
   recordNpcTalk(npc.id, npc.name);
+  const birthday = isNpcBirthday(state, npcId);
+  const topic = getNpcTopic(state, npcId);
+  if (topic) {
+    openModal({
+      kicker: `${npc.role} · 第 ${state.day} 天 · 每日话题`,
+      title: `${npc.name}问你`,
+      body: `
+        ${speakerBlock({ name: npc.name, role: npc.role, text: `“${topic.prompt}”` })}
+        <div class="choice-grid" style="margin-top:16px;">
+          ${topic.choices
+            .map((choice, index) =>
+              choiceOption({
+                number: String(index + 1),
+                title: choice.label,
+                description: choice.reply,
+                action: "npcTopic",
+                value: `${npcId}|${choice.id}`,
+              }),
+            )
+            .join("")}
+        </div>
+        <div class="weather-note">每天只有一次回应机会。你的回答会改变与${npc.name}的关系，并写入牧心的长期记忆。</div>
+        ${birthday ? `<div class="day-report-card"><strong>今天是${npc.name}的生日</strong><span>${BIRTHDAYS[npcId].season}季第 ${BIRTHDAYS[npcId].day} 天 · 今天赠送礼物时关系变化翻倍。</span></div>` : ""}
+      `,
+      footer: `<button type="button" class="button button--ghost" data-action="close">今天先不回答</button>`,
+    });
+    return;
+  }
   const copy = {
     mayor: "“市政不是一张免费 buff 清单。每一条政策都有人出钱、出时间，也有人需要承担它的副作用。”",
     merchant: "“你可以把货交给稳定的出货箱，也可以接受航线的波动。港口记得每一次准时交付，也记得每一次失约。”",
@@ -999,8 +1378,57 @@ function openSceneNpcDialogue(npcId) {
   openModal({
     kicker: `${npc.role} · 第 ${formatClock(state.minutes)}`,
     title: npc.name,
-    body: `${speakerBlock({ name: npc.name, role: npc.role, text: copy })}<div class="weather-note">日程：${state.minutes < 11 * 60 ? "上午" : state.minutes < 16 * 60 ? "午后" : "傍晚"}。再过一段时间，${npc.name}会去另一个场景。</div>`,
-    footer: `<button type="button" class="button button--primary" data-action="close">记下这句话</button>`,
+    body: `${speakerBlock({ name: npc.name, role: npc.role, text: copy })}<div class="weather-note">日程：${state.minutes < 11 * 60 ? "上午" : state.minutes < 16 * 60 ? "午后" : "傍晚"}。再过一段时间，${npc.name}会去另一个场景。</div>${birthday ? `<div class="day-report-card"><strong>今天是${npc.name}的生日</strong><span>${BIRTHDAYS[npcId].season}季第 ${BIRTHDAYS[npcId].day} 天 · 礼物关系加成翻倍。</span></div>` : ""}`,
+    footer: `
+      <button type="button" class="button button--ghost" data-action="close">记下这句话</button>
+      <button type="button" class="button button--primary" data-action="openGiftPanel" data-value="${npc.id}" ${
+        state.social.giftDay?.[npc.id] === state.day ? "disabled" : ""
+      }>${state.social.giftDay?.[npc.id] === state.day ? "今日已赠礼" : "送一份礼物"}</button>
+    `,
+  });
+}
+
+function openGiftPanel(npcId) {
+  const npc = SCENE_NPCS.find((entry) => entry.id === npcId);
+  if (!npc) return;
+  const birthday = isNpcBirthday(state, npcId);
+  if (state.social.giftDay?.[npcId] === state.day) {
+    showToast("今天已经给这个人送过礼物了。", { strong: "礼物" });
+    return;
+  }
+  const rows = Object.values(MARKET_GOODS)
+    .map((good) => {
+      const qualityCount = Object.entries(state.inventory.qualityProduce || {})
+        .filter(([key]) => key.startsWith(`${good.id}_`))
+        .reduce((total, [, count]) => total + count, 0);
+      const count =
+        (state.inventory.produce[good.id] || 0) +
+        (state.inventory.resources[good.id] || 0) +
+        qualityCount;
+      return { good, count };
+    })
+    .filter((entry) => entry.count > 0);
+  openModal({
+    kicker: "关系 · 送一份礼物",
+    title: `${npc.name}会记住这份心意`,
+    body: `
+      <div class="weather-note">偏好标签：${(GIFT_PREFERENCES[npcId]?.likes || []).join("、")}。偏好礼物 +5，普通礼物 +1，讨厌礼物 -2。</div>
+      ${birthday ? `<div class="day-report-card"><strong>生日礼物 · 关系翻倍</strong><span>今天是${BIRTHDAYS[npcId].season}季第 ${BIRTHDAYS[npcId].day} 天。偏好礼物会变成 +10，但仍只消耗 1 份库存。</span></div>` : ""}
+      <div class="shop-grid" style="margin-top:12px;">
+        ${rows.map(({ good, count }) => `
+          <div class="shop-row">
+            <span class="item-swatch" aria-hidden="true">${good.icon}</span>
+            <span class="shop-row-copy">
+              <strong>${good.name} × ${count}</strong>
+              <small>${(GIFT_TAGS[good.id] || []).join(" · ") || "普通礼物"}</small>
+            </span>
+            <button type="button" class="shop-buy" data-action="giftItem" data-value="${npcId}|${good.id}">赠送</button>
+          </div>
+        `).join("") || '<div class="empty-note">背包里还没有可以赠送的农场产出或资源。</div>'}
+      </div>
+      <div class="weather-note">每人每天只能收一次礼物；赠送会消耗 1 份库存。</div>
+    `,
+    footer: `<button type="button" class="button button--ghost" data-action="close">收起礼物栏</button>`,
   });
 }
 
@@ -1567,9 +1995,10 @@ function renderTradePanel() {
     ${regionHero("trade", "港口价格每天刷新。普通出货箱保证稳定，贸易航线承担波动，也提供更高的上限。", [
       regionMetric("市场风向", trendLabel),
       regionMetric("航线声誉", Math.round(state.market.reputation), "is-gold"),
-      regionMetric("累计交付", state.market.shipments),
+      regionMetric("航线等级", MARKET_TIERS[state.market.tier || 0]?.name || "合作社线"),
     ].join(""))}
     <div class="region-section-heading"><span>今日报价</span><small>第 ${state.market.lastRefreshDay} 天刷新</small></div>
+    <div class="region-note">连续交付 ${state.market.contractStreak || 0} / 3 单可提升航线等级；累计交付 ${state.market.shipments} 份。</div>
     <div class="market-table">${goods}</div>
     <div class="region-section-heading"><span>港口订单</span><small>最多同时接两单</small></div>
     <div class="contract-grid">${contracts || '<div class="empty-note">今天还没有新的订单。</div>'}</div>
@@ -1673,7 +2102,15 @@ function travelToScene(sceneId, mode = "road") {
   if (!scene) return;
   const alreadyVisited = state.world.visitedScenes?.includes(sceneId);
   if (mode === "quick" && !alreadyVisited) {
-    showToast(`还没有走过${scene.name}。请从当前地图找到道路入口。`, { strong: "世界导航" });
+    const event = emitFeedback(state, {
+      eventId: "travel_unvisited",
+      kind: "travel",
+      severity: "warning",
+      sourceScene: currentSceneId(),
+      message: `还没有走过${scene.name}。请从当前地图找到道路入口。`,
+      dedupeKey: `travel_unvisited:${sceneId}:${state.day}`,
+    });
+    showFeedbackToast(event, "世界导航");
     return;
   }
   if (modalOpen) {
@@ -1682,7 +2119,15 @@ function travelToScene(sceneId, mode = "road") {
   }
   const result = switchScene(state, sceneId, mode);
   if (!result.ok) {
-    showToast(result.message, { strong: "路线未开放" });
+    const event = emitFeedback(state, {
+      eventId: "travel_blocked",
+      kind: "travel",
+      severity: "warning",
+      sourceScene: currentSceneId(),
+      message: result.message,
+      dedupeKey: `travel_blocked:${sceneId}:${state.day}`,
+    });
+    showFeedbackToast(event, "路线未开放");
     return;
   }
   audio.setScene(sceneId);
@@ -2217,6 +2662,44 @@ function chooseGovernance(choice) {
   });
 }
 
+function renderPostGameProgressCard() {
+  const modifier = getPostGameModifier(state);
+  if (!modifier) return "";
+  const progress = state.story.postGameProgress || {};
+  const scriptReady = Boolean(progress.scriptId);
+  return `
+    <div class="day-report-card day-postgame-card">
+      <strong>修正牌 · ${modifier.title}</strong>
+      <span>${modifier.constraint} ${modifier.boon}</span>
+      <span>目标：${modifier.goal.label} · ${Math.min(progress.value || 0, modifier.goal.target)} / ${modifier.goal.target} · 第 ${progress.daysElapsed || 0} / ${modifier.durationDays} 天</span>
+      ${scriptReady ? `<button type="button" class="settings-action" data-action="viewPostScript"><span>打开后日谈</span><span>${progress.completed ? "牌面目标达成" : "这一周已经结束"}</span></button>` : `<span>截止：第 ${state.story.postGameDeadline || state.day} 天清晨。</span>`}
+    </div>
+  `;
+}
+
+function renderBridgeQuestCard() {
+  const quest = state.quests || {};
+  if (!quest.activeId && !quest.completed) return "";
+  const step = getBridgeQuestStep(state);
+  const status = quest.completed
+    ? "旧渠木桥已经修好，四站路线完成。"
+    : quest.expired
+      ? `已经过期，桥材保留；第 ${quest.retryDay} 天后可重接。`
+      : step
+        ? `当前：${step.label} · ${SCENE_DEFS[step.scene]?.name || step.scene}`
+        : "路线等待下一步。";
+  return `<div class="day-report-card"><strong>共同工程 · ${BRIDGE_QUEST.title}</strong><span>${status}</span><span>桥材 ${quest.bridgeMaterials || 0} 份 · 已完成 ${quest.completedSteps?.length || 0} / ${BRIDGE_QUEST.steps.length} 步${quest.deadlineDay && !quest.completed ? ` · 期限第 ${quest.deadlineDay} 天` : ""}</span></div>`;
+}
+
+function renderWeeklyCard() {
+  const board = ensureWeeklyBoard(state);
+  const accepted = board.requests.filter((request) => request.accepted && !request.completed && !request.expired);
+  const completed = board.requests.filter((request) => request.completed);
+  if (!accepted.length && !completed.length) return "";
+  const next = accepted[0];
+  return `<div class="day-report-card"><strong>本周公共请求 · 第 ${Math.floor((state.day - 1) / 7) + 1} 周</strong><span>已接下 ${accepted.length} 项 · 已交付 ${completed.length} 项${next ? ` · 下一项「${next.title}」第 ${next.deadlineDay} 天截止` : ""}</span></div>`;
+}
+
 function showEnding() {
   const endingId = resolveEnding(state);
   const ending = ENDINGS[endingId];
@@ -2250,6 +2733,26 @@ function showEnding() {
         这个垂直切片验证了牧场经营、历史调查、人工智能记忆与治理选择之间的关系。
         完整版本将继续进入“边界”和“城市”两章。
       </div>
+      ${
+        state.story.postGameModifier
+          ? renderPostGameProgressCard()
+          : `
+            <div class="section-title">结局后的七天 · 选择一张修正牌</div>
+            <p class="weather-note">修正牌只改变结局之后的一周，不会改写刚刚作出的首周结局判定。每张牌都有一个明确偏向和一个代价。</p>
+            <div class="choice-grid">
+              ${POST_GAME_MODIFIERS.map((modifier, index) =>
+                choiceOption({
+                  number: ["一", "二", "三"][index] || String(index + 1),
+                  title: modifier.title,
+                  description: `${modifier.constraint} ${modifier.boon}`,
+                  cost: modifier.goal.label,
+                  action: "choosePostGameModifier",
+                  value: modifier.id,
+                }),
+              ).join("")}
+            </div>
+          `
+      }
       <div class="section-title">这段生活的关系图</div>
       ${relationMarkup}
     `,
@@ -2345,6 +2848,53 @@ function sleepAndAdvance(auto = false) {
   showDaySummary(report, willStartDrought ? "drought" : willMeetInvestor ? "investor" : null, auto);
 }
 
+function renderDailyRecapPanel() {
+  const options = Array.isArray(state.daily?.recapOptions) ? state.daily.recapOptions : [];
+  if (!options.length) return "";
+  const facts = Array.isArray(state.daily?.recapFacts) ? state.daily.recapFacts : [];
+  if (state.daily.recapChoice) {
+    const chosen = options.find((option) => option.id === state.daily.recapChoice);
+    return `
+      <div class="day-recap-card is-resolved" data-recap-panel>
+        <strong>今天的解释已经写下</strong>
+        <span>${chosen ? `${chosen.label} · ${chosen.effect}` : "你把这段经验留在了自己的记录里。"}</span>
+      </div>
+    `;
+  }
+  return `
+    <div class="day-recap-card" data-recap-panel>
+      <strong>第 ${state.daily.recapDay || state.day - 1} 天 · 这些事实应该怎样被记住？</strong>
+      <ul class="day-recap-facts">
+        ${facts.map((fact) => `<li>${fact}</li>`).join("")}
+      </ul>
+      <div class="day-recap-actions">
+        ${options.map((option) => `
+          <button type="button" class="day-recap-option" data-action="dailyRecap" data-value="${option.id}">
+            <b>${option.label}</b>
+            <span>${option.detail}</span>
+            <small>${option.effect}</small>
+          </button>
+        `).join("")}
+      </div>
+    </div>
+  `;
+}
+
+function openDailyRecap() {
+  const options = Array.isArray(state.daily?.recapOptions) ? state.daily.recapOptions : [];
+  if (!options.length) {
+    showToast("今天还没有需要解释的日结。", { strong: "牧心回顾" });
+    return;
+  }
+  openModal({
+    kicker: "牧心回顾 · 昨日取舍",
+    title: "把劳动解释成什么",
+    wide: true,
+    body: renderDailyRecapPanel(),
+    footer: `<span class="pause-label">选择只会结算一次</span><button type="button" class="button button--ghost" data-action="close">稍后再写</button>`,
+  });
+}
+
 function showDaySummary(report, nextEvent = null, auto = false) {
   pendingMorningEvent = nextEvent;
   const weather = weatherPresentation[report.weather] || weatherPresentation.sunny;
@@ -2368,6 +2918,37 @@ function showDaySummary(report, nextEvent = null, auto = false) {
       <div class="weather-note">
         今日天气：${weather.icon} ${weather.label}。${productList}
       </div>
+      ${renderDailyRecapPanel()}
+      ${
+        report.postGame
+          ? `<div class="day-report-card"><strong>后日谈 · ${report.postGame.title}</strong><span>${report.postGame.label}：${Math.min(report.postGame.value, report.postGame.target)} / ${report.postGame.target} · 第 ${report.postGame.daysElapsed} / 7 天${report.postGame.completed ? " · 牌面目标已经达成" : report.postGame.failed ? " · 这一周已经结束" : ""}</span></div>`
+          : ""
+      }
+      ${
+        report.feedbackEvents?.length
+          ? `<div class="day-report-card"><strong>今日反馈记录</strong>${report.feedbackEvents.map((event) => `<span><code>${event.eventId}</code> · ${event.message}</span>`).join("")}</div>`
+          : ""
+      }
+      ${
+        report.questExpired
+          ? `<div class="clue-verification">共同工程「${report.questExpired}」错过期限。桥材和已完成步骤仍保留，下一周可以重新接上。</div>`
+          : ""
+      }
+      ${
+        report.weeklyExpired?.length
+          ? `<div class="clue-verification">本周公共请求未交付：${report.weeklyExpired.join("、")}。公民点和声誉受到影响，下一周公告板会刷新。</div>`
+          : ""
+      }
+      ${
+        report.seasonVariant
+          ? `<div class="day-report-card"><strong>${state.season}季路线 · ${report.seasonVariant.label}</strong><span>${report.seasonVariant.routeLabel}已经在地图上显出来。沿它走，可以找到本季专属的采集点；其他季节的入口会安静地收起，但主路始终可达。</span></div>`
+          : ""
+      }
+      ${
+        getActiveFestival(state)
+          ? `<div class="day-report-card"><strong>节日现场 · 潮灯节</strong><span>港口今天的摊位和灯船只在今天出现。完成任意两项现场活动，可以领取节日回报。</span></div>`
+          : ""
+      }
       ${
         report.helperActions?.length
           ? `<div class="day-report-card day-report-card--helpers"><strong>小精灵日结</strong><span>${report.helperActions.join("；")}。</span></div>`
@@ -2379,6 +2960,7 @@ function showDaySummary(report, nextEvent = null, auto = false) {
           : ""
       }
       ${report.shipping?.units ? `<div class="day-report-card"><strong>出货箱结算</strong><span>昨日交付 ${report.shipping.units} 份，到账 ${report.shipping.value} 金。</span></div>` : ""}
+      ${report.shipping?.delayed ? `<div class="day-report-card"><strong>${report.shipping.route} · 在途</strong><span>这批货物还在海上，预计第 ${report.shipping.arrivalDay} 天到港。货物留在出货箱记录里，不会丢失。</span></div>` : ""}
       ${report.dailyTasks ? `<div class="day-report-card"><strong>今日清单</strong><span>完成 ${report.dailyTasks.completed.length} 项，未完成 ${report.dailyTasks.incomplete.length} 项，已获得 ${report.dailyTasks.reward} 金。${report.dailyTasks.incomplete.length ? "未完成：" + report.dailyTasks.incomplete.map((task) => task.text + "（" + task.progress + "/" + task.target + "）").join("、") : "明天继续保持这个节奏。"}</span></div>` : ""}
       ${report.forageStats?.spawned || report.forageStats?.collected || report.forageStats?.expired ? `<div class="day-report-card"><strong>${report.forageStats.window ? "雨后采集" : "季节山货"}</strong><span>新出现 ${report.forageStats.spawned} 个节点，采到 ${report.forageStats.collected} 个，过期 ${report.forageStats.expired} 个。${report.forageStats.window ? "雨后窗口只开放到上午九点。" : ""}</span></div>` : ""}
       ${report.livestock?.length ? `<div class="day-report-card"><strong>牲畜日结</strong><span>${report.livestock.map((animal) => `${animal.name} · ${animal.sick ? "生病" : animal.unhappy ? "不开心" : "状态稳定"} · 健康 ${Math.round(animal.health)} · 亲密 ${Math.round(animal.affection)} · 放牧 ${Math.round(animal.outdoorMinutes)} 分钟`).join("；")}</span></div>` : ""}
@@ -2502,6 +3084,17 @@ function openShippingBin() {
       }, 0) + Object.entries(state.inventory.resources || {}).reduce((sum, [id, count]) => sum + count * getMarketPrice(state, id), 0)
     : 0;
   const pendingValue = state.shipping.pending.reduce((sum, item) => sum + item.amount * item.unitPrice, 0);
+  const routeButtons = Object.values(SHIPPING_ROUTES).map((route) => `
+    <button type="button" class="route-choice ${state.shipping.selectedRoute === route.id ? "is-active" : ""}" data-action="selectShippingRoute" data-value="${route.id}">
+      <strong>${route.shortName}</strong>
+      <span>${formatClock(route.departMinute)} 发船 · ${route.arrivalDays} 天到港 · 手续费 ${Math.round(route.feeRate * 100)}%</span>
+      <small>${route.description}</small>
+    </button>
+  `).join("");
+  const trip = state.shipping.trip;
+  const tripNote = trip
+    ? `${SHIPPING_ROUTES[trip.routeId]?.name || "当前航次"} · ${formatClock(trip.departMinute)} 发船 · 第 ${trip.arrivalDay} 天到港 · 已装 ${trip.manifest?.reduce((sum, item) => sum + item.amount, 0) || 0} 份`
+    : "还没有在途航次。选择一条路线后，出货箱会在下一班船发出。";
   openModal({
     kicker: "牧场合作社 · 出货箱",
     title: "把今天的收成交给明天",
@@ -2511,6 +3104,11 @@ function openShippingBin() {
         <span>今日待交付估值</span>
         <strong>✦ ${total}</strong>
         <span>已在箱内待结算 ✦ ${pendingValue}</span>
+      </div>
+      <div class="shipping-route-panel">
+        <div class="section-title">选择下一班船</div>
+        <div class="shipping-route-grid">${routeButtons}</div>
+        <div class="weather-note">${tripNote}</div>
       </div>
       <div class="shop-grid">
         ${rows.join("") || '<div class="empty-note">出货箱里还空着。收获作物或照料牲畜后再来看看。</div>'}
@@ -2543,7 +3141,7 @@ function doShipping() {
   saveGame(state);
   updateHUD(true);
   closeModal();
-  showToast(result.message, { strong: "合作社结算", duration: 4200 });
+  showToast(result.message, { strong: "航运排期", duration: 4200 });
 }
 
 function openMenu() {
@@ -2592,6 +3190,9 @@ function openMenu() {
           ${relationRow("劳动者", state.relations.workers)}
           ${relationRow("生态韧性", state.relations.ecology, "metric-track--blue")}
           ${relationRow("企业影响", state.relations.corporation, "metric-track--amber")}
+          ${state.story.postGameModifier ? renderPostGameProgressCard() : ""}
+          ${renderBridgeQuestCard()}
+          ${renderWeeklyCard()}
         </div>
         <div>
           <div class="section-title">背包 · ${getBagUsage(state)} / ${state.bag.slots} 格</div>
@@ -2604,6 +3205,16 @@ function openMenu() {
           </div>
           <div class="section-title">设置</div>
           <div class="settings-list">
+            ${
+              state.daily?.recapOptions?.length && !state.daily.recapChoice
+                ? `<button type="button" class="settings-action" data-action="openDailyRecap">
+                    <span>昨日回顾</span><span>还有一段解释没有写下</span>
+                  </button>`
+                : ""
+            }
+            <button type="button" class="settings-action" data-action="openCollection">
+              <span>共同地方志</span><span>${state.collection.entries.length} 条已收录</span>
+            </button>
             <button type="button" class="settings-action" data-action="toggleSound">
               <span>环境声音</span><span>${state.settings.sound ? "开启" : "关闭"}</span>
             </button>
@@ -2783,6 +3394,19 @@ function handleModalClick(event) {
       shopTab = value;
       openShop();
       break;
+    case "selectShippingRoute": {
+      const result = selectShippingRoute(state, value);
+      if (result.ok) {
+        audio.play("ui");
+        showToast(result.message, { strong: "航运路线" });
+        saveGame(state);
+        openShippingBin();
+      } else {
+        audio.play("error");
+        showToast(result.message, { strong: "航运路线" });
+      }
+      break;
+    }
     case "shipProduce":
       doShipping();
       break;
@@ -2797,6 +3421,46 @@ function handleModalClick(event) {
     case "recordElderClue":
       recordElderClue();
       break;
+    case "npcTopic": {
+      const [npcId, choiceId] = value.split("|");
+      const result = resolveNpcTopic(state, npcId, choiceId);
+      if (result.ok) {
+        const npc = SCENE_NPCS.find((entry) => entry.id === npcId);
+        closeModal();
+        updateHUD(true);
+        saveGame(state);
+        audio.play(result.delta > 0 ? "success" : "error");
+        showToast(result.message, {
+          strong: `${npc?.name || "居民"} · 关系 ${Math.round(result.relation)}`,
+          duration: 4600,
+        });
+      } else {
+        audio.play("error");
+        showToast(result.message, { strong: "每日话题" });
+      }
+      break;
+    }
+    case "openGiftPanel":
+      openGiftPanel(value);
+      break;
+    case "giftItem": {
+      const [npcId, itemId] = value.split("|");
+      const result = giveGift(state, npcId, itemId);
+      if (result.ok) {
+        closeModal();
+        updateHUD(true);
+        saveGame(state);
+        audio.play("success");
+        showToast(result.message, {
+          strong: `${SCENE_NPCS.find((entry) => entry.id === npcId)?.name || "居民"} · 关系 ${Math.round(result.relation)}`,
+          duration: 4600,
+        });
+      } else {
+        audio.play("error");
+        showToast(result.message, { strong: "礼物" });
+      }
+      break;
+    }
     case "waterChoice":
       chooseWater(value);
       break;
@@ -2809,6 +3473,48 @@ function handleModalClick(event) {
     case "viewEnding":
       showEnding();
       break;
+    case "choosePostGameModifier": {
+      const result = choosePostGameModifier(state, value);
+      if (result.ok) {
+        audio.play("memory");
+        saveGame(state);
+        updateHUD(true);
+        openModal({
+          kicker: "后日谈 · 修正牌",
+          title: result.modifier.title,
+          body: `
+            <p class="story-lead">${result.modifier.constraint}</p>
+            <div class="weather-note">${result.modifier.boon}</div>
+            <div class="day-report-card"><strong>七天目标</strong><span>${result.modifier.goal.label}。从明天清晨开始记录，首周结局不会再被改写。</span></div>
+          `,
+          footer: `<button type="button" class="button button--primary" data-action="continueFreeplay">开始这七天</button>`,
+        });
+      } else {
+        audio.play("error");
+        showToast(result.message, { strong: "修正牌" });
+      }
+      break;
+    }
+    case "viewPostScript": {
+      const modifier = getPostGameModifier(state);
+      const progress = state.story.postGameProgress || {};
+      if (!modifier || !progress.scriptId) {
+        showToast("这段后日谈还没有写完。", { strong: "后日谈" });
+        break;
+      }
+      const script = progress.completed ? modifier.epilogue : modifier.fail;
+      openModal({
+        kicker: `后日谈 · ${modifier.title}`,
+        title: script.title,
+        body: `
+          <p class="story-lead">${script.text}</p>
+          <div class="story-quote">${script.note}<cite>—— 修正牌「${modifier.title}」</cite></div>
+          <div class="weather-note">进度：${modifier.goal.label} · ${progress.value} / ${modifier.goal.target} · 第 ${progress.daysElapsed} / ${modifier.durationDays} 天。</div>
+        `,
+        footer: `<button type="button" class="button button--primary" data-action="close">继续生活</button>`,
+      });
+      break;
+    }
     case "continueFreeplay":
       closeModal();
       updateHUD(true);
@@ -2945,6 +3651,70 @@ function handleModalClick(event) {
     case "toggleSound":
       toggleSound(true);
       break;
+    case "openCollection":
+      openCollectionBook();
+      break;
+    case "openDailyRecap":
+      openDailyRecap();
+      break;
+    case "acceptBridgeQuest": {
+      const result = startBridgeQuest(state);
+      if (result.ok) {
+        closeModal();
+        audio.play("success");
+        showFeedbackToast(state.feedback?.lastEvent, "旧渠木桥", 4600);
+        updateHUD(true);
+        updateInteractionHint();
+        saveGame(state);
+      } else {
+        audio.play("error");
+        showToast(result.message, { strong: "旧渠木桥" });
+      }
+      break;
+    }
+    case "acceptWeekly": {
+      const result = acceptWeeklyRequest(state, value);
+      if (result.ok) {
+        audio.play("ui");
+        showToast(result.message, { strong: "本周公共请求" });
+        saveGame(state);
+        openWeeklyBoard();
+      } else {
+        audio.play("error");
+        showToast(result.message, { strong: "本周公共请求" });
+      }
+      break;
+    }
+    case "deliverWeekly": {
+      const result = deliverWeeklyRequest(state, value);
+      if (result.ok) {
+        audio.play("success");
+        showToast(result.message, { strong: "本周公共请求" });
+        updateHUD(true);
+        saveGame(state);
+        openWeeklyBoard();
+      } else {
+        audio.play("error");
+        showToast(result.message, { strong: "本周公共请求" });
+      }
+      break;
+    }
+    case "dailyRecap": {
+      const result = resolveDailyRecap(state, value);
+      if (result.ok) {
+        for (const panel of document.querySelectorAll("[data-recap-panel]")) {
+          panel.outerHTML = renderDailyRecapPanel();
+        }
+        audio.play("success");
+        showToast(result.option.effect, { strong: `日结解释 · ${result.option.label}`, duration: 4200 });
+        updateHUD(true);
+        saveGame(state);
+      } else {
+        audio.play("error");
+        showToast(result.message, { strong: "日结解释" });
+      }
+      break;
+    }
     case "toggleBlur":
       showToast("当前网页版本已经使用完整画面细节。");
       break;
@@ -3031,14 +3801,93 @@ function handleKeyUp(event) {
   keys.delete(event.key.toLowerCase());
 }
 
+function refreshTouchEnvironment() {
+  touchInputState.orientation = window.innerWidth > window.innerHeight ? "landscape" : "portrait";
+  if (!dom.touchControls) {
+    touchInputState.safeAreaInsets = {};
+    return;
+  }
+  const styles = getComputedStyle(dom.touchControls);
+  touchInputState.safeAreaInsets = {
+    bottom: Math.max(0, Number.parseFloat(styles.bottom) || 0),
+    left: Math.max(0, Number.parseFloat(styles.left) || 0),
+    right: Math.max(0, Number.parseFloat(styles.right) || 0),
+  };
+}
+
+function syncTouchDirections() {
+  touchDirections.clear();
+  for (const control of touchPointers.values()) {
+    if (control.direction) touchDirections.add(control.direction);
+  }
+  runtime.moving = touchDirections.size > 0;
+}
+
+function clearTouchInputs() {
+  for (const control of touchPointers.values()) {
+    control.button?.classList.remove("is-pressed");
+  }
+  touchPointers.clear();
+  touchDirections.clear();
+  dom.touchAction?.classList.remove("is-pressed");
+  runtime.moving = false;
+}
+
+function beginTouchControl(event) {
+  const button = event.currentTarget;
+  const direction = button.dataset.move || null;
+  event.preventDefault();
+  if (!direction) {
+    if (minigameLayer.active) return;
+    const now = performance.now();
+    if (now - touchInputState.lastActionAt < 180) return;
+    touchInputState.lastActionAt = now;
+    touchInputState.acceptedActions += 1;
+    button.classList.add("is-pressed");
+    performAction();
+    return;
+  }
+  try {
+    button.setPointerCapture?.(event.pointerId);
+  } catch (error) {
+    // Synthetic pointer streams may not own a capture target.
+  }
+  touchPointers.set(event.pointerId, { button, direction });
+  button.classList.add("is-pressed");
+  syncTouchDirections();
+}
+
+function endTouchControl(event) {
+  const control = touchPointers.get(event.pointerId);
+  if (control) {
+    control.button?.classList.remove("is-pressed");
+    touchPointers.delete(event.pointerId);
+    try {
+      control.button?.releasePointerCapture?.(event.pointerId);
+    } catch (error) {
+      // Capture may already have been released by the browser.
+    }
+  }
+  if (event.currentTarget === dom.touchAction) {
+    dom.touchAction.classList.remove("is-pressed");
+  }
+  syncTouchDirections();
+}
+
 function bindEvents() {
   window.addEventListener("keydown", handleKeyDown);
   window.addEventListener("keyup", handleKeyUp);
-  window.addEventListener("resize", resizeViewport);
-  window.addEventListener("orientationchange", () => window.setTimeout(resizeViewport, 80));
+  window.addEventListener("resize", () => {
+    resizeViewport();
+    refreshTouchEnvironment();
+  });
+  window.addEventListener("orientationchange", () => window.setTimeout(() => {
+    resizeViewport();
+    refreshTouchEnvironment();
+  }, 80));
   window.addEventListener("blur", () => {
     keys.clear();
-    touchDirections.clear();
+    clearTouchInputs();
   });
 
   dom.newGameButton.addEventListener("click", () => {
@@ -3101,39 +3950,18 @@ function bindEvents() {
     if (modalClosable) closeModal();
   });
 
-  for (const button of document.querySelectorAll("[data-move]")) {
-    const direction = button.dataset.move;
-    const press = (event) => {
-      event.preventDefault();
-      touchDirections.add(direction);
-      button.classList.add("is-pressed");
-      try {
-        button.setPointerCapture?.(event.pointerId);
-      } catch (error) {
-        // Some synthetic or interrupted pointer streams have no active capture target.
-      }
-    };
-    const release = (event) => {
-      event.preventDefault();
-      touchDirections.delete(direction);
-      button.classList.remove("is-pressed");
-    };
-    button.addEventListener("pointerdown", press);
-    button.addEventListener("pointerup", release);
-    button.addEventListener("pointercancel", release);
-    button.addEventListener("pointerleave", release);
+  const touchButtons = [
+    ...document.querySelectorAll("[data-move]"),
+    dom.touchAction,
+  ].filter(Boolean);
+  for (const button of touchButtons) {
+    button.addEventListener("pointerdown", beginTouchControl);
+    button.addEventListener("pointerup", endTouchControl);
+    button.addEventListener("pointercancel", endTouchControl);
+    button.addEventListener("pointerleave", endTouchControl);
   }
-
-  dom.touchAction.addEventListener("pointerdown", (event) => {
-    event.preventDefault();
-    dom.touchAction.classList.add("is-pressed");
-    if (minigameLayer.active) return;
-    performAction();
-  });
-  dom.touchAction.addEventListener("pointerup", () => dom.touchAction.classList.remove("is-pressed"));
-  dom.touchAction.addEventListener("pointercancel", () =>
-    dom.touchAction.classList.remove("is-pressed"),
-  );
+  dom.touchControls?.addEventListener("contextmenu", (event) => event.preventDefault());
+  refreshTouchEnvironment();
 }
 
 function startNewGame() {
@@ -3166,6 +3994,16 @@ window.__RANCH_DEBUG__ = {
   actions: {
     performAction: () => performAction(),
     getTargetPlot: () => getTargetPlot(state),
+    npcPositions: (sceneId = state.world.scene, minutes = state.minutes) =>
+      scheduledNpcPositions(minutes, sceneId),
+    touchState: () => ({
+      pointerIds: Array.from(touchPointers.keys()),
+      directions: Array.from(touchDirections),
+      lastActionAt: touchInputState.lastActionAt,
+      acceptedActions: touchInputState.acceptedActions,
+      orientation: touchInputState.orientation,
+      safeAreaInsets: { ...touchInputState.safeAreaInsets },
+    }),
     advanceDay: () => {
       const report = advanceDay(state);
       updateHUD(true);

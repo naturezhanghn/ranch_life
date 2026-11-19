@@ -1,5 +1,6 @@
 export const SAVE_KEY = "ranch-life-common-ground-save-v1";
-export const SAVE_VERSION = 2;
+export const SAVE_BACKUP_KEY = "ranch-life-common-ground-save-v1-backup";
+export const SAVE_VERSION = 3;
 export const DAY_LENGTH_MINUTES = 18 * 60;
 export const DAY_START_MINUTES = 6 * 60;
 export const NIGHT_MINUTES = 22 * 60;
@@ -44,7 +45,7 @@ export const HOUSE_UPGRADES = [
 ];
 export const TOWN_EVENTS = [
   { id: "spring_market", season: "春", day: 7, title: "春芽集市", reward: 80, description: "城镇广场收购春季作物，价格提高。" },
-  { id: "summer_festival", season: "夏", day: 14, title: "潮灯节", reward: 120, description: "贸易港与海岛声誉获得额外提升。" },
+  { id: "summer_festival", season: "夏", day: 14, title: "潮灯节", reward: 120, description: "贸易港与海岛声誉获得额外提升。", festivalId: "tide_lantern" },
   { id: "autumn_harvest", season: "秋", day: 21, title: "丰收会", reward: 160, description: "高品质牲畜产品获得额外结算。" },
   { id: "winter_birthdays", season: "冬", day: 3, title: "冬日生日会", reward: 60, description: "给当天的居民送礼可获得双倍关系。" },
 ];
@@ -259,16 +260,455 @@ export const SCENE_DEFS = {
   },
 };
 
+export const SCENE_SEASON_VARIANTS = {
+  farm: {
+    春: {
+      label: "融雪渠岸",
+      palette: ["#94b67b", "#73985e"],
+      routeLabel: "沿旧渠看融雪",
+      landmark: {
+        id: "farm_spring_seep",
+        x: 1120,
+        y: 500,
+        radius: 58,
+        label: "查看融雪渠口",
+        itemId: "spring_herb",
+        detail: "雪水从旧渠石缝里渗出来，渠岸先长出了今年第一丛春芽草。",
+      },
+      blockers: [],
+    },
+    夏: {
+      label: "浓荫渠岸",
+      palette: ["#8eae63", "#5f8f55"],
+      routeLabel: "穿过蝉鸣树荫",
+      landmark: {
+        id: "farm_summer_shade",
+        x: 1120,
+        y: 500,
+        radius: 58,
+        label: "查看渠边树荫",
+        itemId: "summer_berry",
+        detail: "树荫把正午的渠水压暗了一截，夏莓在潮湿的石缝边熟得发亮。",
+      },
+      blockers: [{ x: 690, y: 430, w: 140, h: 38, label: "集市草棚" }],
+    },
+    秋: {
+      label: "落叶车辙",
+      palette: ["#b2945d", "#7f8355"],
+      routeLabel: "沿落叶车辙走",
+      landmark: {
+        id: "farm_autumn_rut",
+        x: 1120,
+        y: 500,
+        radius: 58,
+        label: "查看落叶车辙",
+        itemId: "autumn_mushroom",
+        detail: "运草车压出的旧车辙里积着湿叶，秋野菇从木屑和渠泥之间冒出来。",
+      },
+      blockers: [{ x: 700, y: 500, w: 120, h: 36, label: "晒谷架" }],
+    },
+    冬: {
+      label: "薄冰渠岸",
+      palette: ["#9fb5b4", "#6d898b"],
+      routeLabel: "绕开薄冰去渠口",
+      landmark: {
+        id: "farm_winter_ice",
+        x: 1120,
+        y: 500,
+        radius: 58,
+        label: "查看薄冰渠口",
+        itemId: "winter_root",
+        detail: "渠面结着薄冰，冰下的雪下根仍然活着。旧水渠没有停，只是走得更慢。",
+      },
+      blockers: [{ x: 720, y: 430, w: 110, h: 32, label: "封路雪堆" }],
+    },
+  },
+  city: {
+    春: {
+      label: "槐花街",
+      palette: ["#8ca98a", "#5d7969"],
+      routeLabel: "沿槐花街去广场",
+      landmark: {
+        id: "city_spring_blossom",
+        x: 620,
+        y: 580,
+        radius: 56,
+        label: "查看槐花落处",
+        itemId: "spring_herb",
+        detail: "老槐树下落了一层花，春芽草从石缝里钻出来，经过的人都没有踩它。",
+      },
+      blockers: [],
+    },
+    夏: {
+      label: "遮阳长廊",
+      palette: ["#78998b", "#4f6f67"],
+      routeLabel: "沿遮阳长廊去港口",
+      landmark: {
+        id: "city_summer_awning",
+        x: 620,
+        y: 580,
+        radius: 56,
+        label: "查看遮阳长廊",
+        itemId: "summer_berry",
+        detail: "布篷把广场切成一条阴凉的走廊，夏莓摊主把最甜的一小篮留给路人尝。",
+      },
+      blockers: [{ x: 930, y: 520, w: 120, h: 34, label: "夏日摊位" }],
+    },
+    秋: {
+      label: "丰收侧街",
+      palette: ["#a68f68", "#6d6f58"],
+      routeLabel: "穿过丰收侧街",
+      landmark: {
+        id: "city_autumn_market",
+        x: 620,
+        y: 580,
+        radius: 56,
+        label: "查看丰收侧街",
+        itemId: "autumn_mushroom",
+        detail: "侧街堆着新谷袋和木箱，潮湿的箱底长出秋野菇，清洁工把它们扫到树根边。",
+      },
+      blockers: [{ x: 210, y: 500, w: 116, h: 36, label: "谷袋堆" }],
+    },
+    冬: {
+      label: "炉火门廊",
+      palette: ["#8c9ba0", "#586b73"],
+      routeLabel: "沿炉火门廊回议事厅",
+      landmark: {
+        id: "city_winter_hearth",
+        x: 620,
+        y: 580,
+        radius: 56,
+        label: "查看炉火门廊",
+        itemId: "winter_root",
+        detail: "门廊边的炉灰还温着，雪下根被居民埋在灰里保鲜，留给晚归的人。",
+      },
+      blockers: [{ x: 930, y: 520, w: 104, h: 30, label: "防滑沙袋" }],
+    },
+  },
+  port: {
+    春: {
+      label: "潮痕栈桥",
+      palette: ["#75aaa9", "#467982"],
+      routeLabel: "沿潮痕上栈桥",
+      landmark: {
+        id: "port_spring_tide",
+        x: 700,
+        y: 620,
+        radius: 56,
+        label: "查看潮痕栈桥",
+        itemId: "spring_herb",
+        detail: "春潮把一小片草籽带上栈桥，木缝里长出了盐味很重的春芽草。",
+      },
+      blockers: [],
+    },
+    夏: {
+      label: "凉潮码头",
+      palette: ["#68a2a7", "#39717f"],
+      routeLabel: "沿凉潮码头去渡轮",
+      landmark: {
+        id: "port_summer_breeze",
+        x: 700,
+        y: 620,
+        radius: 56,
+        label: "查看凉潮码头",
+        itemId: "summer_berry",
+        detail: "午后的海风从货箱之间穿过，夏莓被船员放在阴凉处，免得被太阳晒软。",
+      },
+      blockers: [{ x: 470, y: 500, w: 128, h: 34, label: "装卸货箱" }],
+    },
+    秋: {
+      label: "货栈风门",
+      palette: ["#8d9a89", "#506d6d"],
+      routeLabel: "穿过货栈风门",
+      landmark: {
+        id: "port_autumn_warehouse",
+        x: 700,
+        y: 620,
+        radius: 56,
+        label: "查看货栈风门",
+        itemId: "autumn_mushroom",
+        detail: "风门后的木托盘带着远洋湿气，秋野菇长在没人注意的角落里。",
+      },
+      blockers: [{ x: 470, y: 500, w: 108, h: 32, label: "封舱木架" }],
+    },
+    冬: {
+      label: "封港信号",
+      palette: ["#82989f", "#4d6670"],
+      routeLabel: "沿封港信号走",
+      landmark: {
+        id: "port_winter_signal",
+        x: 700,
+        y: 620,
+        radius: 56,
+        label: "查看封港信号",
+        itemId: "winter_root",
+        detail: "冬季船班变少，信号灯下堆着防冻的稻草。雪下根被压在稻草里，等下一艘船。",
+      },
+      blockers: [{ x: 470, y: 500, w: 96, h: 30, label: "防冻草包" }],
+    },
+  },
+  island: {
+    春: {
+      label: "候鸟沙脊",
+      palette: ["#97c7b5", "#548f88"],
+      routeLabel: "沿候鸟沙脊去潮池",
+      landmark: {
+        id: "island_spring_migration",
+        x: 640,
+        y: 620,
+        radius: 56,
+        label: "查看候鸟沙脊",
+        itemId: "spring_herb",
+        detail: "候鸟在沙脊上歇脚，翅膀带下来的草籽在潮线以上发了芽。",
+      },
+      blockers: [],
+    },
+    夏: {
+      label: "珊瑚浅滩",
+      palette: ["#83c2b8", "#438b8b"],
+      routeLabel: "沿珊瑚浅滩去灯塔",
+      landmark: {
+        id: "island_summer_coral",
+        x: 640,
+        y: 620,
+        radius: 56,
+        label: "查看珊瑚浅滩",
+        itemId: "summer_berry",
+        detail: "浅滩水温升高，夏莓在背阴的礁石后成熟，孩子们只摘熟透的那几颗。",
+      },
+      blockers: [{ x: 520, y: 500, w: 104, h: 32, label: "潮汐浮标" }],
+    },
+    秋: {
+      label: "候鸟礁",
+      palette: ["#9fb69c", "#557e75"],
+      routeLabel: "沿候鸟礁去潮池",
+      landmark: {
+        id: "island_autumn_reef",
+        x: 640,
+        y: 620,
+        radius: 56,
+        label: "查看候鸟礁",
+        itemId: "autumn_mushroom",
+        detail: "秋潮把海藻和木片堆在礁石背风处，秋野菇在淡水渗出的地方长了一圈。",
+      },
+      blockers: [{ x: 520, y: 500, w: 92, h: 30, label: "晒网架" }],
+    },
+    冬: {
+      label: "避风灯塔",
+      palette: ["#90aaa9", "#4d7579"],
+      routeLabel: "沿避风灯塔回渡口",
+      landmark: {
+        id: "island_winter_lighthouse",
+        x: 640,
+        y: 620,
+        radius: 56,
+        label: "查看避风灯塔",
+        itemId: "winter_root",
+        detail: "冬季海风被灯塔挡住，墙根下的雪下根是岛上少数还活着的绿色。",
+      },
+      blockers: [{ x: 520, y: 500, w: 88, h: 28, label: "防浪木栅" }],
+    },
+  },
+  council: {
+    春: {
+      label: "水章花窗",
+      palette: ["#849ba5", "#566d77"],
+      routeLabel: "沿水章花窗去档案桌",
+      landmark: {
+        id: "council_spring_window",
+        x: 600,
+        y: 620,
+        radius: 56,
+        label: "查看水章花窗",
+        itemId: "spring_herb",
+        detail: "花窗把春日的绿光投在水章上，窗台边的春芽草提醒人们：水也会记住季节。",
+      },
+      blockers: [],
+    },
+    夏: {
+      label: "石廊阴面",
+      palette: ["#7b9199", "#4b626b"],
+      routeLabel: "沿石廊阴面去议事桌",
+      landmark: {
+        id: "council_summer_corridor",
+        x: 600,
+        y: 620,
+        radius: 56,
+        label: "查看石廊阴面",
+        itemId: "summer_berry",
+        detail: "石廊把暑气挡在门外，夏莓被放在窗边的水盆里，供来议事的人分着吃。",
+      },
+      blockers: [{ x: 300, y: 500, w: 110, h: 30, label: "临时长椅" }],
+    },
+    秋: {
+      label: "档案晒台",
+      palette: ["#8e8d7e", "#59645e"],
+      routeLabel: "沿档案晒台去水章桌",
+      landmark: {
+        id: "council_autumn_terrace",
+        x: 600,
+        y: 620,
+        radius: 56,
+        label: "查看档案晒台",
+        itemId: "autumn_mushroom",
+        detail: "晒台上的旧纸页被风翻动，秋野菇从潮湿的砖缝里探出来，像另一份未归档的证据。",
+      },
+      blockers: [{ x: 300, y: 500, w: 96, h: 28, label: "晾纸架" }],
+    },
+    冬: {
+      label: "水章暖房",
+      palette: ["#81939a", "#506873"],
+      routeLabel: "沿水章暖房去议事桌",
+      landmark: {
+        id: "council_winter_room",
+        x: 600,
+        y: 620,
+        radius: 56,
+        label: "查看水章暖房",
+        itemId: "winter_root",
+        detail: "暖房里的水没有结冰，雪下根被种在旧水章柜旁，提醒每个人制度也要过冬。",
+      },
+      blockers: [{ x: 300, y: 500, w: 84, h: 26, label: "门帘挡风架" }],
+    },
+  },
+  workshop: {
+    春: {
+      label: "温室花架",
+      palette: ["#92ae7c", "#618662"],
+      routeLabel: "沿温室花架去种子仓",
+      landmark: {
+        id: "workshop_spring_trellis",
+        x: 520,
+        y: 380,
+        radius: 56,
+        label: "查看温室花架",
+        itemId: "spring_herb",
+        detail: "小精灵把第一根藤蔓牵上花架，春芽草在花盆边缘自己长了出来。",
+      },
+      blockers: [],
+    },
+    夏: {
+      label: "蜂蜜花墙",
+      palette: ["#8aa967", "#5a815d"],
+      routeLabel: "沿蜂蜜花墙去温室",
+      landmark: {
+        id: "workshop_summer_honey",
+        x: 520,
+        y: 380,
+        radius: 56,
+        label: "查看蜂蜜花墙",
+        itemId: "summer_berry",
+        detail: "花墙把工坊的午后染成金色，夏莓被蜜蜂和精灵一起看护着。",
+      },
+      blockers: [{ x: 760, y: 500, w: 104, h: 30, label: "蜂箱推车" }],
+    },
+    秋: {
+      label: "种子仓侧门",
+      palette: ["#a18f69", "#6b7a5c"],
+      routeLabel: "沿种子仓侧门去花园",
+      landmark: {
+        id: "workshop_autumn_seed",
+        x: 520,
+        y: 380,
+        radius: 56,
+        label: "查看种子仓侧门",
+        itemId: "autumn_mushroom",
+        detail: "侧门边的木箱受了潮，秋野菇从谷壳里长出来，精灵把它记录成新的观察样本。",
+      },
+      blockers: [{ x: 760, y: 500, w: 96, h: 28, label: "种子麻袋" }],
+    },
+    冬: {
+      label: "月光温室",
+      palette: ["#89a3a1", "#577b75"],
+      routeLabel: "沿月光温室去种子仓",
+      landmark: {
+        id: "workshop_winter_glass",
+        x: 520,
+        y: 380,
+        radius: 56,
+        label: "查看月光温室",
+        itemId: "winter_root",
+        detail: "温室玻璃上结着薄霜，雪下根在暖灯下缓慢生长，证明照料不一定追求速度。",
+      },
+      blockers: [{ x: 760, y: 500, w: 88, h: 26, label: "暖灯推车" }],
+    },
+  },
+  quarry: {
+    春: {
+      label: "矿脉苔痕",
+      palette: ["#8c876d", "#4b5146"],
+      routeLabel: "沿矿脉苔痕去深井",
+      landmark: {
+        id: "quarry_spring_moss",
+        x: 760,
+        y: 620,
+        radius: 56,
+        label: "查看矿脉苔痕",
+        itemId: "spring_herb",
+        detail: "矿壁渗水的地方长出一线新苔，旧矿道也有自己的春天。",
+      },
+      blockers: [],
+    },
+    夏: {
+      label: "井口凉风",
+      palette: ["#8b8267", "#48483f"],
+      routeLabel: "沿井口凉风去矿车",
+      landmark: {
+        id: "quarry_summer_draft",
+        x: 760,
+        y: 620,
+        radius: 56,
+        label: "查看井口凉风",
+        itemId: "summer_berry",
+        detail: "深井送出的凉风让矿工把夏莓暂存在井口，免得午后就坏掉。",
+      },
+      blockers: [{ x: 450, y: 500, w: 108, h: 30, label: "矿车轨道" }],
+    },
+    秋: {
+      label: "旧矿车辙",
+      palette: ["#9c8763", "#4e4a3d"],
+      routeLabel: "沿旧矿车辙去碎石场",
+      landmark: {
+        id: "quarry_autumn_cart",
+        x: 760,
+        y: 620,
+        radius: 56,
+        label: "查看旧矿车辙",
+        itemId: "autumn_mushroom",
+        detail: "废弃矿车停在岔道上，车斗里的湿木屑长出秋野菇，矿工说这是矿道的年轮。",
+      },
+      blockers: [{ x: 450, y: 500, w: 96, h: 28, label: "废矿车" }],
+    },
+    冬: {
+      label: "矿灯井台",
+      palette: ["#85918e", "#454c4a"],
+      routeLabel: "沿矿灯井台去安全站",
+      landmark: {
+        id: "quarry_winter_lamp",
+        x: 760,
+        y: 620,
+        radius: 56,
+        label: "查看矿灯井台",
+        itemId: "winter_root",
+        detail: "井台边的矿灯一夜没灭，雪下根在灯影里活着，安全员把它当作换班的路标。",
+      },
+      blockers: [{ x: 450, y: 500, w: 84, h: 26, label: "矿灯架" }],
+    },
+  },
+};
+
 export const SCENE_INTERACTIONS = {
   city: [
     { id: "city_market", x: 430, y: 275, radius: 62, label: "进入城市建设处", keycap: "E" },
     { id: "city_mayor", x: 474, y: 526, radius: 58, label: "和市政官聊聊", keycap: "E" },
     { id: "city_forage", x: 310, y: 520, radius: 58, label: "寻找村口山货", keycap: "E", forageNode: true },
+    { id: "city_weekly", x: 700, y: 560, radius: 54, label: "查看本周公共请求", keycap: "E" },
   ],
   council: [
     { id: "council_government", x: 380, y: 364, radius: 64, label: "打开共同议政", keycap: "E" },
     { id: "council_water", x: 860, y: 366, radius: 64, label: "查看水章档案", keycap: "E" },
     { id: "council_clerk", x: 600, y: 566, radius: 54, label: "和议事员聊聊", keycap: "E" },
+    { id: "council_weekly", x: 520, y: 620, radius: 54, label: "查看公共请求盖章台", keycap: "E" },
   ],
   workshop: [
     { id: "workshop_sprites", x: 234, y: 318, radius: 64, label: "打开小精灵工坊", keycap: "E" },
@@ -289,6 +729,7 @@ export const SCENE_INTERACTIONS = {
     { id: "port_shipping", x: 1114, y: 286, radius: 58, label: "打开港口出货箱", keycap: "E" },
     { id: "port_sailor", x: 500, y: 542, radius: 54, label: "和渡轮长聊聊", keycap: "E" },
     { id: "port_delivery_run", x: 760, y: 520, radius: 58, label: "限时运货", keycap: "E", minigame: "delivery" },
+    { id: "port_weekly", x: 900, y: 600, radius: 54, label: "查看本周收货牌", keycap: "E" },
   ],
   quarry: [
     { id: "quarry_vein", x: 620, y: 330, radius: 64, label: "旧矿脉采样", keycap: "E", minigame: "mining" },
@@ -300,40 +741,44 @@ export const SCENE_NPCS = [
     id: "mayor",
     name: "市政官沈禾",
     role: "河港市公共事务协调员",
+    speedRatio: 0.44,
     scenes: [
-      { from: 6 * 60, to: 11 * 60, scene: "city", x: 474, y: 526 },
-      { from: 11 * 60, to: 15 * 60, scene: "council", x: 600, y: 566 },
-      { from: 15 * 60, to: 22 * 60, scene: "city", x: 474, y: 526 },
+      { from: 6 * 60, to: 11 * 60, scene: "city", x: 474, y: 526, path: [{ x: 474, y: 526 }, { x: 620, y: 560 }] },
+      { from: 11 * 60, to: 15 * 60, scene: "council", x: 600, y: 566, path: [{ x: 600, y: 566 }, { x: 520, y: 610 }] },
+      { from: 15 * 60, to: 22 * 60, scene: "city", x: 474, y: 526, path: [{ x: 620, y: 560 }, { x: 474, y: 526 }] },
     ],
   },
   {
     id: "merchant",
     name: "港口商人岑岑",
     role: "贸易航线经纪人",
+    speedRatio: 0.42,
     scenes: [
-      { from: 6 * 60, to: 13 * 60, scene: "port", x: 500, y: 542 },
-      { from: 13 * 60, to: 18 * 60, scene: "city", x: 430, y: 275 },
-      { from: 18 * 60, to: 22 * 60, scene: "port", x: 500, y: 542 },
+      { from: 6 * 60, to: 13 * 60, scene: "port", x: 500, y: 542, path: [{ x: 500, y: 542 }, { x: 640, y: 600 }] },
+      { from: 13 * 60, to: 18 * 60, scene: "city", x: 430, y: 275, path: [{ x: 430, y: 275 }, { x: 560, y: 380 }] },
+      { from: 18 * 60, to: 22 * 60, scene: "port", x: 500, y: 542, path: [{ x: 640, y: 600 }, { x: 500, y: 542 }] },
     ],
   },
   {
     id: "spriteKeeper",
     name: "精灵看守白露",
     role: "小精灵工坊的照看人",
+    speedRatio: 0.39,
     scenes: [
-      { from: 6 * 60, to: 10 * 60, scene: "workshop", x: 760, y: 566 },
-      { from: 10 * 60, to: 16 * 60, scene: "island", x: 760, y: 342 },
-      { from: 16 * 60, to: 22 * 60, scene: "workshop", x: 760, y: 566 },
+      { from: 6 * 60, to: 10 * 60, scene: "workshop", x: 760, y: 566, path: [{ x: 760, y: 566 }, { x: 620, y: 610 }] },
+      { from: 10 * 60, to: 16 * 60, scene: "island", x: 760, y: 342, path: [{ x: 760, y: 342 }, { x: 640, y: 420 }] },
+      { from: 16 * 60, to: 22 * 60, scene: "workshop", x: 760, y: 566, path: [{ x: 620, y: 610 }, { x: 760, y: 566 }] },
     ],
   },
   {
     id: "farmerLuo",
     name: "罗婶",
     role: "上游村种植户",
+    speedRatio: 0.46,
     scenes: [
-      { from: 6 * 60, to: 10 * 60, scene: "city", x: 260, y: 526 },
-      { from: 10 * 60, to: 14 * 60, scene: "port", x: 310, y: 540 },
-      { from: 14 * 60, to: 22 * 60, scene: "city", x: 260, y: 526 },
+      { from: 6 * 60, to: 10 * 60, scene: "city", x: 260, y: 526, path: [{ x: 260, y: 526 }, { x: 360, y: 560 }] },
+      { from: 10 * 60, to: 14 * 60, scene: "port", x: 310, y: 540, path: [{ x: 310, y: 540 }, { x: 420, y: 600 }] },
+      { from: 14 * 60, to: 22 * 60, scene: "city", x: 260, y: 526, path: [{ x: 360, y: 560 }, { x: 260, y: 526 }] },
     ],
   },
   {
@@ -377,6 +822,328 @@ export const SCENE_NPCS = [
     ],
   },
 ];
+
+const NPC_PLAYER_SPEED = 154;
+const NPC_DOOR_DENSITY_RADIUS = 72;
+
+function pointAlongNpcPath(path, distance) {
+  if (path.length === 1) return { ...path[0], segment: 0 };
+  let remaining = distance;
+  for (let index = 0; index < path.length - 1; index += 1) {
+    const start = path[index];
+    const end = path[index + 1];
+    const segmentLength = Math.hypot(end.x - start.x, end.y - start.y);
+    if (remaining <= segmentLength) {
+      const progress = segmentLength ? remaining / segmentLength : 0;
+      return {
+        x: start.x + (end.x - start.x) * progress,
+        y: start.y + (end.y - start.y) * progress,
+        segment: index,
+      };
+    }
+    remaining -= segmentLength;
+  }
+  return { ...path[path.length - 1], segment: path.length - 2 };
+}
+
+export function npcPositionForEntry(entry, minutes) {
+  const path = Array.isArray(entry.path) && entry.path.length > 1
+    ? entry.path
+    : [{ x: entry.x, y: entry.y }];
+  const lengths = path.slice(1).map((point, index) =>
+    Math.hypot(point.x - path[index].x, point.y - path[index].y),
+  );
+  const totalLength = lengths.reduce((sum, length) => sum + length, 0);
+  const speedPerMinute = NPC_PLAYER_SPEED * (entry.speedRatio || 0.44) * REAL_SECONDS_PER_GAME_MINUTE;
+  const elapsed = Math.max(0, minutes - entry.from);
+  const cycle = Math.max(1, totalLength * 2);
+  const rawDistance = (elapsed * speedPerMinute) % cycle;
+  const distance = rawDistance <= totalLength ? rawDistance : cycle - rawDistance;
+  return {
+    scene: entry.scene,
+    ...pointAlongNpcPath(path, distance),
+    moving: path.length > 1,
+  };
+}
+
+export function scheduledNpcPositions(minutes, sceneId) {
+  const positions = SCENE_NPCS.map((npc) => {
+    const entries = npc.scenes || [];
+    const entry = entries.find((candidate) => minutes >= candidate.from && minutes < candidate.to)
+      || entries[entries.length - 1];
+    if (!entry || entry.scene !== sceneId) return null;
+    return {
+      ...npcPositionForEntry({ ...entry, speedRatio: npc.speedRatio || entry.speedRatio }, minutes),
+      npc,
+      entry,
+    };
+  }).filter(Boolean);
+
+  const portals = SCENE_DEFS[sceneId]?.portals || [];
+  for (const portal of portals) {
+    const near = positions.filter((position) => (
+      Math.hypot(position.x - portal.x, position.y - portal.y) < NPC_DOOR_DENSITY_RADIUS
+    ));
+    if (near.length <= 1) continue;
+    const sorted = [...near].sort((a, b) => {
+      const distanceA = Math.hypot(a.x - portal.x, a.y - portal.y);
+      const distanceB = Math.hypot(b.x - portal.x, b.y - portal.y);
+      return distanceA - distanceB || a.npc.id.localeCompare(b.npc.id);
+    });
+    for (const position of sorted.slice(1)) {
+      const dx = position.x - portal.x;
+      const dy = position.y - portal.y;
+      const distance = Math.hypot(dx, dy) || 1;
+      position.x = portal.x + (dx / distance) * 80;
+      position.y = portal.y + (dy / distance) * 80;
+      position.densityAdjusted = true;
+    }
+  }
+  return positions;
+}
+
+export const NPC_TOPICS = {
+  mayor: {
+    prompt: "阿禾把新的水章草稿摊在桌上：如果水量再一次不足，应该先保护谁？",
+    choices: [
+      {
+        id: "common",
+        label: "先公开水量记录，让每个村都参与决定。",
+        delta: 3,
+        community: 2,
+        reply: "“公开会让人吵起来，但吵过一次，下一次就不必重新猜。”",
+      },
+      {
+        id: "speed",
+        label: "先让市政快速决定，事后再解释。",
+        delta: -1,
+        community: -1,
+        reply: "“快是快，可被跳过的人会把这件事记很久。”",
+      },
+    ],
+  },
+  merchant: {
+    prompt: "岑岑问你：港口接到一笔高价远洋单，但会挤掉本村小农的交付窗口。",
+    choices: [
+      {
+        id: "shared",
+        label: "保留一部分舱位给本地小农。",
+        delta: 3,
+        community: 1,
+        reply: "“利润少一点，但下次船靠岸时，码头还会有人愿意等你。”",
+      },
+      {
+        id: "profit",
+        label: "先拿远洋单，市场机会不等人。",
+        delta: -1,
+        community: -1,
+        reply: "“机会确实不等人。可小农也不会永远等我们。”",
+      },
+    ],
+  },
+  spriteKeeper: {
+    prompt: "白露问：小精灵是否可以为了效率，临时越过自己最擅长的岗位？",
+    choices: [
+      {
+        id: "consent",
+        label: "先问它们愿意学什么，再安排工作。",
+        delta: 3,
+        community: 1,
+        reply: "“它们不是备用零件。愿意学，和被安排去学，是两种关系。”",
+      },
+      {
+        id: "order",
+        label: "先按牧场缺口派工，成长以后再说。",
+        delta: -1,
+        community: -1,
+        reply: "“效率表上没有写它们昨晚做了梦。”",
+      },
+    ],
+  },
+  islandChild: {
+    prompt: "小满指着潮池问：稀有的月光珍珠应该全部捞走吗？",
+    choices: [
+      {
+        id: "leave",
+        label: "留一半给下一次潮汐和别的生物。",
+        delta: 2,
+        ecology: 2,
+        reply: "“阿婆说，海不是今天才有的。”",
+      },
+      {
+        id: "take",
+        label: "今天能带走就带走，明天未必还有机会。",
+        delta: -1,
+        ecology: -1,
+        reply: "“那明天来的人，只能看到空掉的礁缝。”",
+      },
+    ],
+  },
+  quarryForeman: {
+    prompt: "衡叔敲了敲矿道支柱：深层的富矿能卖好价，但今天的木梁已经旧了。",
+    choices: [
+      {
+        id: "repair",
+        label: "先修支柱，少采一钩也认了。",
+        delta: 2,
+        community: 1,
+        reply: "“矿可以明天再采，人不能明天再长出来。”",
+      },
+      {
+        id: "risk",
+        label: "只下一钩，应该来得及。",
+        delta: -1,
+        community: -1,
+        reply: "“每个出事的人，进去前都说过‘应该’。”",
+      },
+    ],
+  },
+};
+
+export const SCENE_FINDS = {
+  farm: [
+    {
+      id: "old_gate",
+      x: 584,
+      y: 520,
+      label: "查看旧闸刻痕",
+      lore: "闸石侧面有三种深浅不同的刻痕，像是不同年代的人在同一处记下过水位。",
+      reward: { coins: 18 },
+    },
+    {
+      id: "field_stone",
+      x: 190,
+      y: 320,
+      label: "翻看田埂石",
+      lore: "田埂下压着一枚生锈的田界钉，上面没有地主姓名，只有共同修渠的年份。",
+      reward: { coins: 12 },
+    },
+  ],
+  city: [
+    {
+      id: "market_tile",
+      x: 660,
+      y: 540,
+      label: "查看旧市场砖",
+      lore: "一块被磨平的铺地砖上刻着三只手共同托起一束麦穗，边缘已经缺了一角。",
+      reward: { coins: 16 },
+    },
+    {
+      id: "ferry_post",
+      x: 1110,
+      y: 475,
+      label: "读旧渡口牌",
+      lore: "渡口牌背后写着几行已经褪色的名字，都是曾在这条航线上轮班守夜的人。",
+      reward: { coins: 20 },
+    },
+  ],
+  council: [
+    {
+      id: "water_ledger",
+      x: 620,
+      y: 520,
+      label: "翻阅水章旧页",
+      lore: "旧水章里没有“先到先得”，只有“先行者负责通知后来者”。",
+      reward: { coins: 24 },
+    },
+  ],
+  workshop: [
+    {
+      id: "sprite_etch",
+      x: 760,
+      y: 430,
+      label: "查看精灵刻线",
+      lore: "工坊门框上刻着七种不同的手势，白露说那是七个小精灵互相交接工作的暗号。",
+      reward: { coins: 22 },
+    },
+  ],
+  island: [
+    {
+      id: "drift_bottle",
+      x: 850,
+      y: 570,
+      label: "捡起漂流瓶",
+      lore: "瓶中信来自另一座岛，写着：如果你们也看见潮水变低，请联系我们。",
+      reward: { coins: 26 },
+    },
+    {
+      id: "old_beacon",
+      x: 1080,
+      y: 470,
+      label: "查看旧航标",
+      lore: "航标上的灯塔图案被海风磨得模糊，底下仍能看见“为夜行者留灯”五个字。",
+      reward: { coins: 22 },
+    },
+  ],
+  quarry: [
+    {
+      id: "safety_ledger",
+      x: 300,
+      y: 560,
+      label: "查看矿道安全簿",
+      lore: "安全簿最后一页没有写产量，只写着：今日所有人平安归来。",
+      reward: { coins: 20 },
+    },
+  ],
+};
+
+export const COLLECTION_DEFS = {
+  places: {
+    name: "地图里的旧痕迹",
+    entries: Object.entries(SCENE_FINDS).flatMap(([scene, finds]) =>
+      finds.map((find) => ({
+        id: `${scene}:${find.id}`,
+        label: `${find.label} · ${SCENE_DEFS[scene]?.name || scene}`,
+        source: SCENE_DEFS[scene]?.name || scene,
+      })),
+    ),
+  },
+  forage: {
+    name: "季节山货",
+    entries: Object.entries(FORAGE_TABLE).flatMap(([season, items]) =>
+      items.map((item) => ({
+        id: item.id,
+        label: `${item.name} · ${season}季`,
+        source: "雨后山货",
+      })),
+    ),
+  },
+  people: {
+    name: "居民与话题",
+    entries: Object.entries(NPC_TOPICS).map(([npcId, topic]) => ({
+      id: npcId,
+      label: topic.prompt,
+      source: SCENE_NPCS.find((npc) => npc.id === npcId)?.name || npcId,
+    })),
+  },
+};
+
+export const GIFT_TAGS = {
+  turnip: ["vegetable", "humble"],
+  potato: ["vegetable", "humble"],
+  strawberry: ["fruit", "sweet"],
+  egg: ["protein", "farm"],
+  milk: ["protein", "farm"],
+  wool: ["craft", "farm"],
+  tidefish: ["sea", "protein"],
+  ore: ["mineral", "craft"],
+  seaweed: ["sea", "herb"],
+  coconut: ["fruit", "sea"],
+  pearl: ["luxury", "sea"],
+  coral: ["craft", "sea"],
+  spring_herb: ["herb", "seasonal"],
+  summer_berry: ["fruit", "seasonal"],
+  autumn_mushroom: ["herb", "seasonal"],
+  winter_root: ["herb", "seasonal"],
+};
+
+export const GIFT_PREFERENCES = {
+  mayor: { likes: ["herb", "vegetable", "seasonal"], dislikes: ["luxury"] },
+  merchant: { likes: ["sea", "fruit", "luxury"], dislikes: ["vegetable"] },
+  spriteKeeper: { likes: ["herb", "seasonal", "sweet"], dislikes: ["mineral"] },
+  islandChild: { likes: ["sea", "fruit", "sweet"], dislikes: ["mineral"] },
+  quarryForeman: { likes: ["mineral", "protein", "farm"], dislikes: ["luxury"] },
+};
 
 export const PLAYER_START = { x: 286, y: 282, facing: "down" };
 
@@ -622,6 +1389,46 @@ export const MARKET_GOODS = {
     volatility: 0.24,
     source: "旧矿道",
   },
+  spring_herb: {
+    id: "spring_herb",
+    name: "春芽草",
+    icon: "❋",
+    basePrice: 28,
+    minPrice: 16,
+    maxPrice: 48,
+    volatility: 0.22,
+    source: "雨后山货",
+  },
+  summer_berry: {
+    id: "summer_berry",
+    name: "夏莓",
+    icon: "●",
+    basePrice: 42,
+    minPrice: 25,
+    maxPrice: 72,
+    volatility: 0.25,
+    source: "雨后山货",
+  },
+  autumn_mushroom: {
+    id: "autumn_mushroom",
+    name: "秋野菇",
+    icon: "◉",
+    basePrice: 68,
+    minPrice: 42,
+    maxPrice: 112,
+    volatility: 0.28,
+    source: "雨后山货",
+  },
+  winter_root: {
+    id: "winter_root",
+    name: "雪下根",
+    icon: "◇",
+    basePrice: 82,
+    minPrice: 48,
+    maxPrice: 138,
+    volatility: 0.3,
+    source: "雨后山货",
+  },
 };
 
 export const MINIGAME_DEFS = {
@@ -632,9 +1439,9 @@ export const MINIGAME_DEFS = {
     scene: "island",
     energy: 4,
     clockMinutes: 40,
-    duration: 22,
-    action: "点击/轻触鸟群；键盘用方向键移动准星，空格发射。",
-    rewardNote: "命中越多，巡护补贴越高，生态信任也会提高。",
+    duration: 15,
+    action: "点击/轻触鸟群；键盘用方向键移动准星，空格发射。金色候鸟稀有且只计入一次。",
+    rewardNote: "普通驱离给补贴；每日最多捕获一次稀有候鸟，稀有收益进入贸易链。",
   },
   fishing: {
     id: "fishing",
@@ -717,6 +1524,13 @@ export const TRADE_CONTRACTS = [
     reputation: 10,
     description: "博物馆想收藏一枚来自旧海路的月光珍珠。",
   },
+];
+
+export const MARKET_TIERS = [
+  { level: 0, name: "合作社线", bonus: 0 },
+  { level: 1, name: "近海航线", bonus: 0.08 },
+  { level: 2, name: "远洋契约", bonus: 0.16 },
+  { level: 3, name: "共同体航线", bonus: 0.24 },
 ];
 
 export const CITY_PROJECTS = {
@@ -1062,6 +1876,11 @@ export const STORY_OBJECTIVES = {
     text: "继续经营牧场，写下自己的日子",
     progress: () => "",
   },
+  postGame: {
+    kicker: "后日谈 · 七天",
+    text: "在修正牌的约束下完成一次短后记",
+    progress: () => "",
+  },
 };
 
 export const DAILY_TASK_POOL = [
@@ -1275,6 +2094,218 @@ export const ENDINGS = {
     text: "你试图让每个人满意，却没能让任何一方相信你会承担后果。水源、数据和土地被不同势力分割，旧渠重新埋进了荒草。牧心的日志里，最后一条记录只有一句：信任无法被平均分配。",
     note: "共同体不是没有冲突，而是有人愿意留下来处理冲突。",
   },
+};
+
+export const POST_GAME_MODIFIERS = [
+  {
+    id: "publicLedger",
+    title: "公共账本",
+    constraint: "订单收益降低 20%，市场不再只按最高出价结算。",
+    boon: "选择时公民点 +2；每次把日结转为公共行动都计入牌面目标。",
+    goal: { type: "publicActions", target: 3, label: "把 3 次日结转为公共行动" },
+    durationDays: 7,
+    epilogue: {
+      title: "账本留在了议事厅",
+      text: "七天后，订单利润没有回到旧水平，但每一笔让价都换来了可查的公共记录。村民开始用同一本账讨论水、道路和下一个季节。",
+      note: "你失去了一部分效率，换来了一个可以追问的共同体。",
+    },
+    fail: {
+      title: "账本没有被翻开",
+      text: "订单仍然完成，公共行动却始终没有写进同一本账。市场恢复了速度，议事厅里留下的是一叠互不相认的收据。",
+      note: "共享不是把数字放到一起，而是让人愿意在同一张桌前解释它们。",
+    },
+  },
+  {
+    id: "handCare",
+    title: "手工周",
+    constraint: "小精灵暂停自动工作，所有照料必须由你亲自完成。",
+    boon: "选择时社区信任 +3；四个没有动物挨饿的日子会完成牌面目标。",
+    goal: { type: "careDays", target: 4, label: "四个清晨没有动物挨饿" },
+    durationDays: 7,
+    epilogue: {
+      title: "手心的温度",
+      text: "你重新记住了每只动物早晨的叫声。小精灵没有消失，它们只是把工作交还给你，在旁边记录你怎样做出判断。",
+      note: "自动化没有错，错的是让人忘记自己为什么照料。",
+    },
+    fail: {
+      title: "空着的饲料桶",
+      text: "自动化暂停后，忙碌仍然找到了缝隙。有几天牲畜棚里没有足够的食物，社区开始怀疑共同生活是否只是一句口号。",
+      note: "照料不是效率的对立面，它是效率必须回答的问题。",
+    },
+  },
+  {
+    id: "drySeason",
+    title: "旱季复演",
+    constraint: "水罐上限降到 12，每一天都要重新分配有限的水。",
+    boon: "选择时生态韧性 +3；连续七天社区信任不低于 50 会完成牌面目标。",
+    goal: { type: "surviveDays", target: 7, label: "七天保住社区信任 ≥ 50" },
+    durationDays: 7,
+    epilogue: {
+      title: "水少的时候",
+      text: "第七天，渠水仍然很浅，但没有人把邻居的水口堵上。牧心记录下每一次让水，也记录下那些没有被算法量化的克制。",
+      note: "共同体的韧性，不在水多的时候，而在水少的时候。",
+    },
+    fail: {
+      title: "渠底的裂缝",
+      text: "水罐见底之前，信任先见了底。每个群体都证明了自己的需求更紧急，旧渠只剩下被反复争抢的泥。",
+      note: "旱季不会制造分裂，它只是让原本存在的裂缝显出来。",
+    },
+  },
+];
+
+export const BRIDGE_QUEST = {
+  id: "canal_bridge",
+  title: "旧渠木桥",
+  description: "旧渠上的人行木桥断了。修好它，才能让上游的草料车重新进村。",
+  deadlineDays: 7,
+  retryDays: 7,
+  signs: {
+    farm: { x: 560, y: 620, label: "查看修桥路牌" },
+    city: { x: 760, y: 590, label: "查看城市回报路牌" },
+    port: { x: 840, y: 640, label: "查看港口交货路牌" },
+    council: { x: 700, y: 620, label: "查看议事厅盖章路牌" },
+  },
+  steps: [
+    {
+      id: "repair",
+      scene: "farm",
+      x: 560,
+      y: 620,
+      label: "修整旧渠桥桩",
+      actionLabel: "修桥",
+      detail: "用 40 金和 2 份矿铜加固桥桩。矿铜会留在桥里，不会因订单失败而丢失。",
+      cost: { coins: 40, ore: 2 },
+    },
+    {
+      id: "deliver",
+      scene: "port",
+      x: 840,
+      y: 640,
+      label: "把桥板送到港口",
+      actionLabel: "交付桥板",
+      detail: "把 2 枚鸡蛋交给港口的木匠换桥板。桥板会留在货栈，等你回来继续。",
+      cost: { egg: 2 },
+    },
+    {
+      id: "council",
+      scene: "council",
+      x: 700,
+      y: 620,
+      label: "在议事厅为修桥盖章",
+      actionLabel: "议事盖章",
+      detail: "让议事厅确认修桥是公共工程，而不是某一家的私事。",
+    },
+    {
+      id: "reward",
+      scene: "city",
+      x: 760,
+      y: 590,
+      label: "回城市路牌领取回报",
+      actionLabel: "领取回报",
+      detail: "桥修好后，城市会支付 90 金，并记下一次公共行动的信用。",
+      reward: { coins: 90, civic: 1, community: 2 },
+    },
+  ],
+};
+
+export const WEEKLY_REQUEST_TEMPLATES = [
+  {
+    id: "school_soup",
+    title: "学校汤锅",
+    description: "村小学这周要给孩子和值夜家长准备热汤。",
+    requirements: { turnip: 2, egg: 2 },
+    reward: 120,
+    civic: 1,
+    reputation: 2,
+  },
+  {
+    id: "clinic_milk",
+    title: "诊所加餐",
+    description: "诊所希望给恢复期的病人准备牛奶和根茎。",
+    requirements: { milk: 1, potato: 2 },
+    reward: 150,
+    civic: 1,
+    reputation: 2,
+  },
+  {
+    id: "harbor_breakfast",
+    title: "港口早班",
+    description: "早班装卸工需要一份能带上船的早餐。",
+    requirements: { egg: 1, milk: 1, turnip: 1 },
+    reward: 135,
+    civic: 1,
+    reputation: 2,
+  },
+  {
+    id: "weaver_straw",
+    title: "织坊草料",
+    description: "旧织坊要修补公共坐垫，收一些羊毛和干草。",
+    requirements: { wool: 1, turnip: 1 },
+    reward: 145,
+    civic: 1,
+    reputation: 2,
+  },
+];
+
+export const SHIPPING_ROUTES = {
+  cooperative: {
+    id: "cooperative",
+    name: "合作社慢船",
+    shortName: "合作社",
+    description: "每天上午 08:00 发船，价格稳定，手续费低。",
+    departMinute: 8 * 60,
+    arrivalDays: 1,
+    feeRate: 0.02,
+    priceMultiplier: 1,
+    risk: 0,
+  },
+  coastal: {
+    id: "coastal",
+    name: "近海快线",
+    shortName: "近海",
+    description: "每天中午 12:00 发船，第二天到港，价格略高、手续费中等。",
+    departMinute: 12 * 60,
+    arrivalDays: 1,
+    feeRate: 0.05,
+    priceMultiplier: 1.12,
+    risk: 0.08,
+  },
+  ocean: {
+    id: "ocean",
+    name: "远洋货轮",
+    shortName: "远洋",
+    description: "每天下午 16:00 发船，两天后到港，报价最高但会受市场波动影响。",
+    departMinute: 16 * 60,
+    arrivalDays: 2,
+    feeRate: 0.08,
+    priceMultiplier: 1.28,
+    risk: 0.22,
+  },
+};
+
+export const FESTIVALS = {
+  tide_lantern: {
+    id: "tide_lantern",
+    name: "潮灯节",
+    season: "夏",
+    day: 14,
+    scene: "port",
+    description: "港口把灯船推到水面，摊位和临时订单只在这一天出现。",
+    activities: [
+      { id: "soup", x: 600, y: 560, label: "尝一碗节日汤", cost: { coins: 10 }, community: 1, detail: "给夜班船工留一碗热汤。" },
+      { id: "lantern", x: 760, y: 560, label: "折一盏潮灯", cost: { turnip: 1 }, community: 1, detail: "把一盏写有村名的灯放上灯船。" },
+      { id: "crate", x: 900, y: 560, label: "帮船工搬一箱货", cost: {}, reputation: 1, detail: "把临时订单搬上灯船，换来船工的信任。" },
+    ],
+    reward: { coins: 80, civic: 1, community: 2 },
+  },
+};
+
+export const BIRTHDAYS = {
+  mayor: { season: "春", day: 12 },
+  merchant: { season: "夏", day: 8 },
+  spriteKeeper: { season: "秋", day: 3 },
+  islandChild: { season: "夏", day: 20 },
+  quarryForeman: { season: "冬", day: 5 },
 };
 
 export const TIPS = [

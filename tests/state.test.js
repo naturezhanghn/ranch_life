@@ -1,28 +1,42 @@
 import assert from "node:assert/strict";
-import { CROPS, DAY_START_MINUTES, TRADE_CONTRACTS, WORLD } from "../js/data.js";
+import { BRIDGE_QUEST, CROPS, DAY_START_MINUTES, POST_GAME_MODIFIERS, SAVE_BACKUP_KEY, SAVE_KEY, TRADE_CONTRACTS, WORLD } from "../js/data.js";
 import {
   advanceDay,
+  advanceBridgeQuest,
   applyDevelopmentChoice,
   applyDroughtChoice,
   applyGovernanceChoice,
   acceptTradeContract,
+  acceptWeeklyRequest,
   assignSprite,
   brushAnimal,
+  choosePostGameModifier,
   createInitialState,
   collectForage,
+  deliverWeeklyRequest,
+  emitFeedback,
   enactGovernmentPolicy,
+  ensureWeeklyBoard,
   exploreIsland,
   fulfillTradeContract,
   feedAnimal,
   getClueCount,
+  getActiveFestival,
+  getBridgeQuestStep,
+  getPostGameModifier,
   getTargetPlot,
   getBagUsage,
   loadGame,
   investInCity,
+  joinFestivalActivity,
   recruitSprite,
   recordClue,
+  resolveDailyRecap,
   resolveEnding,
+  saveGame,
+  startBridgeQuest,
   sellAtMarket,
+  selectShippingRoute,
   shipProduce,
   settleShipping,
   switchScene,
@@ -220,6 +234,202 @@ test("daily task settlement is shown in the day report and牧心 memory", () => 
   assert.ok(state.ai.memories.some((memory) => memory.text.includes("今日清单结算")));
 });
 
+test("daily recap offers one interpretation once and applies only its choice", () => {
+  const state = freshState();
+  state.relations.community = 60;
+  const trustBefore = state.ai.trust;
+  const civicBefore = state.government.civicPoints;
+  const report = advanceDay(state);
+  assert.equal(report.recap.facts.length, 3);
+  assert.equal(state.daily.recapOptions.length, 2);
+  assert.equal(state.daily.recapChoice, null);
+  const aiChoice = resolveDailyRecap(state, "ai");
+  assert.equal(aiChoice.ok, true);
+  assert.equal(state.ai.trust, trustBefore + 2);
+  assert.equal(state.government.civicPoints, civicBefore);
+  assert.equal(state.daily.recapChoice, "ai");
+  assert.equal(resolveDailyRecap(state, "public").ok, false);
+  assert.equal(state.relations.community, 60);
+  const next = advanceDay(state);
+  assert.equal(next.recap.options.length, 2);
+  assert.equal(state.daily.recapChoice, null);
+});
+
+test("public daily recap pays civic point and community without repeating", () => {
+  const state = freshState();
+  state.relations.community = 60;
+  const trustBefore = state.ai.trust;
+  const civicBefore = state.government.civicPoints;
+  advanceDay(state);
+  const result = resolveDailyRecap(state, "public");
+  assert.equal(result.ok, true);
+  assert.equal(state.government.civicPoints, civicBefore + 1);
+  assert.equal(state.relations.community, 61);
+  assert.equal(state.ai.trust, trustBefore);
+  assert.equal(resolveDailyRecap(state, "public").ok, false);
+  assert.equal(state.government.civicPoints, civicBefore + 1);
+});
+
+test("feedback events dedupe, persist, and feed the day report", () => {
+  const state = freshState();
+  const first = emitFeedback(state, {
+    eventId: "test_feedback",
+    kind: "travel",
+    sourceScene: "city",
+    severity: "warning",
+    message: "这条路今天不通。",
+    dedupeKey: "test-feedback-key",
+  });
+  assert.ok(first);
+  assert.equal(first.eventId, "test_feedback");
+  assert.equal(first.message, "这条路今天不通。");
+  const duplicate = emitFeedback(state, {
+    eventId: "test_feedback",
+    kind: "travel",
+    sourceScene: "city",
+    message: "这条路今天不通。",
+    dedupeKey: "test-feedback-key",
+  });
+  assert.equal(duplicate, null);
+  const second = emitFeedback(state, {
+    eventId: "test_feedback_2",
+    kind: "season",
+    sourceScene: "farm",
+    severity: "success",
+    message: "季节路线已经记录。",
+    dedupeKey: "test-feedback-key-2",
+  });
+  assert.ok(second);
+  const report = advanceDay(state);
+  assert.ok(report.feedbackEvents.some((event) => event.eventId === "test_feedback"));
+  assert.ok(report.feedbackEvents.some((event) => event.eventId === "test_feedback_2"));
+  assert.equal(state.feedback.events.length, 2);
+});
+
+test("four-station bridge quest preserves materials and completes once", () => {
+  const state = freshState();
+  state.coins = 100;
+  state.inventory.resources.ore = 2;
+  state.inventory.produce.egg = 2;
+  assert.equal(startBridgeQuest(state).ok, true);
+  assert.equal(getBridgeQuestStep(state).id, "repair");
+  state.world.scene = "farm";
+  const repair = advanceBridgeQuest(state);
+  assert.equal(repair.ok, true);
+  assert.equal(state.coins, 60);
+  assert.equal(state.inventory.resources.ore, 0);
+  assert.equal(state.quests.bridgeMaterials, 2);
+  assert.equal(getBridgeQuestStep(state).id, "deliver");
+  state.world.scene = "port";
+  assert.equal(advanceBridgeQuest(state).ok, true);
+  assert.equal(state.inventory.produce.egg, 0);
+  assert.equal(getBridgeQuestStep(state).id, "council");
+  state.world.scene = "council";
+  assert.equal(advanceBridgeQuest(state).ok, true);
+  assert.equal(getBridgeQuestStep(state).id, "reward");
+  state.world.scene = "city";
+  const civicBefore = state.government.civicPoints;
+  const communityBefore = state.relations.community;
+  const reward = advanceBridgeQuest(state);
+  assert.equal(reward.ok, true);
+  assert.equal(reward.completed, true);
+  assert.equal(state.quests.completed, true);
+  assert.equal(state.coins, 150);
+  assert.equal(state.government.civicPoints, civicBefore + 1);
+  assert.equal(state.relations.community, communityBefore + 2);
+  assert.equal(state.stats.bridgeCompleted, 1);
+  assert.equal(advanceBridgeQuest(state).ok, false);
+  assert.equal(state.quests.completedSteps.length, BRIDGE_QUEST.steps.length);
+});
+
+test("expired bridge quest keeps steps and can be reaccepted next week", () => {
+  const state = freshState();
+  state.coins = 100;
+  state.inventory.resources.ore = 2;
+  startBridgeQuest(state);
+  state.world.scene = "farm";
+  advanceBridgeQuest(state);
+  state.quests.deadlineDay = state.day;
+  state.market.reputation = 10;
+  const reputationBefore = state.market.reputation;
+  const report = advanceDay(state);
+  assert.equal(state.quests.expired, true);
+  assert.equal(state.quests.stepIndex, 1);
+  assert.equal(state.quests.completedSteps.includes("repair"), true);
+  assert.equal(state.quests.bridgeMaterials, 2);
+  assert.equal(state.quests.retryDay, state.day + 7);
+  assert.ok(state.market.reputation < reputationBefore);
+  assert.ok(report.feedbackEvents.some((event) => event.eventId === "bridge_expired"));
+  state.day = state.quests.retryDay;
+  const resumed = startBridgeQuest(state);
+  assert.equal(resumed.ok, true);
+  assert.equal(state.quests.expired, false);
+  assert.equal(getBridgeQuestStep(state).id, "deliver");
+});
+
+test("weekly public requests can be accepted, delivered, and paid once", () => {
+  const state = freshState();
+  const board = ensureWeeklyBoard(state);
+  assert.ok(board.requests.length >= 2);
+  const request = board.requests[0];
+  assert.equal(acceptWeeklyRequest(state, request.id).ok, true);
+  assert.equal(acceptWeeklyRequest(state, request.id).ok, false);
+  for (const [itemId, amount] of Object.entries(request.requirements)) {
+    state.inventory.produce[itemId] = amount;
+  }
+  const coinsBefore = state.coins;
+  const civicBefore = state.government.civicPoints;
+  const result = deliverWeeklyRequest(state, request.id);
+  assert.equal(result.ok, true);
+  assert.equal(state.coins, coinsBefore + request.reward);
+  assert.equal(state.government.civicPoints, civicBefore + request.civic);
+  assert.equal(state.weekly.completedIds.includes(request.id), true);
+  assert.equal(deliverWeeklyRequest(state, request.id).ok, false);
+});
+
+test("weekly request expiry charges reputation and refreshes the board", () => {
+  const state = freshState();
+  const board = ensureWeeklyBoard(state);
+  const request = board.requests[0];
+  acceptWeeklyRequest(state, request.id);
+  state.market.reputation = 10;
+  state.government.civicPoints = 5;
+  state.day = 7;
+  const report = advanceDay(state);
+  assert.equal(state.weekly.expiredIds.includes(request.id), true);
+  assert.ok(report.weeklyExpired.includes(request.title));
+  assert.ok(state.market.reputation < 10);
+  assert.ok(state.government.civicPoints < 5);
+  assert.ok(state.weekly.requests.some((entry) => entry.id !== request.id));
+});
+
+test("festival activities require two completions and pay once", () => {
+  const state = freshState();
+  state.season = "夏";
+  state.seasonDay = 14;
+  state.day = 14;
+  state.coins = 20;
+  state.inventory.produce.turnip = 1;
+  state.relations.community = 50;
+  const festival = getActiveFestival(state);
+  assert.equal(festival.id, "tide_lantern");
+  assert.equal(festival.activities.length, 3);
+  const soup = joinFestivalActivity(state, "soup");
+  assert.equal(soup.ok, true);
+  assert.equal(state.coins, 10);
+  assert.equal(soup.reward, null);
+  const lantern = joinFestivalActivity(state, "lantern");
+  assert.equal(lantern.ok, true);
+  assert.equal(state.inventory.produce.turnip, 0);
+  assert.equal(state.festival.rewardClaimed, true);
+  assert.equal(state.coins, 90);
+  assert.equal(state.government.civicPoints, 4);
+  assert.equal(state.relations.community, 54);
+  assert.equal(joinFestivalActivity(state, "soup").ok, false);
+  state.seasonDay = 15;
+  assert.equal(getActiveFestival(state), null);
+});
+
 test("rain forage nodes expire, collect once, and feed the day report", () => {
   const state = freshState();
   state.weather = "rain";
@@ -387,6 +597,82 @@ test("weak trust and incomplete history produce split ending", () => {
   assert.equal(resolveEnding(state), "split");
 });
 
+test("post-game modifier applies one constraint without rewriting the ending", () => {
+  const state = freshState();
+  state.story.ending = "common";
+  state.story.endingSeen = true;
+  state.story.endingDay = state.day;
+  state.coins = 100;
+  const civicBefore = state.government.civicPoints;
+  const result = choosePostGameModifier(state, "publicLedger");
+  assert.equal(result.ok, true);
+  assert.equal(state.story.ending, "common");
+  assert.equal(state.story.postGameModifier, "publicLedger");
+  assert.equal(state.story.postGameDeadline, state.day + 7);
+  assert.equal(state.government.civicPoints, civicBefore + 2);
+  assert.equal(choosePostGameModifier(state, "handCare").ok, false);
+  assert.equal(POST_GAME_MODIFIERS.length, 3);
+  const contract = {
+    id: "postgame-contract",
+    title: "后日谈订单",
+    reward: 100,
+    reputation: 2,
+    requirements: { egg: 1 },
+    accepted: true,
+    completed: false,
+    expiresDay: state.day + 1,
+  };
+  state.inventory.produce.egg = 1;
+  state.market.contracts = [contract];
+  const coinsBefore = state.coins;
+  const fulfilled = fulfillTradeContract(state, contract.id);
+  assert.equal(fulfilled.ok, true);
+  assert.equal(fulfilled.payout, 80);
+  assert.equal(state.coins, coinsBefore + 80);
+});
+
+test("post-game public ledger completes after three public recaps and is idempotent", () => {
+  const state = freshState();
+  state.story.ending = "common";
+  state.story.endingSeen = true;
+  choosePostGameModifier(state, "publicLedger");
+  for (let index = 0; index < 3; index += 1) {
+    state.daily.recapChoice = "public";
+    advanceDay(state);
+  }
+  const modifier = getPostGameModifier(state);
+  assert.equal(modifier.id, "publicLedger");
+  assert.equal(state.story.postGameProgress.completed, true);
+  assert.equal(state.story.postGameProgress.value, 3);
+  assert.ok(state.story.postScriptsSeen.includes("publicLedger:epilogue"));
+  const progressBefore = { ...state.story.postGameProgress };
+  advanceDay(state);
+  assert.deepEqual(state.story.postGameProgress, progressBefore);
+});
+
+test("post-game hand-care and dry-season modifiers enforce their constraints", () => {
+  const handCare = freshState();
+  handCare.story.ending = "ecology";
+  handCare.story.endingSeen = true;
+  choosePostGameModifier(handCare, "handCare");
+  for (const animal of handCare.animals) animal.fed = true;
+  const careReport = advanceDay(handCare);
+  assert.ok(careReport.helperActions.some((entry) => entry.includes("手工周")));
+  assert.equal(handCare.story.postGameProgress.value, 1);
+
+  const drySeason = freshState();
+  drySeason.story.ending = "ecology";
+  drySeason.story.endingSeen = true;
+  choosePostGameModifier(drySeason, "drySeason");
+  assert.ok(drySeason.maxWater <= 12);
+  for (let index = 0; index < 7; index += 1) {
+    drySeason.relations.community = 60;
+    advanceDay(drySeason);
+  }
+  assert.equal(drySeason.story.postGameProgress.completed, true);
+  assert.ok(drySeason.story.postScriptsSeen.includes("drySeason:epilogue"));
+});
+
 test("crop data keeps a meaningful high-investment option", () => {
   const averageDailyProfit = Object.values(CROPS).map((crop) => ({
     id: crop.id,
@@ -515,6 +801,28 @@ test("shipping waits overnight and records cumulative settlement", () => {
   assert.equal(state.shipping.pending.length, 0);
 });
 
+test("shipping route delays arrival, charges a fee, and rejects a missed boat", () => {
+  const state = freshState();
+  state.inventory.produce.turnip = 3;
+  state.minutes = 9 * 60;
+  assert.equal(selectShippingRoute(state, "ocean").ok, true);
+  const consign = shipProduce(state, "ocean");
+  assert.equal(consign.ok, true);
+  assert.equal(consign.arrivalDay, 3);
+  const firstReport = advanceDay(state);
+  assert.equal(firstReport.shipping.delayed, true);
+  assert.equal(state.shipping.pending.length, 1);
+  state.inventory.produce.turnip = 1;
+  const missed = shipProduce(state, "ocean");
+  assert.equal(missed.ok, false);
+  assert.equal(state.inventory.produce.turnip, 1);
+  const secondReport = advanceDay(state);
+  assert.ok(secondReport.shipping.fee > 0);
+  assert.equal(state.shipping.pending.length, 0);
+  assert.equal(state.shipping.tripHistory[0].route, "ocean");
+  assert.ok(state.shipping.tripHistory[0].payout < state.shipping.tripHistory[0].gross);
+});
+
 test("accepted trade orders survive one night and expire with a penalty", () => {
   const state = freshState();
   const contract = state.market.contracts[0];
@@ -524,6 +832,71 @@ test("accepted trade orders survive one night and expire with a penalty", () => 
   assert.equal(state.market.contracts.some((entry) => entry.id === contract.id && entry.accepted), true);
   advanceDay(state);
   assert.ok(state.market.reputation < beforeReputation || state.government.civicPoints < 3);
+});
+
+test("corrupt primary saves fall back to the previous automatic save", () => {
+  const previousStorage = globalThis.localStorage;
+  const store = {};
+  globalThis.localStorage = {
+    getItem: (key) => (key in store ? store[key] : null),
+    setItem: (key, value) => { store[key] = String(value); },
+    removeItem: (key) => { delete store[key]; },
+  };
+  try {
+    const first = createInitialState();
+    first.day = 1;
+    first.coins = 111;
+    saveGame(first);
+    const second = createInitialState();
+    second.day = 2;
+    second.coins = 222;
+    saveGame(second);
+    assert.ok(store[SAVE_BACKUP_KEY]);
+    store[SAVE_KEY] = "{not valid json";
+    const loaded = loadGame();
+    assert.equal(loaded.day, 1);
+    assert.equal(loaded.coins, 111);
+    assert.notEqual(store[SAVE_KEY], "{not valid json");
+  } finally {
+    globalThis.localStorage = previousStorage;
+  }
+});
+
+test("illegal save numbers are clamped and missing fields get defaults", () => {
+  const previousStorage = globalThis.localStorage;
+  const store = {};
+  globalThis.localStorage = {
+    getItem: (key) => (key in store ? store[key] : null),
+    setItem: (key, value) => { store[key] = String(value); },
+    removeItem: (key) => { delete store[key]; },
+  };
+  try {
+    store[SAVE_KEY] = JSON.stringify({
+      day: -5,
+      season: "??",
+      seasonDay: 99,
+      coins: -30,
+      energy: 999,
+      maxEnergy: 100,
+      water: -8,
+      maxWater: 24,
+    });
+    const clamped = loadGame();
+    assert.equal(clamped.day, 1);
+    assert.equal(clamped.season, "春");
+    assert.equal(clamped.seasonDay, 28);
+    assert.equal(clamped.coins, 0);
+    assert.equal(clamped.energy, 100);
+    assert.equal(clamped.water, 0);
+    store[SAVE_KEY] = JSON.stringify({ day: 4, season: "夏" });
+    const sparse = loadGame();
+    assert.equal(sparse.day, 4);
+    assert.equal(sparse.season, "夏");
+    assert.equal(sparse.player.x, createInitialState().player.x);
+    assert.ok(sparse.quests && sparse.festival && sparse.weekly);
+  } finally {
+    globalThis.localStorage = previousStorage;
+  }
 });
 
 test("backpack and tool upgrades persist and affect capacity", () => {

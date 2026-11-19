@@ -1523,6 +1523,44 @@ body.phaser-runtime #phaserCanvas { display: block; }
   gap: 9px;
 }
 
+.shipping-route-panel {
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid rgba(61, 102, 84, 0.18);
+  border-radius: 11px;
+  background: rgba(228, 239, 214, 0.4);
+}
+
+.shipping-route-grid {
+  margin-top: 8px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.route-choice {
+  min-height: 66px;
+  padding: 9px 10px;
+  border: 1px solid rgba(54, 91, 73, 0.18);
+  border-radius: 9px;
+  display: grid;
+  gap: 3px;
+  color: #486456;
+  background: rgba(255, 251, 236, 0.72);
+  text-align: left;
+  cursor: pointer;
+}
+
+.route-choice.is-active {
+  border-color: rgba(112, 141, 74, 0.55);
+  background: rgba(219, 237, 190, 0.86);
+  box-shadow: inset 0 0 0 1px rgba(112, 141, 74, 0.18);
+}
+
+.route-choice strong { font-size: 11px; }
+.route-choice span { color: #6e806f; font-size: 9px; line-height: 1.4; }
+.route-choice small { color: #8b7857; font-size: 8px; line-height: 1.4; }
+
 .shop-row {
   padding: 11px;
   border: 1px solid rgba(28, 63, 53, 0.1);
@@ -2495,7 +2533,7 @@ body.phaser-runtime #phaserCanvas { display: block; }
   .touch-controls {
     position: absolute;
     z-index: 15;
-    inset: auto 12px 12px;
+    inset: auto calc(12px + env(safe-area-inset-right)) calc(12px + env(safe-area-inset-bottom)) calc(12px + env(safe-area-inset-left));
     display: flex;
     align-items: flex-end;
     justify-content: space-between;
@@ -2503,12 +2541,12 @@ body.phaser-runtime #phaserCanvas { display: block; }
   }
 
   .dpad {
-    width: 122px;
-    height: 98px;
+    width: 144px;
+    height: 94px;
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     grid-template-rows: repeat(2, 1fr);
-    gap: 4px;
+    gap: 6px;
     pointer-events: auto;
   }
 
@@ -2525,6 +2563,8 @@ body.phaser-runtime #phaserCanvas { display: block; }
 
   .dpad button {
     border-radius: 9px;
+    min-width: 44px;
+    min-height: 44px;
     font-size: 10px;
   }
 
@@ -3361,7 +3401,102 @@ body.region-switching .app-shell {
 
 .day-report-card strong { color: #37604c; font-size: 10px; }
 .day-report-card span { color: #6b7e70; }
+.day-report-card code { color: #7b5d35; font-size: inherit; }
 .day-report-card--ai { border-color: rgba(80, 139, 128, 0.22); background: rgba(198, 230, 221, 0.42); }
+
+.day-recap-card {
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid rgba(75, 117, 101, 0.26);
+  border-radius: 12px;
+  display: grid;
+  gap: 9px;
+  color: #486656;
+  background: linear-gradient(145deg, rgba(244, 238, 206, 0.8), rgba(208, 231, 211, 0.65));
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.day-recap-card.is-resolved {
+  border-color: rgba(80, 139, 128, 0.24);
+  background: rgba(198, 230, 221, 0.5);
+}
+
+.day-recap-card > strong {
+  color: #315b49;
+  font-size: 12px;
+}
+
+.day-recap-facts {
+  margin: 0;
+  padding-left: 18px;
+  color: #64776a;
+}
+
+.day-recap-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.day-recap-option {
+  min-height: 48px;
+  padding: 10px 12px;
+  border: 1px solid rgba(51, 95, 77, 0.18);
+  border-radius: 10px;
+  display: grid;
+  gap: 3px;
+  color: #345443;
+  background: rgba(255, 251, 235, 0.76);
+  text-align: left;
+  cursor: pointer;
+}
+
+.day-recap-option:hover {
+  background: #fff7dc;
+}
+
+.day-recap-option b {
+  font-size: 11px;
+}
+
+.day-recap-option span {
+  color: #6b7e70;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.day-recap-option small {
+  color: #9a6f38;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+@media (max-width: 620px) {
+  .day-recap-actions {
+    grid-template-columns: 1fr;
+  }
+  .day-report-card,
+  .day-recap-card {
+    font-size: 11px;
+  }
+  .day-report-card strong {
+    font-size: 11px;
+  }
+  .shipping-route-grid {
+    grid-template-columns: 1fr;
+  }
+  .route-choice {
+    min-height: 54px;
+  }
+  .route-choice strong {
+    font-size: 12px;
+  }
+  .route-choice span,
+  .route-choice small {
+    font-size: 10px;
+  }
+}
 
 .region-locked-card {
   margin-top: 14px;

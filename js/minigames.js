@@ -120,8 +120,10 @@ export class HuntGame extends BaseMiniGame {
   constructor(rng = Math.random) {
     super("hunt", rng);
     this.hits = 0;
+    this.rareHits = 0;
     this.misses = 0;
     this.spawnTimer = 0;
+    this.actionCooldown = 0;
     this.aim = { x: WIDTH / 2, y: HEIGHT / 2 };
     this.birds = [];
   }
@@ -135,10 +137,14 @@ export class HuntGame extends BaseMiniGame {
       vy: (this.rng() - 0.5) * 24,
       wing: this.rng() * TAU,
       color: this.rng() > 0.45 ? "#3f5146" : "#665d44",
+      rare: this.rng() < 0.12,
     });
+    const bird = this.birds.at(-1);
+    if (bird.rare) bird.color = "#d6ad4f";
   }
 
   tick(dt) {
+    this.actionCooldown = Math.max(0, this.actionCooldown - dt);
     this.spawnTimer -= dt;
     if (this.spawnTimer <= 0) {
       this.spawnBird();
@@ -162,6 +168,8 @@ export class HuntGame extends BaseMiniGame {
 
   action(x, y) {
     if (this.finished) return;
+    if (this.actionCooldown > 0) return;
+    this.actionCooldown = 0.18;
     this.aim.x = typeof x === "number" ? x : this.aim.x;
     this.aim.y = typeof y === "number" ? y : this.aim.y;
     let hitIndex = -1;
@@ -174,10 +182,16 @@ export class HuntGame extends BaseMiniGame {
       }
     });
     if (hitIndex >= 0) {
-      this.birds.splice(hitIndex, 1);
+      const [bird] = this.birds.splice(hitIndex, 1);
       this.hits += 1;
-      this.score += 18;
-      this.message = "驱离成功，谷仓安全了一点。";
+      if (bird.rare) {
+        this.rareHits += 1;
+        this.score += 36;
+        this.message = "金色候鸟被安全标记，这是一次稀有巡护记录。";
+      } else {
+        this.score += 18;
+        this.message = "驱离成功，谷仓安全了一点。";
+      }
     } else {
       this.misses += 1;
       this.score = Math.max(0, this.score - 2);
@@ -186,7 +200,7 @@ export class HuntGame extends BaseMiniGame {
   }
 
   resultForFinish() {
-    return { hits: this.hits, misses: this.misses };
+    return { hits: this.hits, rareHits: this.rareHits, misses: this.misses };
   }
 
   timeout() {
@@ -264,12 +278,12 @@ export class HuntGame extends BaseMiniGame {
     ctx.fill();
     ctx.fillStyle = "#486453";
     ctx.font = "600 12px 'PingFang SC', sans-serif";
-    ctx.fillText(`驱离 ${this.hits}  ·  落空 ${this.misses}  ·  ${this.message}`, 42, HEIGHT - 34);
+    ctx.fillText(`驱离 ${this.hits}  ·  稀有 ${this.rareHits}  ·  落空 ${this.misses}  ·  ${this.message}`, 42, HEIGHT - 34);
     ctx.restore();
   }
 
   renderResult(ctx) {
-    this.drawResult(ctx, [`驱离斑翅雀：${this.hits} 只`, `巡护评分：${Math.round(this.score)}`]);
+    this.drawResult(ctx, [`驱离斑翅雀：${this.hits} 只`, `稀有候鸟：${this.rareHits} 只 · 评分：${Math.round(this.score)}`]);
   }
 }
 
