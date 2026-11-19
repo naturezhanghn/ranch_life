@@ -450,6 +450,8 @@ export function createInitialState() {
       dailyFinds: {},
       expeditions: 0,
       journal: [],
+      rareHuntDay: 0,
+      rareHuntCount: 0,
     },
     market: {
       prices: createMarketPrices(),
@@ -1742,19 +1744,44 @@ export function resolveMinigame(state, type, result = {}) {
 
   if (type === "hunt") {
     const hits = Math.max(0, Math.floor(Number(result.hits) || 0));
-    const coins = hits * 12;
+    const misses = Math.max(0, Math.floor(Number(result.misses) || 0));
+    let rareHits = Math.min(1, Math.max(0, Math.floor(Number(result.rareHits) || 0)));
+    if (rareHits && state.island?.rareHuntDay === state.day) rareHits = 0;
+    const seasonMultiplier = { 春: 1, 夏: 1.02, 秋: 1.05, 冬: 1.08 }[state.season] || 1;
+    const rareValue = Math.round(118 * seasonMultiplier) * rareHits;
+    const coins = hits * 10;
     state.coins += coins;
     state.stats.earned += coins;
     state.stats.minigameHits += hits;
     state.relations.ecology = bounded(state.relations.ecology + (hits >= 4 ? 2 : 1));
+    state.market.reputation += Math.min(2, (hits > 0 ? 1 : 0) + (rareHits > 0 ? 1 : 0));
+    if (rareHits > 0) {
+      state.inventory.resources.pearl += rareHits;
+      state.island.rareHuntDay = state.day;
+      state.island.rareHuntCount = (state.island.rareHuntCount || 0) + rareHits;
+    }
+    let failPenalty = 0;
+    if (hits === 0 && misses > 0) {
+      failPenalty = Math.min(3, 1 + Math.floor(misses / 2));
+      state.energy = Math.max(0, state.energy - failPenalty);
+    }
     bumpCounter(state, "explored");
     addMemory(
       state,
-      `湿地巡护结束：驱离 ${hits} 只偷食鸟，获得 ${coins} 金巡护补贴。`,
+      `湿地巡护结束：驱离 ${hits} 只偷食鸟${rareHits ? `，安全标记 ${rareHits} 只稀有候鸟` : ""}，获得 ${coins} 金巡护补贴。${rareHits && state.island.rareHuntDay === state.day && state.island.rareHuntCount === rareHits ? "今日稀有捕获额度已使用。" : ""}`,
       "care",
       2,
     );
-    return { ok: true, type, coins, hits, message: `巡护完成：驱离 ${hits} 只斑翅雀，获得 ${coins} 金。` };
+    return {
+      ok: true,
+      type,
+      coins,
+      hits,
+      rareHits,
+      rareValue,
+      failPenalty,
+      message: `巡护完成：驱离 ${hits} 只斑翅雀${rareHits ? `，标记 ${rareHits} 只稀有候鸟` : ""}，获得 ${coins} 金${rareHits ? `，并带回价值约 ${rareValue} 金的月光珍珠` : ""}。${failPenalty ? ` 空手而归额外消耗 ${failPenalty} 体力。` : ""}`,
+    };
   }
 
   if (type === "fishing") {

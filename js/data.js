@@ -1435,9 +1435,9 @@ export const MINIGAME_DEFS = {
     scene: "island",
     energy: 4,
     clockMinutes: 40,
-    duration: 22,
-    action: "点击/轻触鸟群；键盘用方向键移动准星，空格发射。",
-    rewardNote: "命中越多，巡护补贴越高，生态信任也会提高。",
+    duration: 15,
+    action: "点击/轻触鸟群；键盘用方向键移动准星，空格发射。金色候鸟稀有且只计入一次。",
+    rewardNote: "普通驱离给补贴；每日最多捕获一次稀有候鸟，稀有收益进入贸易链。",
   },
   fishing: {
     id: "fishing",

@@ -32,6 +32,19 @@ test("hunt registers a hit on the aimed bird and finishes with a score", () => {
   assert.equal(game.result.hits, 1);
 });
 
+test("hunt marks a rare bird and reports it in the result", () => {
+  const game = new HuntGame(createRng(15));
+  game.spawnBird();
+  game.birds[0].rare = true;
+  const bird = game.birds[0];
+  game.action(bird.x, bird.y);
+  assert.equal(game.hits, 1);
+  assert.equal(game.rareHits, 1);
+  game.timeout();
+  assert.equal(game.result.rareHits, 1);
+  assert.ok(game.score >= 36);
+});
+
 test("fishing rewards perfect timing only when the marker is in the green zone", () => {
   const game = new FishingGame(createRng(12));
   game.phase = "bite";
@@ -109,6 +122,40 @@ test("delivery uses an accepted, fully stocked contract and pays its reward", ()
   assert.equal(resolved.ok, true);
   assert.equal(state.market.contracts[0].completed, true);
   assert.equal(state.coins, before + 226);
+});
+
+test("hunt caps rare capture once per day and adds a failure stamina penalty", () => {
+  const state = createInitialState();
+  state.world.unlockedRegions.push("island");
+  state.world.scene = "island";
+  state.season = "冬";
+  assert.equal(beginMinigame(state, "hunt").ok, true);
+  const first = resolveMinigame(state, "hunt", { hits: 1, misses: 0, rareHits: 1, score: 50 });
+  assert.equal(first.ok, true);
+  assert.equal(first.rareHits, 1);
+  assert.equal(first.rareValue, 127);
+  assert.ok(first.rareValue <= 130);
+  assert.equal(state.inventory.resources.pearl, 1);
+  assert.equal(state.island.rareHuntDay, 1);
+
+  state.minigames.active = { type: "hunt", day: 1, contractId: null };
+  const sameDay = resolveMinigame(state, "hunt", { hits: 1, misses: 0, rareHits: 1, score: 40 });
+  assert.equal(sameDay.rareHits, 0);
+  assert.equal(state.inventory.resources.pearl, 1);
+
+  state.day = 2;
+  assert.equal(beginMinigame(state, "hunt").ok, true);
+  const nextDay = resolveMinigame(state, "hunt", { hits: 1, misses: 0, rareHits: 1, score: 40 });
+  assert.equal(nextDay.rareHits, 1);
+  assert.equal(state.inventory.resources.pearl, 2);
+
+  state.day = 3;
+  assert.equal(beginMinigame(state, "hunt").ok, true);
+  const energyBefore = state.energy;
+  const failed = resolveMinigame(state, "hunt", { hits: 0, misses: 5, rareHits: 0, score: 0 });
+  assert.equal(failed.ok, true);
+  assert.equal(failed.failPenalty, 3);
+  assert.equal(state.energy, energyBefore - 3);
 });
 
 console.log(`\n${passed} minigame tests passed.`);
