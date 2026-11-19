@@ -737,40 +737,44 @@ export const SCENE_NPCS = [
     id: "mayor",
     name: "市政官沈禾",
     role: "河港市公共事务协调员",
+    speedRatio: 0.44,
     scenes: [
-      { from: 6 * 60, to: 11 * 60, scene: "city", x: 474, y: 526 },
-      { from: 11 * 60, to: 15 * 60, scene: "council", x: 600, y: 566 },
-      { from: 15 * 60, to: 22 * 60, scene: "city", x: 474, y: 526 },
+      { from: 6 * 60, to: 11 * 60, scene: "city", x: 474, y: 526, path: [{ x: 474, y: 526 }, { x: 620, y: 560 }] },
+      { from: 11 * 60, to: 15 * 60, scene: "council", x: 600, y: 566, path: [{ x: 600, y: 566 }, { x: 520, y: 610 }] },
+      { from: 15 * 60, to: 22 * 60, scene: "city", x: 474, y: 526, path: [{ x: 620, y: 560 }, { x: 474, y: 526 }] },
     ],
   },
   {
     id: "merchant",
     name: "港口商人岑岑",
     role: "贸易航线经纪人",
+    speedRatio: 0.42,
     scenes: [
-      { from: 6 * 60, to: 13 * 60, scene: "port", x: 500, y: 542 },
-      { from: 13 * 60, to: 18 * 60, scene: "city", x: 430, y: 275 },
-      { from: 18 * 60, to: 22 * 60, scene: "port", x: 500, y: 542 },
+      { from: 6 * 60, to: 13 * 60, scene: "port", x: 500, y: 542, path: [{ x: 500, y: 542 }, { x: 640, y: 600 }] },
+      { from: 13 * 60, to: 18 * 60, scene: "city", x: 430, y: 275, path: [{ x: 430, y: 275 }, { x: 560, y: 380 }] },
+      { from: 18 * 60, to: 22 * 60, scene: "port", x: 500, y: 542, path: [{ x: 640, y: 600 }, { x: 500, y: 542 }] },
     ],
   },
   {
     id: "spriteKeeper",
     name: "精灵看守白露",
     role: "小精灵工坊的照看人",
+    speedRatio: 0.39,
     scenes: [
-      { from: 6 * 60, to: 10 * 60, scene: "workshop", x: 760, y: 566 },
-      { from: 10 * 60, to: 16 * 60, scene: "island", x: 760, y: 342 },
-      { from: 16 * 60, to: 22 * 60, scene: "workshop", x: 760, y: 566 },
+      { from: 6 * 60, to: 10 * 60, scene: "workshop", x: 760, y: 566, path: [{ x: 760, y: 566 }, { x: 620, y: 610 }] },
+      { from: 10 * 60, to: 16 * 60, scene: "island", x: 760, y: 342, path: [{ x: 760, y: 342 }, { x: 640, y: 420 }] },
+      { from: 16 * 60, to: 22 * 60, scene: "workshop", x: 760, y: 566, path: [{ x: 620, y: 610 }, { x: 760, y: 566 }] },
     ],
   },
   {
     id: "farmerLuo",
     name: "罗婶",
     role: "上游村种植户",
+    speedRatio: 0.46,
     scenes: [
-      { from: 6 * 60, to: 10 * 60, scene: "city", x: 260, y: 526 },
-      { from: 10 * 60, to: 14 * 60, scene: "port", x: 310, y: 540 },
-      { from: 14 * 60, to: 22 * 60, scene: "city", x: 260, y: 526 },
+      { from: 6 * 60, to: 10 * 60, scene: "city", x: 260, y: 526, path: [{ x: 260, y: 526 }, { x: 360, y: 560 }] },
+      { from: 10 * 60, to: 14 * 60, scene: "port", x: 310, y: 540, path: [{ x: 310, y: 540 }, { x: 420, y: 600 }] },
+      { from: 14 * 60, to: 22 * 60, scene: "city", x: 260, y: 526, path: [{ x: 360, y: 560 }, { x: 260, y: 526 }] },
     ],
   },
   {
@@ -814,6 +818,85 @@ export const SCENE_NPCS = [
     ],
   },
 ];
+
+const NPC_PLAYER_SPEED = 154;
+const NPC_DOOR_DENSITY_RADIUS = 72;
+
+function pointAlongNpcPath(path, distance) {
+  if (path.length === 1) return { ...path[0], segment: 0 };
+  let remaining = distance;
+  for (let index = 0; index < path.length - 1; index += 1) {
+    const start = path[index];
+    const end = path[index + 1];
+    const segmentLength = Math.hypot(end.x - start.x, end.y - start.y);
+    if (remaining <= segmentLength) {
+      const progress = segmentLength ? remaining / segmentLength : 0;
+      return {
+        x: start.x + (end.x - start.x) * progress,
+        y: start.y + (end.y - start.y) * progress,
+        segment: index,
+      };
+    }
+    remaining -= segmentLength;
+  }
+  return { ...path[path.length - 1], segment: path.length - 2 };
+}
+
+export function npcPositionForEntry(entry, minutes) {
+  const path = Array.isArray(entry.path) && entry.path.length > 1
+    ? entry.path
+    : [{ x: entry.x, y: entry.y }];
+  const lengths = path.slice(1).map((point, index) =>
+    Math.hypot(point.x - path[index].x, point.y - path[index].y),
+  );
+  const totalLength = lengths.reduce((sum, length) => sum + length, 0);
+  const speedPerMinute = NPC_PLAYER_SPEED * (entry.speedRatio || 0.44) * REAL_SECONDS_PER_GAME_MINUTE;
+  const elapsed = Math.max(0, minutes - entry.from);
+  const cycle = Math.max(1, totalLength * 2);
+  const rawDistance = (elapsed * speedPerMinute) % cycle;
+  const distance = rawDistance <= totalLength ? rawDistance : cycle - rawDistance;
+  return {
+    scene: entry.scene,
+    ...pointAlongNpcPath(path, distance),
+    moving: path.length > 1,
+  };
+}
+
+export function scheduledNpcPositions(minutes, sceneId) {
+  const positions = SCENE_NPCS.map((npc) => {
+    const entries = npc.scenes || [];
+    const entry = entries.find((candidate) => minutes >= candidate.from && minutes < candidate.to)
+      || entries[entries.length - 1];
+    if (!entry || entry.scene !== sceneId) return null;
+    return {
+      ...npcPositionForEntry({ ...entry, speedRatio: npc.speedRatio || entry.speedRatio }, minutes),
+      npc,
+      entry,
+    };
+  }).filter(Boolean);
+
+  const portals = SCENE_DEFS[sceneId]?.portals || [];
+  for (const portal of portals) {
+    const near = positions.filter((position) => (
+      Math.hypot(position.x - portal.x, position.y - portal.y) < NPC_DOOR_DENSITY_RADIUS
+    ));
+    if (near.length <= 1) continue;
+    const sorted = [...near].sort((a, b) => {
+      const distanceA = Math.hypot(a.x - portal.x, a.y - portal.y);
+      const distanceB = Math.hypot(b.x - portal.x, b.y - portal.y);
+      return distanceA - distanceB || a.npc.id.localeCompare(b.npc.id);
+    });
+    for (const position of sorted.slice(1)) {
+      const dx = position.x - portal.x;
+      const dy = position.y - portal.y;
+      const distance = Math.hypot(dx, dy) || 1;
+      position.x = portal.x + (dx / distance) * 80;
+      position.y = portal.y + (dy / distance) * 80;
+      position.densityAdjusted = true;
+    }
+  }
+  return positions;
+}
 
 export const NPC_TOPICS = {
   mayor: {

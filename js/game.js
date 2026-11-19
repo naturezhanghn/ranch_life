@@ -28,6 +28,7 @@ import {
   SCENE_INTERACTIONS,
   SCENE_NPCS,
   SCENE_REGION_MAP,
+  scheduledNpcPositions,
   SHOP_SEEDS,
   SPRITE_DEFS,
   STORY_OBJECTIVES,
@@ -533,12 +534,6 @@ function currentSceneId() {
   return state.world?.scene || "farm";
 }
 
-function scheduledNpcPosition(npc, minutes = state.minutes) {
-  const entries = npc.scenes || [];
-  const match = entries.find((entry) => minutes >= entry.from && minutes < entry.to);
-  return match || entries[entries.length - 1] || null;
-}
-
 function scenePortalInteractions(sceneId) {
   return (SCENE_DEFS[sceneId]?.portals || []).map((portal) => ({
     ...portal,
@@ -575,20 +570,16 @@ function availableInteractions() {
       findId: find.id,
       sceneId,
     }));
-  const npcs = SCENE_NPCS.map((npc) => {
-    const position = scheduledNpcPosition(npc);
-    if (!position || position.scene !== sceneId) return null;
-    return {
-      id: `npc_${npc.id}`,
-      x: position.x,
-      y: position.y,
-      radius: 46,
-      label: `和${npc.name}聊聊`,
-      keycap: "E",
-      npcId: npc.id,
-      npc,
-    };
-  }).filter(Boolean);
+  const npcs = scheduledNpcPositions(state.minutes, sceneId).map((position) => ({
+    id: `npc_${position.npc.id}`,
+    x: position.x,
+    y: position.y,
+    radius: 46,
+    label: `和${position.npc.name}聊聊`,
+    keycap: "E",
+    npcId: position.npc.id,
+    npc: position.npc,
+  }));
   const seasonVariant = getSceneSeasonVariant(state, sceneId);
   const seasonLandmark = seasonVariant?.landmark;
   const seasonClaimed = seasonLandmark
@@ -800,9 +791,8 @@ function canMoveTo(x, y) {
     : [...(SCENE_DEFS[sceneId]?.blockers || []), ...seasonalBlockers];
   if (blockers.some((rect) => circleHitsRect(x, y, radius, rect, 2))) return false;
 
-  for (const npc of SCENE_NPCS) {
-    const position = scheduledNpcPosition(npc);
-    if (position?.scene === sceneId && Math.hypot(x - position.x, y - position.y) < radius + 14) return false;
+  for (const position of scheduledNpcPositions(state.minutes, sceneId)) {
+    if (Math.hypot(x - position.x, y - position.y) < radius + 14) return false;
   }
   if (sceneId === "farm") {
     for (const npc of [{ x: 398, y: 257 }, { x: 705, y: 287 }, { x: 280, y: 681 }]) {
@@ -3576,6 +3566,8 @@ window.__RANCH_DEBUG__ = {
   actions: {
     performAction: () => performAction(),
     getTargetPlot: () => getTargetPlot(state),
+    npcPositions: (sceneId = state.world.scene, minutes = state.minutes) =>
+      scheduledNpcPositions(minutes, sceneId),
     advanceDay: () => {
       const report = advanceDay(state);
       updateHUD(true);

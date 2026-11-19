@@ -4,8 +4,8 @@ import {
   SCENE_DEFS,
   SCENE_FINDS,
   SCENE_INTERACTIONS,
-  SCENE_NPCS,
   SCENE_SEASON_VARIANTS,
+  scheduledNpcPositions,
   TOOLS,
   WORLD,
 } from "./data.js";
@@ -153,11 +153,11 @@ export class WorldRenderer {
     this.drawSeasonalLandmark(ctx, state, sceneId, seasonVariant, time);
 
     const drawables = [];
-    for (const npc of SCENE_NPCS) {
-      const position = this.scheduledNpcPosition(npc, state.minutes);
-      if (position?.scene === sceneId) {
-        drawables.push({ y: position.y, draw: () => this.drawSceneNpc(ctx, npc, position, time) });
-      }
+    for (const position of scheduledNpcPositions(state.minutes, sceneId)) {
+      drawables.push({
+        y: position.y,
+        draw: () => this.drawSceneNpc(ctx, position.npc, position, time),
+      });
     }
     drawables.push({
       y: state.player.y,
@@ -176,11 +176,6 @@ export class WorldRenderer {
     this.drawLighting(ctx, state, time);
     this.drawEffects(ctx, runtime, time, delta);
     this.drawDebugVignette(ctx);
-  }
-
-  scheduledNpcPosition(npc, minutes) {
-    const entry = npc.scenes.find((candidate) => minutes >= candidate.from && minutes < candidate.to);
-    return entry || npc.scenes[npc.scenes.length - 1];
   }
 
   drawSceneGround(ctx, sceneId, time) {
@@ -2098,11 +2093,12 @@ export class WorldRenderer {
     const sceneId = state.world?.scene || "farm";
     const base = sceneId === "farm" ? INTERACTIONS : SCENE_INTERACTIONS[sceneId] || [];
     const portalEntries = (SCENE_DEFS[sceneId]?.portals || []).map((portal) => portal);
-    const npcEntries = SCENE_NPCS.map((npc) => {
-      const position = this.scheduledNpcPosition(npc, state.minutes);
-      if (!position || position.scene !== sceneId) return null;
-      return { id: `npc_${npc.id}`, x: position.x, y: position.y, radius: 46 };
-    }).filter(Boolean);
+    const npcEntries = scheduledNpcPositions(state.minutes, sceneId).map((position) => ({
+      id: `npc_${position.npc.id}`,
+      x: position.x,
+      y: position.y,
+      radius: 46,
+    }));
     return [...base, ...portalEntries, ...npcEntries].find((entry) => entry.id === interactionId) || null;
   }
 

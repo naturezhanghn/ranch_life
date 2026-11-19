@@ -1,5 +1,12 @@
 import assert from "node:assert/strict";
-import { SCENE_DEFS, SCENE_SEASON_VARIANTS, SEASONS, TRADE_CONTRACTS } from "../js/data.js";
+import {
+  SCENE_DEFS,
+  SCENE_NPCS,
+  SCENE_SEASON_VARIANTS,
+  SEASONS,
+  TRADE_CONTRACTS,
+  scheduledNpcPositions,
+} from "../js/data.js";
 import {
   advanceDay,
   collectSeasonalLandmark,
@@ -168,6 +175,32 @@ test("seasonal landmark can be gathered once per day and records its own route",
   assert.equal(collectSeasonalLandmark(state, "farm").ok, true);
   state.season = "秋";
   assert.equal(collectSeasonalLandmark(state, "farm").itemId, "autumn_mushroom");
+});
+
+test("scheduled NPCs interpolate between waypoints and never crowd a door", () => {
+  const waypointNpcs = SCENE_NPCS.filter((npc) => npc.scenes.some((entry) => entry.path?.length === 2));
+  assert.ok(waypointNpcs.length >= 4);
+  for (const npc of waypointNpcs) {
+    assert.equal(npc.scenes.length, 3);
+    assert.ok(npc.scenes.every((entry) => entry.path?.length === 2));
+  }
+  const first = scheduledNpcPositions(6 * 60, "city").find((position) => position.npc.id === "mayor");
+  const second = scheduledNpcPositions(6 * 60 + 5, "city").find((position) => position.npc.id === "mayor");
+  const distance = Math.hypot(second.x - first.x, second.y - first.y);
+  const speedRatio = distance / (5 * 0.22) / 154;
+  assert.ok(speedRatio >= 0.35 && speedRatio <= 0.55, `mayor speed ratio ${speedRatio}`);
+
+  for (let minutes = 6 * 60; minutes <= 22 * 60; minutes += 15) {
+    for (const sceneId of Object.keys(SCENE_DEFS)) {
+      const positions = scheduledNpcPositions(minutes, sceneId);
+      for (const portal of SCENE_DEFS[sceneId].portals || []) {
+        const near = positions.filter((position) => (
+          Math.hypot(position.x - portal.x, position.y - portal.y) < 72
+        ));
+        assert.ok(near.length <= 1, `${sceneId} door ${portal.id} at ${minutes} has ${near.length} NPCs`);
+      }
+    }
+  }
 });
 
 console.log(`\n${passed} exploration tests passed.`);
