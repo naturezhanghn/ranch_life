@@ -11,6 +11,10 @@
       "license": "original-project-asset",
       "width": 1024,
       "height": 1024,
+      "size": 2182945,
+      "version": 1,
+      "maxBytes": 3145728,
+      "runtime": false,
       "fallback": "programmatic-landmarks"
     },
     {
@@ -22,6 +26,10 @@
       "license": "original-project-asset",
       "width": 1024,
       "height": 1024,
+      "size": 1545165,
+      "version": 1,
+      "maxBytes": 3145728,
+      "runtime": false,
       "fallback": "programmatic-gameplay-props"
     }
   ]

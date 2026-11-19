@@ -48,6 +48,7 @@ Development. The real Canvas scene base remains the default runtime; four miniga
 - Gameplay card 25 is implemented: the summer-day-14 tide-lantern festival changes the port with three physical stalls/lantern markers. Completing any two on-site activities pays 80金+1公民点+2社区 once; flags are stored per festival year and the map returns to normal the next day.
 - Gameplay card 15 is implemented: five NPC birthdays are registered by season/day. Birthday gifts double the preference/ordinary/dislike relationship delta, record `town.birthdayGifts[npc]`, keep the one-gift-per-day cap, and show birthday context in both the NPC dialogue and gift panel.
 - Gameplay card 28 is implemented: save schema is now v3; every save rotates the previous payload into `ranch-life-common-ground-save-v1-backup` with a checksum, corrupt primary JSON falls back to that backup, and load clamps illegal day/season/seasonDay/minutes/coins/energy/water/player values while filling new quest/festival/weekly fields from defaults.
+- Gameplay card 29 is implemented: `assets/manifest.json` now records `size`, `version`, `maxBytes`, runtime/fallback metadata; `tools/check_assets.js` verifies required fields, unique ids, scene ids, existing files, exact size, and per-entry byte caps. It runs in `npm run build` and the GitHub Actions CI workflow. All runtime art remains programmatic with manifest fallbacks.
 - The branch is synchronized with `main` at `f09b381`. The merge keeps main's `FORAGE_NODE_DEFS`/`expiresMinute` implementation, legacy-node recovery, 8-minute collection time cost, and ecology gain, while retaining the shared collection hook.
 
 ## Important files
@@ -119,6 +120,7 @@ Review the next queued gameplay card (08: seasonal routes) against the merged ma
 - Card 25 verification: `npm test` (42 state + 9 minigame + 9 exploration); desktop festival smoke completed soup and lantern activities, paid the 80金/1公民点 reward once, and rendered markers without overflow; 390×844 touch completed the soup activity with no console errors.
 - Card 15 verification: `npm test` (42 state + 9 minigame + 10 exploration); Chromium birthday smoke showed the birthday note in dialogue and gift panel, a favorite birthday turnip raised relationship from 8 to 18, recorded day 12, and produced no console errors.
 - Card 28 verification: `npm test` (44 state + 9 minigame + 10 exploration); regression tests cover corrupt-primary backup recovery, illegal-number clamping, sparse old saves, and new-system defaults.
+- Card 29 verification: `npm run check:assets` reports 2 valid entries; `npm test` remains green; CI now runs the manifest check before tests.
 - This branch remains isolated until review and explicit merge approval.
 
 ## Latest social/economy slice
