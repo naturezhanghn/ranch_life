@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {
+  MARKET_TIERS,
   SCENE_DEFS,
   SCENE_NPCS,
   SCENE_SEASON_VARIANTS,
@@ -108,6 +109,7 @@ test("birthday gifts double the relationship delta and record the day", () => {
 
 test("three consecutive contract deliveries raise the market tier without double paying", () => {
   const state = createInitialState();
+  state.rngState = 123456789;
   state.inventory.produce.egg = 3;
   for (let index = 0; index < 3; index += 1) {
     const contract = {
@@ -126,9 +128,15 @@ test("three consecutive contract deliveries raise the market tier without double
   }
   assert.equal(state.market.tier, 1);
   assert.equal(state.market.contractStreak, 0);
-  const generated = generateTradeContracts(state)[0];
-  const baseContract = TRADE_CONTRACTS.find((entry) => entry.id === generated.id);
-  assert.ok(generated.reward > baseContract.reward);
+  const tierBonus = MARKET_TIERS[1].bonus;
+  assert.ok(tierBonus > 0);
+  const generatedContracts = generateTradeContracts(state);
+  assert.ok(generatedContracts.length >= 2);
+  for (const generated of generatedContracts) {
+    const baseContract = TRADE_CONTRACTS.find((entry) => entry.id === generated.id);
+    assert.ok(baseContract);
+    assert.equal(generated.reward, Math.round(baseContract.reward * (1 + tierBonus)));
+  }
 });
 
 test("discoveries feed the shared collection book exactly once", () => {
