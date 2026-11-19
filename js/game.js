@@ -49,6 +49,7 @@ import {
   buySeed,
   beginMinigame,
   checkDailyTasks,
+  collectSeasonalLandmark,
   collectForage,
   clearSave,
   createInitialState,
@@ -60,6 +61,7 @@ import {
   getMarketPrice,
   getMinigameAvailability,
   getNpcTopic,
+  getSceneSeasonVariant,
   giveGift,
   getTargetPlot,
   enactGovernmentPolicy,
@@ -583,7 +585,30 @@ function availableInteractions() {
       npc,
     };
   }).filter(Boolean);
-  return [...base.filter(forageInteractionIsAvailable), ...sceneFinds, ...scenePortalInteractions(sceneId), ...npcs];
+  const seasonVariant = getSceneSeasonVariant(state, sceneId);
+  const seasonLandmark = seasonVariant?.landmark;
+  const seasonClaimed = seasonLandmark
+    ? (state.seasonRoutes?.claims?.[`${state.season}:${sceneId}:${seasonLandmark.id}`] || 0) === state.day
+    : true;
+  const seasonal = seasonLandmark && !seasonClaimed
+    ? [{
+        id: `seasonal_${sceneId}`,
+        x: seasonLandmark.x,
+        y: seasonLandmark.y,
+        radius: seasonLandmark.radius || 56,
+        label: seasonLandmark.label,
+        keycap: "E",
+        seasonalGather: true,
+        sceneId,
+      }]
+    : [];
+  return [
+    ...base.filter(forageInteractionIsAvailable),
+    ...sceneFinds,
+    ...scenePortalInteractions(sceneId),
+    ...npcs,
+    ...seasonal,
+  ];
 }
 
 function findNearestInteraction() {
@@ -765,7 +790,10 @@ function canMoveTo(x, y) {
     { x: 831, y: 483, w: 141, h: 59 },
   ];
   const sceneId = currentSceneId();
-  const blockers = sceneId === "farm" ? farmBlockers : SCENE_DEFS[sceneId]?.blockers || [];
+  const seasonalBlockers = getSceneSeasonVariant(state, sceneId)?.blockers || [];
+  const blockers = sceneId === "farm"
+    ? [...farmBlockers, ...seasonalBlockers]
+    : [...(SCENE_DEFS[sceneId]?.blockers || []), ...seasonalBlockers];
   if (blockers.some((rect) => circleHitsRect(x, y, radius, rect, 2))) return false;
 
   for (const npc of SCENE_NPCS) {
@@ -851,6 +879,22 @@ function handleInteraction(id) {
   }
   if (sceneInteraction?.findId) {
     handleSceneFind(sceneInteraction.findId, sceneInteraction.sceneId);
+    return;
+  }
+  if (sceneInteraction?.seasonalGather) {
+    const result = collectSeasonalLandmark(state, currentSceneId());
+    if (result.ok) {
+      audio.play("forage");
+      triggerEffect("forage", state.player.x, state.player.y);
+      applyTaskCompletions(checkDailyTasks(state));
+      showToast(result.message, { strong: "季节路线", duration: 4600 });
+    } else {
+      audio.play("error");
+      showToast(result.message, { strong: "季节路线" });
+    }
+    updateHUD(true);
+    updateInteractionHint();
+    saveGame(state);
     return;
   }
   switch (id) {
@@ -2522,6 +2566,11 @@ function showDaySummary(report, nextEvent = null, auto = false) {
       <div class="weather-note">
         今日天气：${weather.icon} ${weather.label}。${productList}
       </div>
+      ${
+        report.seasonVariant
+          ? `<div class="day-report-card"><strong>${state.season}季路线 · ${report.seasonVariant.label}</strong><span>${report.seasonVariant.routeLabel}已经在地图上显出来。沿它走，可以找到本季专属的采集点；其他季节的入口会安静地收起，但主路始终可达。</span></div>`
+          : ""
+      }
       ${
         report.helperActions?.length
           ? `<div class="day-report-card day-report-card--helpers"><strong>小精灵日结</strong><span>${report.helperActions.join("；")}。</span></div>`

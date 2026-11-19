@@ -1,4 +1,14 @@
-import { CROPS, INTERACTIONS, SCENE_DEFS, SCENE_FINDS, SCENE_INTERACTIONS, SCENE_NPCS, TOOLS, WORLD } from "./data.js";
+import {
+  CROPS,
+  INTERACTIONS,
+  SCENE_DEFS,
+  SCENE_FINDS,
+  SCENE_INTERACTIONS,
+  SCENE_NPCS,
+  SCENE_SEASON_VARIANTS,
+  TOOLS,
+  WORLD,
+} from "./data.js";
 
 const TAU = Math.PI * 2;
 
@@ -45,9 +55,11 @@ export class WorldRenderer {
       return;
     }
 
+    const farmSeasonVariant = SCENE_SEASON_VARIANTS.farm?.[state.season] || null;
     ctx.clearRect(0, 0, WORLD.width, WORLD.height);
     this.drawGround(ctx, state, time);
     this.drawPaths(ctx, time);
+    this.drawSeasonalRoute(ctx, state, "farm", farmSeasonVariant, time);
     this.drawCanal(ctx, state, time);
     this.drawField(ctx, state, time, runtime);
     this.drawPasture(ctx, state, time);
@@ -60,9 +72,11 @@ export class WorldRenderer {
     this.drawShippingBin(ctx, time);
     this.drawCanalGate(ctx, state, time);
     this.drawStaticProps(ctx, time);
+    this.drawSeasonalBlockers(ctx, state, farmSeasonVariant, time);
     this.drawScenePortals(ctx, SCENE_DEFS.farm, time);
     this.drawForageNode(ctx, state, time);
     this.drawSceneFinds(ctx, state, time);
+    this.drawSeasonalLandmark(ctx, state, "farm", farmSeasonVariant, time);
 
     const drawables = [];
     const sisterY = 257;
@@ -110,6 +124,7 @@ export class WorldRenderer {
     this.drawInteractionHighlight(ctx, state, runtime, time);
     this.drawForegroundFlora(ctx, time);
     this.drawFloatingAtmosphere(ctx, state, time);
+    this.drawSeasonalAtmosphere(ctx, state, farmSeasonVariant, time);
     this.drawWeather(ctx, state, time);
     this.drawLighting(ctx, state, time);
     this.drawEffects(ctx, runtime, time, delta);
@@ -119,18 +134,23 @@ export class WorldRenderer {
   renderScene(ctx, state, runtime, time, delta) {
     const sceneId = state.world.scene;
     const scene = SCENE_DEFS[sceneId] || SCENE_DEFS.city;
+    const seasonVariant = SCENE_SEASON_VARIANTS[sceneId]?.[state.season] || null;
+    const palette = seasonVariant?.palette || scene.palette;
     ctx.clearRect(0, 0, WORLD.width, WORLD.height);
     const gradient = ctx.createLinearGradient(0, 0, 0, WORLD.height);
-    gradient.addColorStop(0, scene.palette[0]);
-    gradient.addColorStop(1, scene.palette[1]);
+    gradient.addColorStop(0, palette[0]);
+    gradient.addColorStop(1, palette[1]);
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, WORLD.width, WORLD.height);
 
     this.drawSceneGround(ctx, sceneId, time);
+    this.drawSeasonalRoute(ctx, state, sceneId, seasonVariant, time);
     this.drawSceneStructures(ctx, sceneId, time);
+    this.drawSeasonalBlockers(ctx, state, seasonVariant, time);
     this.drawScenePortals(ctx, scene, time);
     this.drawSceneLandmarks(ctx, state, sceneId, time);
     this.drawSceneFinds(ctx, state, time);
+    this.drawSeasonalLandmark(ctx, state, sceneId, seasonVariant, time);
 
     const drawables = [];
     for (const npc of SCENE_NPCS) {
@@ -151,6 +171,7 @@ export class WorldRenderer {
 
     this.drawSceneInteractionHighlight(ctx, state, runtime, time);
     this.drawSceneAtmosphere(ctx, sceneId, time);
+    this.drawSeasonalAtmosphere(ctx, state, seasonVariant, time);
     this.drawWeather(ctx, state, time);
     this.drawLighting(ctx, state, time);
     this.drawEffects(ctx, runtime, time, delta);
@@ -207,6 +228,120 @@ export class WorldRenderer {
         ctx.fillStyle = index % 3 === 0 ? "rgba(235, 208, 142, 0.13)" : "rgba(39, 43, 40, 0.15)";
         ctx.beginPath();
         ctx.ellipse(x, y, 8 + (index % 4) * 4, 3 + (index % 2) * 3, index, 0, TAU);
+        ctx.fill();
+      }
+    }
+    ctx.restore();
+  }
+
+  drawSeasonalRoute(ctx, state, sceneId, variant, time) {
+    const scene = SCENE_DEFS[sceneId];
+    if (!variant?.landmark || !scene?.spawn) return;
+    const from = scene.spawn;
+    const to = variant.landmark;
+    const midX = (from.x + to.x) / 2;
+    const midY = Math.min(from.y, to.y) - 54;
+    ctx.save();
+    ctx.strokeStyle = "rgba(255, 244, 197, 0.28)";
+    ctx.lineWidth = 3;
+    ctx.setLineDash([10, 12]);
+    ctx.lineDashOffset = -time * 8;
+    ctx.beginPath();
+    ctx.moveTo(from.x, from.y);
+    ctx.quadraticCurveTo(midX, midY, to.x, to.y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    for (let step = 0.24; step < 1; step += 0.24) {
+      const inverse = 1 - step;
+      const x = inverse * inverse * from.x + 2 * inverse * step * midX + step * step * to.x;
+      const y = inverse * inverse * from.y + 2 * inverse * step * midY + step * step * to.y;
+      ctx.globalAlpha = 0.35;
+      ctx.fillStyle = "#fff3c4";
+      ctx.beginPath();
+      ctx.arc(x, y, 2.5, 0, TAU);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  drawSeasonalBlockers(ctx, state, variant, time) {
+    if (!variant?.blockers?.length) return;
+    ctx.save();
+    for (const blocker of variant.blockers) {
+      const snow = state.season === "冬";
+      ctx.fillStyle = snow ? "rgba(226, 238, 238, 0.88)" : "rgba(72, 87, 64, 0.75)";
+      roundedRect(ctx, blocker.x, blocker.y, blocker.w, blocker.h, 14);
+      ctx.fill();
+      ctx.globalAlpha = snow ? 0.5 : 0.28;
+      ctx.fillStyle = snow ? "#ffffff" : "#d8b873";
+      for (let index = 0; index < 4; index += 1) {
+        ctx.beginPath();
+        ctx.arc(blocker.x + 16 + index * (blocker.w - 32) / 3, blocker.y + 10 + Math.sin(time + index) * 2, 5, 0, TAU);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 0.85;
+      ctx.fillStyle = snow ? "#eef7f5" : "#f3e4bb";
+      ctx.font = "700 9px 'PingFang SC', sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText(blocker.label, blocker.x + blocker.w / 2, blocker.y + blocker.h / 2 + 3);
+      ctx.globalAlpha = 1;
+    }
+    ctx.restore();
+  }
+
+  drawSeasonalLandmark(ctx, state, sceneId, variant, time) {
+    if (!variant?.landmark) return;
+    const landmark = variant.landmark;
+    const claimKey = `${state.season}:${sceneId}:${landmark.id}`;
+    const claimed = (state.seasonRoutes?.claims?.[claimKey] || 0) === state.day;
+    const pulse = 1 + Math.sin(time * 2 + landmark.x * 0.02) * 0.1;
+    ctx.save();
+    ctx.globalAlpha = claimed ? 0.28 : 0.65;
+    ctx.strokeStyle = "#fff3bd";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(landmark.x, landmark.y, 24 * pulse, 0, TAU);
+    ctx.stroke();
+    ctx.globalAlpha = claimed ? 0.4 : 0.9;
+    ctx.fillStyle = "#f7e6a6";
+    ctx.beginPath();
+    ctx.arc(landmark.x, landmark.y, 7, 0, TAU);
+    ctx.fill();
+    this.drawPlaceTag(
+      ctx,
+      landmark.x,
+      landmark.y - 34,
+      `${claimed ? "已走过" : "本季"} · ${variant.label}`,
+      "rgba(255, 247, 216, 0.9)",
+      "#5b5231",
+    );
+    ctx.restore();
+  }
+
+  drawSeasonalAtmosphere(ctx, state, variant, time) {
+    if (!variant) return;
+    const palette = {
+      春: ["#f1d7d5", "petal"],
+      夏: ["#d8f0bd", "spark"],
+      秋: ["#e8c27d", "leaf"],
+      冬: ["#eef8f8", "snow"],
+    }[state.season] || ["#f1d7d5", "petal"];
+    ctx.save();
+    ctx.fillStyle = palette[0];
+    for (let index = 0; index < 22; index += 1) {
+      const drift = time * (5 + index % 4);
+      const x = ((index * 137 + drift) % 1320) - 20;
+      const y = 80 + ((index * 83 + Math.sin(time * 0.5 + index) * 24 + drift * (0.3 + (index % 3) * 0.18)) % 540);
+      ctx.globalAlpha = state.season === "冬" ? 0.4 : 0.28;
+      if (palette[1] === "leaf") {
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(time * 0.6 + index);
+        ctx.fillRect(-3, -1.2, 6, 2.4);
+        ctx.restore();
+      } else {
+        ctx.beginPath();
+        ctx.arc(x, y, state.season === "夏" ? 1.3 : 2, 0, TAU);
         ctx.fill();
       }
     }
@@ -434,10 +569,12 @@ export class WorldRenderer {
   }
 
   drawGround(ctx, state, time) {
+    const variant = SCENE_SEASON_VARIANTS.farm?.[state.season];
+    const palette = variant?.palette || ["#89a96b", "#88a762", "#75985a"];
     const gradient = ctx.createLinearGradient(0, 0, 0, WORLD.height);
-    gradient.addColorStop(0, "#89a96b");
-    gradient.addColorStop(0.55, "#88a762");
-    gradient.addColorStop(1, "#75985a");
+    gradient.addColorStop(0, palette[0]);
+    gradient.addColorStop(0.55, palette[0]);
+    gradient.addColorStop(1, palette[1]);
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, WORLD.width, WORLD.height);
 

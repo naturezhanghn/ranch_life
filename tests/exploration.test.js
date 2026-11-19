@@ -1,12 +1,14 @@
 import assert from "node:assert/strict";
-import { TRADE_CONTRACTS } from "../js/data.js";
+import { SCENE_DEFS, SCENE_SEASON_VARIANTS, SEASONS, TRADE_CONTRACTS } from "../js/data.js";
 import {
   advanceDay,
+  collectSeasonalLandmark,
   collectForage,
   createInitialState,
   discoverSceneFind,
   fulfillTradeContract,
   generateTradeContracts,
+  getSceneSeasonVariant,
   getNpcTopic,
   giveGift,
   resolveNpcTopic,
@@ -122,6 +124,50 @@ test("discoveries feed the shared collection book exactly once", () => {
   const before = state.collection.entries.length;
   discoverSceneFind(state, "farm", "old_gate");
   assert.equal(state.collection.entries.length, before);
+});
+
+test("four seasonal routes expose one exclusive landmark and stay clear of portals", () => {
+  const state = createInitialState();
+  for (const season of SEASONS) {
+    state.season = season;
+    for (const sceneId of ["farm", "city", "port", "island", "council", "workshop", "quarry"]) {
+      const variant = getSceneSeasonVariant(state, sceneId);
+      assert.ok(variant, `${sceneId} should have a ${season} variant`);
+      assert.ok(variant.label && variant.routeLabel && variant.landmark?.id);
+      assert.ok(SCENE_SEASON_VARIANTS[sceneId][season].palette.length === 2);
+      for (const blocker of variant.blockers || []) {
+        assert.ok(blocker.w < 200 && blocker.h < 80, "seasonal blockers must stay small");
+        for (const portal of SCENE_DEFS[sceneId].portals || []) {
+          const inside =
+            portal.x > blocker.x - 16
+            && portal.x < blocker.x + blocker.w + 16
+            && portal.y > blocker.y - 16
+            && portal.y < blocker.y + blocker.h + 16;
+          assert.equal(inside, false, `${sceneId} ${season} blocker must not cover a portal`);
+        }
+      }
+    }
+  }
+});
+
+test("seasonal landmark can be gathered once per day and records its own route", () => {
+  const state = createInitialState();
+  state.season = "夏";
+  state.day = 3;
+  state.seasonDay = 3;
+  const before = state.energy;
+  const first = collectSeasonalLandmark(state, "farm");
+  assert.equal(first.ok, true);
+  assert.equal(first.itemId, "summer_berry");
+  assert.equal(state.energy, before - 1);
+  assert.equal(state.inventory.resources.summer_berry, 1);
+  assert.equal(state.seasonRoutes.claims[`夏:farm:${first.landmark.id}`], 3);
+  assert.equal(state.collection.stats.forage.found, 1);
+  assert.equal(collectSeasonalLandmark(state, "farm").ok, false);
+  state.day = 4;
+  assert.equal(collectSeasonalLandmark(state, "farm").ok, true);
+  state.season = "秋";
+  assert.equal(collectSeasonalLandmark(state, "farm").itemId, "autumn_mushroom");
 });
 
 console.log(`\n${passed} exploration tests passed.`);

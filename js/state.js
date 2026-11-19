@@ -31,6 +31,7 @@ import {
   SCENE_FINDS,
   SCENE_NPCS,
   SCENE_REGION_MAP,
+  SCENE_SEASON_VARIANTS,
   SEASONS,
   SEASON_DAYS,
   SEASONAL_CROP_CALENDAR,
@@ -328,6 +329,10 @@ export function createInitialState() {
       legacyMigrated: false,
       lastRefreshDay: 0,
     },
+    seasonRoutes: {
+      claims: {},
+      lastNotice: {},
+    },
     collection: {
       entries: [],
       stats: {},
@@ -530,6 +535,52 @@ export function addMemory(state, text, type = "observation", importance = 1) {
     text,
   });
   state.ai.memories = state.ai.memories.slice(0, 16);
+}
+
+export function getSceneSeasonVariant(state, sceneId = state.world?.scene || "farm") {
+  return SCENE_SEASON_VARIANTS[sceneId]?.[state.season] || null;
+}
+
+export function collectSeasonalLandmark(state, sceneId = state.world?.scene || "farm") {
+  const variant = getSceneSeasonVariant(state, sceneId);
+  const landmark = variant?.landmark;
+  if (!variant || !landmark) return { ok: false, message: "这条季节小径还没有出现。" };
+  const claimKey = `${state.season}:${sceneId}:${landmark.id}`;
+  state.seasonRoutes = state.seasonRoutes || { claims: {}, lastNotice: {} };
+  state.seasonRoutes.claims = state.seasonRoutes.claims || {};
+  if ((state.seasonRoutes.claims[claimKey] || 0) === state.day) {
+    return { ok: false, message: "这条季节小径今天已经走过了，明天再来看看。" };
+  }
+  if (state.energy < 1) return { ok: false, message: "体力不够，先在附近歇一会儿吧。" };
+  const item = (FORAGE_TABLE[state.season] || []).find((entry) => entry.id === landmark.itemId);
+  if (!item) return { ok: false, message: "这里今天的季节物还没有成熟。" };
+  state.energy -= 1;
+  state.minutes = Math.min(24 * 60, state.minutes + 6);
+  state.inventory.resources[item.id] = (state.inventory.resources[item.id] || 0) + 1;
+  state.seasonRoutes.claims[claimKey] = state.day;
+  recordCollection(
+    state,
+    "forage",
+    item.id,
+    item.name,
+    `${SCENE_DEFS[sceneId]?.name || sceneId} · ${variant.label}`,
+  );
+  bumpCounter(state, "foraged");
+  state.relations.ecology = bounded(state.relations.ecology + 1);
+  addMemory(
+    state,
+    `${landmark.detail}你在${variant.routeLabel}采到${item.name}，并把这条季节路线记进地方志。`,
+    "forage",
+    2,
+  );
+  return {
+    ok: true,
+    itemId: item.id,
+    item,
+    variant,
+    landmark,
+    message: `沿${variant.routeLabel}采到${item.name}。本季这条路今天已经走完了。`,
+  };
 }
 
 export function bumpCounter(state, counter, amount = 1) {
@@ -1121,9 +1172,15 @@ export function switchScene(state, sceneId, mode = "road") {
   state.player.y = scene.spawn.y;
   state.player.facing = scene.spawn.facing || "down";
   if (mode === "quick") state.minutes = Math.min(24 * 60, state.minutes + 4);
+  const variant = getSceneSeasonVariant(state, sceneId);
+  const noticeKey = `${state.season}:${sceneId}:${state.day}`;
+  state.seasonRoutes = state.seasonRoutes || { claims: {}, lastNotice: {} };
+  state.seasonRoutes.lastNotice = state.seasonRoutes.lastNotice || {};
+  const shouldNotice = variant && !state.seasonRoutes.lastNotice[noticeKey];
+  if (shouldNotice) state.seasonRoutes.lastNotice[noticeKey] = true;
   addMemory(
     state,
-    `${mode === "quick" ? "你使用已走过的路线快速抵达" : "你沿着道路抵达"}${scene.name}。这里的声音和牧场不同。`,
+    `${mode === "quick" ? "你使用已走过的路线快速抵达" : "你沿着道路抵达"}${scene.name}。这里的声音和牧场不同。${shouldNotice ? `${variant.label}已经在路边显出来：${variant.routeLabel}。` : ""}`,
     "travel",
     2,
   );
@@ -2131,6 +2188,7 @@ export function advanceDay(state) {
       combo: Math.max(0, Number(state.forage?.combo) || 0),
       window: false,
     },
+    seasonVariant: null,
     systemNotes: [],
     weather: "sunny",
   };
@@ -2240,7 +2298,13 @@ export function advanceDay(state) {
   if (state.seasonDay > SEASON_DAYS) {
     state.seasonDay = 1;
     state.season = SEASONS[(SEASONS.indexOf(state.season) + 1) % SEASONS.length];
-    addMemory(state, `季节更替：现在是${state.season}季。作物日历和山货目录已经刷新。`, "season", 3);
+    const farmVariant = getSceneSeasonVariant(state, "farm");
+    addMemory(
+      state,
+      `季节更替：现在是${state.season}季。作物日历、山货目录和场景路线已经刷新${farmVariant ? `，牧场出现了「${farmVariant.label}」` : ""}。`,
+      "season",
+      3,
+    );
   }
   state.minutes = DAY_START_MINUTES;
   state.energy = state.maxEnergy;
@@ -2262,6 +2326,7 @@ export function advanceDay(state) {
 
   state.weather = weather;
   report.weather = weather;
+  report.seasonVariant = getSceneSeasonVariant(state, "farm");
 
   const rainWindow = previousWeather === "rain";
   const seasonalForage = rainWindow || nextRandom(state) > 0.45 || state.seasonDay === 1;
@@ -2458,6 +2523,12 @@ export function loadGame() {
         giftLog: Array.isArray(parsed.social?.giftLog)
           ? parsed.social.giftLog
           : base.social.giftLog,
+      },
+      seasonRoutes: {
+        ...base.seasonRoutes,
+        ...(parsed.seasonRoutes || {}),
+        claims: { ...base.seasonRoutes.claims, ...(parsed.seasonRoutes?.claims || {}) },
+        lastNotice: { ...base.seasonRoutes.lastNotice, ...(parsed.seasonRoutes?.lastNotice || {}) },
       },
       world: {
         ...base.world,
