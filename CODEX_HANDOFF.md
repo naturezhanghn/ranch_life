@@ -15,14 +15,15 @@ Development. The real Canvas scene base remains the default runtime; four miniga
 - `vendor/dist/phaser.min.js` is pinned to Phaser `4.2.1`.
 - `?phaser=1` starts the Phaser farm rendering/input/camera slice. Default URLs preserve the current Canvas runtime.
 - `SCENE_NPCS` now drives eight scheduled residents across city, port, council, workshop, and island scenes.
-- `assets/generated/world-landmark-sheet.png` was generated through the requested imagegen function for map visual direction.
+- `assets/generated/world-landmark-sheet.png` and `assets/generated/gameplay-elements-sheet.png` were generated through the requested imagegen function for map and activity visual direction. `assets/manifest.json` records both assets with programmatic fallbacks.
+- `GAMEPLAY_30_PLAN.md` contains 30 numbered gameplay design cards with state fields, spatial rules, rewards, failure recovery, day-end and牧心 effects, and desktop/390×844 acceptance checks. The cards were individually queued to both existing `codex` and `bailian` tmux sessions.
 - `state.js` remains the owner of economy, AI, saves, scene state, and day progression.
 - `js/minigames.js` owns deterministic minigame rules (hunt, fishing, mining, delivery).
 - `js/minigame-layer.js` owns the Canvas overlay, pointer/keyboard routing, and result handoff.
 - New sites are scene interactions, not standalone menu pages: `island_patrol`, `island_fishing`, `quarry_vein`, and `port_delivery_run`.
 - Old saves receive `minigames` defaults; active sessions are intentionally cleared on load.
 - The game-space slice is merged into `main`; its branch remains available for audit.
-- Deployment source commit: `ffdc3ba` on `main`; live URL: `https://naturezhanghn.github.io/ranch_life/`.
+- Deployment source commit: `e94ff22` on `main`; live URL: `https://naturezhanghn.github.io/ranch_life/`.
 
 ## Important files
 
@@ -58,10 +59,11 @@ Development. The real Canvas scene base remains the default runtime; four miniga
 - Save compatibility remains tied to `state.js`, not Phaser scene objects.
 - Minigame overlay and Phaser must never own world movement at the same time.
 - The quarry is a scene entered from the city road; it is intentionally not a new top-level region tab.
+- The 30-card queue is asynchronous. Its remaining slices must be reviewed one at a time before merging, because both tmux agents share the project filesystem.
 
 ## Next safest task
 
-Run the opt-in Phaser farm slice against the merged code before migrating additional scenes; then extend the next approved gameplay slice.
+Run the opt-in Phaser farm slice against the merged code before migrating additional scenes; then review the first completed card from the tmux queue before accepting the next card.
 
 ## Last slice
 
