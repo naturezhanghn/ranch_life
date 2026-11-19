@@ -198,6 +198,15 @@ export class WorldRenderer {
         ctx.lineTo(x + 15, y);
         ctx.stroke();
       }
+    } else if (sceneId === "quarry") {
+      for (let index = 0; index < 28; index += 1) {
+        const x = 18 + hash01(index * 7.3) * 1240;
+        const y = 60 + hash01(index * 13.1) * 600;
+        ctx.fillStyle = index % 3 === 0 ? "rgba(235, 208, 142, 0.13)" : "rgba(39, 43, 40, 0.15)";
+        ctx.beginPath();
+        ctx.ellipse(x, y, 8 + (index % 4) * 4, 3 + (index % 2) * 3, index, 0, TAU);
+        ctx.fill();
+      }
     }
     ctx.restore();
   }
@@ -237,6 +246,13 @@ export class WorldRenderer {
         [488, 86, 214, 156, "银沙滩", "#ccb878"],
         [892, 66, 300, 190, "月光礁", "#6d98a1"],
         [342, 428, 202, 122, "赤潮花园", "#ad6c68"],
+      ],
+      quarry: [
+        [54, 72, 250, 154, "矿工小屋", "#75644e"],
+        [438, 84, 386, 158, "旧矿道入口", "#4d4b43"],
+        [926, 74, 238, 162, "废矿车棚", "#716053"],
+        [190, 376, 208, 112, "碎石场", "#8a7659"],
+        [834, 380, 246, 118, "安全站", "#6e7464"],
       ],
     }[sceneId] || [];
     for (const [x, y, w, h, label, roof] of structures) {

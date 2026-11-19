@@ -11,6 +11,7 @@ import {
   ISLAND_DAILY_LIMIT,
   ISLAND_SPOTS,
   MARKET_GOODS,
+  MINIGAME_DEFS,
   PLAYER_START,
   PRODUCTS,
   PRODUCT_QUALITY_LABELS,
@@ -184,6 +185,8 @@ export function createInitialState() {
         coconut: 0,
         pearl: 0,
         coral: 0,
+        tidefish: 0,
+        ore: 0,
       },
     },
     bag: {
@@ -230,6 +233,10 @@ export function createInitialState() {
       talkedAnimals: 0,
       brushedAnimals: 0,
       qualityItems: 0,
+      minigameHits: 0,
+      fishCaught: 0,
+      oreMined: 0,
+      deliveryRuns: 0,
     },
     daily: null,
     ai: {
@@ -285,6 +292,27 @@ export function createInitialState() {
       reputation: 0,
       shipments: 0,
       contracts: [],
+    },
+    minigames: {
+      lastPlayed: {
+        hunt: 0,
+        fishing: 0,
+        mining: 0,
+        delivery: 0,
+      },
+      best: {
+        hunt: 0,
+        fishing: 0,
+        mining: 0,
+        delivery: 0,
+      },
+      totals: {
+        huntRuns: 0,
+        fishingRuns: 0,
+        miningRuns: 0,
+        deliveryRuns: 0,
+      },
+      active: null,
     },
     government: {
       civicPoints: 3,
@@ -1075,6 +1103,159 @@ export function exploreIsland(state, spotId) {
   return { ok: true, message: `探索${spot.title}，${resultText}。`, resource: spot.resource, amount };
 }
 
+function eligibleDeliveryContract(state) {
+  return (state.market?.contracts || []).find(
+    (contract) =>
+      contract.accepted &&
+      !contract.completed &&
+      Object.entries(contract.requirements).every(
+        ([itemId, amount]) => inventoryQuantity(state, itemId) >= amount,
+      ),
+  ) || null;
+}
+
+function minigameSceneUnlocked(state, def) {
+  if (def.scene === "island") return state.world.unlockedRegions.includes("island");
+  if (def.scene === "quarry") return state.world.visitedScenes.includes("city");
+  return true;
+}
+
+export function getMinigameAvailability(state, type) {
+  const def = MINIGAME_DEFS[type];
+  if (!def) return { ok: false, message: "这个玩法还没有准备好。" };
+  if (state.minigames?.active) {
+    return { ok: false, message: "另一场活动还没有结束。" };
+  }
+  if ((state.minigames?.lastPlayed?.[type] || 0) === state.day) {
+    return { ok: false, message: `${def.title}今天已经做过了，明天再来吧。` };
+  }
+  if (state.energy < def.energy) {
+    return { ok: false, message: `体力不够，${def.title}需要 ${def.energy} 点体力。` };
+  }
+  if (!minigameSceneUnlocked(state, def)) {
+    return { ok: false, message: def.scene === "island" ? "先修好蓝潮渡轮，才能进入潮汐路线。" : "先去城市旧矿道看看。" };
+  }
+  let contract = null;
+  if (type === "delivery") {
+    contract = eligibleDeliveryContract(state);
+    if (!contract) {
+      return { ok: false, message: "先接下港口订单，并把所需货物备齐。" };
+    }
+  }
+  return { ok: true, def, contract };
+}
+
+export function beginMinigame(state, type) {
+  const availability = getMinigameAvailability(state, type);
+  if (!availability.ok) return availability;
+  state.energy -= availability.def.energy;
+  state.minutes = Math.min(24 * 60, state.minutes + availability.def.clockMinutes);
+  state.minigames.lastPlayed[type] = state.day;
+  state.minigames.active = {
+    type,
+    day: state.day,
+    contractId: availability.contract?.id || null,
+  };
+  addMemory(
+    state,
+    `你开始了${availability.def.title}。这次行动消耗 ${availability.def.energy} 点体力，结果会写入牧心的长期记忆。`,
+    "activity",
+    2,
+  );
+  return {
+    ok: true,
+    type,
+    contract: availability.contract,
+    def: availability.def,
+  };
+}
+
+export function abortMinigame(state) {
+  if (!state.minigames?.active) return { ok: false, message: "没有正在进行的活动。" };
+  state.minigames.active = null;
+  return { ok: true };
+}
+
+export function resolveMinigame(state, type, result = {}) {
+  const def = MINIGAME_DEFS[type];
+  const active = state.minigames?.active;
+  if (!def || !active || active.type !== type || active.day !== state.day) {
+    return { ok: false, message: "这场活动的结果已经失效。" };
+  }
+  state.minigames.active = null;
+  state.minigames.totals[`${type}Runs`] = (state.minigames.totals[`${type}Runs`] || 0) + 1;
+  const score = Math.max(0, Math.round(Number(result.score) || 0));
+  state.minigames.best[type] = Math.max(state.minigames.best[type] || 0, score);
+
+  if (type === "hunt") {
+    const hits = Math.max(0, Math.floor(Number(result.hits) || 0));
+    const coins = hits * 12;
+    state.coins += coins;
+    state.stats.earned += coins;
+    state.stats.minigameHits += hits;
+    state.relations.ecology = bounded(state.relations.ecology + (hits >= 4 ? 2 : 1));
+    bumpCounter(state, "explored");
+    addMemory(
+      state,
+      `湿地巡护结束：驱离 ${hits} 只偷食鸟，获得 ${coins} 金巡护补贴。`,
+      "care",
+      2,
+    );
+    return { ok: true, type, coins, hits, message: `巡护完成：驱离 ${hits} 只斑翅雀，获得 ${coins} 金。` };
+  }
+
+  if (type === "fishing") {
+    const catches = Math.max(0, Math.floor(Number(result.catches) || 0));
+    const perfects = Math.min(catches, Math.max(0, Math.floor(Number(result.perfects) || 0)));
+    const amount = catches + perfects;
+    if (amount > 0) state.inventory.resources.tidefish += amount;
+    state.stats.fishCaught += amount;
+    bumpCounter(state, "explored");
+    addMemory(
+      state,
+      `潮汐垂钓结束：钓到 ${catches} 条鱼，其中 ${perfects} 次完美收线。`,
+      "care",
+      2,
+    );
+    return { ok: true, type, catches, perfects, amount, message: `钓到 ${catches} 条潮汐银鱼${perfects ? `，${perfects} 次完美收线` : ""}。` };
+  }
+
+  if (type === "mining") {
+    const haulUnits = Math.max(0, Math.floor(Number(result.haulUnits ?? Math.round((result.haulValue || 0) / 5)) || 0));
+    if (haulUnits > 0) state.inventory.resources.ore += haulUnits;
+    state.stats.oreMined += haulUnits;
+    bumpCounter(state, "foraged");
+    addMemory(
+      state,
+      `旧矿脉采样结束：带回 ${haulUnits} 份旧矿铜。${result.collapsed ? "吊钩在坍塌带失去了一部分收获。" : ""}`,
+      "activity",
+      2,
+    );
+    return { ok: true, type, haulUnits, message: `带回 ${haulUnits} 份旧矿铜${result.collapsed ? "，矿道发生了一次小坍塌" : ""}。` };
+  }
+
+  if (type === "delivery") {
+    const contractId = active.contractId;
+    if (result.arrived) {
+      const fulfilled = fulfillTradeContract(state, contractId);
+      if (!fulfilled.ok) return { ...fulfilled, type };
+      const tip = 30;
+      state.coins += tip;
+      state.stats.earned += tip;
+      state.stats.deliveryRuns += 1;
+      state.market.reputation += 2;
+      bumpCounter(state, "contracts");
+      addMemory(state, `限时运货成功，按时送达「${fulfilled.contract.title}」，额外获得 ${tip} 金小费。`, "economy", 3);
+      return { ok: true, type, coins: fulfilled.contract.reward + tip, message: `运货成功，订单完成并获得 ${fulfilled.contract.reward + tip} 金。` };
+    }
+    state.market.reputation = Math.max(0, state.market.reputation - 1);
+    addMemory(state, "限时运货失败：车辆被路障耽误，港口声誉下降。订单仍在等待下一次交付。", "economy", 2);
+    return { ok: true, type, coins: 0, message: "运货超时，订单仍在等待，港口声誉下降 1。" };
+  }
+
+  return { ok: false, message: "这个玩法没有结算规则。" };
+}
+
 export function recordTalk(state, npcName) {
   bumpCounter(state, "talked");
   if (state.government) state.government.civicPoints += 1;
@@ -1745,6 +1926,14 @@ export function loadGame() {
         contracts: Array.isArray(parsed.market?.contracts)
           ? parsed.market.contracts
           : base.market.contracts,
+      },
+      minigames: {
+        ...base.minigames,
+        ...(parsed.minigames || {}),
+        lastPlayed: { ...base.minigames.lastPlayed, ...(parsed.minigames?.lastPlayed || {}) },
+        best: { ...base.minigames.best, ...(parsed.minigames?.best || {}) },
+        totals: { ...base.minigames.totals, ...(parsed.minigames?.totals || {}) },
+        active: null,
       },
       government: {
         ...base.government,

@@ -11,6 +11,7 @@ import {
   ISLAND_DAILY_LIMIT,
   ISLAND_SPOTS,
   MARKET_GOODS,
+  MINIGAME_DEFS,
   INTERACTIONS,
   PRODUCTS,
   REGIONS,
@@ -34,11 +35,13 @@ import {
   applyDevelopmentChoice,
   applyDroughtChoice,
   applyGovernanceChoice,
+  abortMinigame,
   acceptTradeContract,
   assignSprite,
   animalQuality,
   buyFeed,
   buySeed,
+  beginMinigame,
   checkDailyTasks,
   collectForage,
   clearSave,
@@ -49,6 +52,7 @@ import {
   getAiPrediction,
   getClueCount,
   getMarketPrice,
+  getMinigameAvailability,
   getTargetPlot,
   enactGovernmentPolicy,
   exploreIsland,
@@ -69,6 +73,7 @@ import {
   recordTalk,
   refillWaterAtCanal,
   resolveEnding,
+  resolveMinigame,
   saveGame,
   sellAtMarket,
   shipProduce,
@@ -77,6 +82,7 @@ import {
   useToolOnPlot,
 } from "./state.js";
 import { FarmAudio } from "./audio.js";
+import { MinigameLayer } from "./minigame-layer.js";
 import { WorldRenderer } from "./renderer.js";
 
 const canvas = document.getElementById("gameCanvas");
@@ -125,6 +131,10 @@ const dom = {
   liveRegion: document.getElementById("liveRegion"),
   touchControls: document.getElementById("touchControls"),
   touchAction: document.getElementById("touchAction"),
+  minigameLayer: document.getElementById("minigameLayer"),
+  minigameCanvas: document.getElementById("minigameCanvas"),
+  minigameClose: document.getElementById("minigameClose"),
+  minigameAnnouncement: document.getElementById("minigameAnnouncement"),
 };
 
 const weatherPresentation = {
@@ -159,6 +169,14 @@ const runtime = {
 };
 
 audio.setEnabled(state.settings.sound);
+
+const minigameLayer = new MinigameLayer({
+  layer: dom.minigameLayer,
+  canvas: dom.minigameCanvas,
+  closeButton: dom.minigameClose,
+  announcement: dom.minigameAnnouncement,
+  audio,
+});
 
 function escapeHtml(value) {
   return String(value)
@@ -535,7 +553,7 @@ function availableInteractions() {
 }
 
 function findNearestInteraction() {
-  if (!active || modalOpen) return null;
+  if (!active || modalOpen || minigameLayer.active) return null;
   let nearest = null;
   let nearestDistance = Infinity;
   for (const interaction of availableInteractions()) {
@@ -551,7 +569,7 @@ function findNearestInteraction() {
 }
 
 function updateInteractionHint() {
-  if (!active || modalOpen) {
+  if (!active || modalOpen || minigameLayer.active) {
     dom.interactionHint.classList.remove("is-visible");
     runtime.nearInteraction = null;
     return;
@@ -570,6 +588,11 @@ function updateInteractionHint() {
 
 function update(delta) {
   if (!active || !state) return;
+
+  if (minigameLayer.active) {
+    minigameLayer.update(delta);
+    return;
+  }
 
   if (!modalOpen) {
     updateMovement(delta);
@@ -732,7 +755,7 @@ function canMoveTo(x, y) {
 }
 
 function performAction() {
-  if (!active || modalOpen || inputLocked) return;
+  if (!active || modalOpen || inputLocked || minigameLayer.active) return;
   const nearest = findNearestInteraction();
   if (nearest) {
     handleInteraction(nearest.id);
@@ -786,6 +809,10 @@ function handleInteraction(id) {
   }
   if (sceneInteraction?.npcId) {
     openSceneNpcDialogue(sceneInteraction.npcId);
+    return;
+  }
+  if (sceneInteraction?.minigame) {
+    startSceneMinigame(sceneInteraction.minigame);
     return;
   }
   switch (id) {
@@ -874,6 +901,62 @@ function handleInteraction(id) {
       break;
     default:
       break;
+  }
+}
+
+function startSceneMinigame(type) {
+  if (!MINIGAME_DEFS[type]) {
+    showToast("这个活动还没有准备好。");
+    return;
+  }
+  const availability = getMinigameAvailability(state, type);
+  if (!availability.ok) {
+    audio.play("error");
+    showToast(availability.message, { strong: MINIGAME_DEFS[type].title });
+    return;
+  }
+  if (availability.def.scene !== currentSceneId()) {
+    audio.play("error");
+    showToast(`请先前往${SCENE_DEFS[availability.def.scene]?.name || "对应地点"}。`);
+    return;
+  }
+  const started = beginMinigame(state, type);
+  if (!started.ok) {
+    audio.play("error");
+    showToast(started.message, { strong: MINIGAME_DEFS[type].title });
+    return;
+  }
+  audio.play("ui");
+  updateHUD(true);
+  saveGame(state);
+  const launched = minigameLayer.start({
+    type,
+    contract: started.contract,
+    onComplete: (result) => {
+      const resolved = resolveMinigame(state, type, result);
+      if (resolved.ok) {
+        applyTaskCompletions(checkDailyTasks(state));
+        audio.play("success");
+        showToast(resolved.message, { strong: MINIGAME_DEFS[type].title, duration: 4600 });
+        addMemory(state, `小游戏结算：${MINIGAME_DEFS[type].title}完成，结果已写入当日记录。`, "activity", 2);
+      } else {
+        audio.play("error");
+        showToast(resolved.message, { strong: MINIGAME_DEFS[type].title });
+      }
+      updateHUD(true);
+      saveGame(state);
+    },
+    onAbort: () => {
+      abortMinigame(state);
+      audio.play("error");
+      showToast("你暂时离开了活动，今天的机会已经用掉。", { strong: MINIGAME_DEFS[type].title });
+      updateHUD(true);
+      saveGame(state);
+    },
+  });
+  if (!launched) {
+    abortMinigame(state);
+    showToast("无法启动这个活动。", { strong: MINIGAME_DEFS[type].title });
   }
 }
 
@@ -2873,6 +2956,10 @@ function selectTool(toolId) {
 
 function handleKeyDown(event) {
   const key = event.key.toLowerCase();
+  if (minigameLayer.active) {
+    minigameLayer.handleKeyDown(event);
+    return;
+  }
   if (modalOpen) {
     if (key === "escape" && modalClosable) closeModal();
     return;
@@ -3024,6 +3111,7 @@ function bindEvents() {
   dom.touchAction.addEventListener("pointerdown", (event) => {
     event.preventDefault();
     dom.touchAction.classList.add("is-pressed");
+    if (minigameLayer.active) return;
     performAction();
   });
   dom.touchAction.addEventListener("pointerup", () => dom.touchAction.classList.remove("is-pressed"));
@@ -3068,6 +3156,16 @@ window.__RANCH_DEBUG__ = {
       return report;
     },
     checkDailyTasks: () => checkDailyTasks(state),
+    beginMinigame: (type) => startSceneMinigame(type),
+    minigameActive: () => minigameLayer.active,
+    getMinigame: () => minigameLayer.game,
+    finishMinigame: () => {
+      if (!minigameLayer.active || !minigameLayer.game) return false;
+      minigameLayer.game.timeout();
+      minigameLayer.resultTimer = 2.3;
+      minigameLayer.update(0.01);
+      return true;
+    },
     save: () => saveGame(state),
   },
   startNew: () => startNewGame(),

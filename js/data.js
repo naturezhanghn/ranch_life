@@ -40,9 +40,12 @@ export const REGION_SCENE_MAP = {
   sprites: "workshop",
 };
 
-export const SCENE_REGION_MAP = Object.fromEntries(
-  Object.entries(REGION_SCENE_MAP).map(([regionId, sceneId]) => [sceneId, regionId]),
-);
+export const SCENE_REGION_MAP = {
+  ...Object.fromEntries(
+    Object.entries(REGION_SCENE_MAP).map(([regionId, sceneId]) => [sceneId, regionId]),
+  ),
+  quarry: "city",
+};
 
 export const REGIONS = {
   farm: {
@@ -148,6 +151,24 @@ export const SCENE_DEFS = {
       { id: "portal_port", x: 1138, y: 640, radius: 42, target: "port", label: "去贸易港" },
       { id: "portal_council", x: 770, y: 275, radius: 52, target: "council", label: "进入共同议事厅" },
       { id: "portal_workshop", x: 1080, y: 274, radius: 52, target: "workshop", label: "进入小精灵工坊" },
+      { id: "portal_quarry", x: 560, y: 620, radius: 48, target: "quarry", label: "出城去旧矿道" },
+    ],
+  },
+  quarry: {
+    id: "quarry",
+    name: "旧矿道",
+    subtitle: "废弃矿车、深井与尚未塌落的矿脉",
+    palette: ["#857b66", "#403f3a"],
+    spawn: { x: 116, y: 606, facing: "right" },
+    blockers: [
+      { x: 54, y: 72, w: 250, h: 154 },
+      { x: 438, y: 84, w: 386, h: 158 },
+      { x: 926, y: 74, w: 238, h: 162 },
+      { x: 190, y: 376, w: 208, h: 112 },
+      { x: 834, y: 380, w: 246, h: 118 },
+    ],
+    portals: [
+      { id: "portal_city", x: 86, y: 646, radius: 42, target: "city", label: "回河港市" },
     ],
   },
   port: {
@@ -223,12 +244,6 @@ export const SCENE_INTERACTIONS = {
     { id: "city_market", x: 430, y: 275, radius: 62, label: "进入城市建设处", keycap: "E" },
     { id: "city_mayor", x: 474, y: 526, radius: 58, label: "和市政官聊聊", keycap: "E" },
   ],
-  port: [
-    { id: "port_trade", x: 490, y: 275, radius: 62, label: "查看贸易航线", keycap: "E" },
-    { id: "port_ferry", x: 850, y: 278, radius: 64, label: "乘蓝潮渡轮", keycap: "E" },
-    { id: "port_shipping", x: 1114, y: 286, radius: 58, label: "打开港口出货箱", keycap: "E" },
-    { id: "port_sailor", x: 500, y: 542, radius: 54, label: "和渡轮长聊聊", keycap: "E" },
-  ],
   council: [
     { id: "council_government", x: 380, y: 364, radius: 64, label: "打开共同议政", keycap: "E" },
     { id: "council_water", x: 860, y: 366, radius: 64, label: "查看水章档案", keycap: "E" },
@@ -244,6 +259,18 @@ export const SCENE_INTERACTIONS = {
     { id: "island_silverBeach", x: 760, y: 342, radius: 60, label: "探索银沙滩", keycap: "E", spot: "silverBeach" },
     { id: "island_moonReef", x: 1100, y: 350, radius: 60, label: "探索月光礁", keycap: "E", spot: "moonReef" },
     { id: "island_redGarden", x: 590, y: 590, radius: 60, label: "探索赤潮花园", keycap: "E", spot: "redGarden" },
+    { id: "island_patrol", x: 930, y: 500, radius: 58, label: "湿地巡护", keycap: "E", minigame: "hunt" },
+    { id: "island_fishing", x: 1120, y: 570, radius: 58, label: "潮汐垂钓", keycap: "E", minigame: "fishing" },
+  ],
+  port: [
+    { id: "port_trade", x: 490, y: 275, radius: 62, label: "查看贸易航线", keycap: "E" },
+    { id: "port_ferry", x: 850, y: 278, radius: 64, label: "乘蓝潮渡轮", keycap: "E" },
+    { id: "port_shipping", x: 1114, y: 286, radius: 58, label: "打开港口出货箱", keycap: "E" },
+    { id: "port_sailor", x: 500, y: 542, radius: 54, label: "和渡轮长聊聊", keycap: "E" },
+    { id: "port_delivery_run", x: 760, y: 520, radius: 58, label: "限时运货", keycap: "E", minigame: "delivery" },
+  ],
+  quarry: [
+    { id: "quarry_vein", x: 620, y: 330, radius: 64, label: "旧矿脉采样", keycap: "E", minigame: "mining" },
   ],
 };
 
@@ -316,6 +343,16 @@ export const SCENE_NPCS = [
       { from: 6 * 60, to: 12 * 60, scene: "island", x: 372, y: 342 },
       { from: 12 * 60, to: 17 * 60, scene: "island", x: 590, y: 590 },
       { from: 17 * 60, to: 22 * 60, scene: "port", x: 500, y: 542 },
+    ],
+  },
+  {
+    id: "quarryForeman",
+    name: "衡叔",
+    role: "旧矿道安全员",
+    scenes: [
+      { from: 6 * 60, to: 12 * 60, scene: "quarry", x: 300, y: 560 },
+      { from: 12 * 60, to: 17 * 60, scene: "city", x: 560, y: 580 },
+      { from: 17 * 60, to: 22 * 60, scene: "quarry", x: 300, y: 560 },
     ],
   },
 ];
@@ -543,6 +580,73 @@ export const MARKET_GOODS = {
     maxPrice: 118,
     volatility: 0.34,
     source: "蓝潮海岛",
+  },
+  tidefish: {
+    id: "tidefish",
+    name: "潮汐银鱼",
+    icon: "≈",
+    basePrice: 34,
+    minPrice: 20,
+    maxPrice: 62,
+    volatility: 0.28,
+    source: "潮汐垂钓",
+  },
+  ore: {
+    id: "ore",
+    name: "旧矿铜",
+    icon: "◆",
+    basePrice: 58,
+    minPrice: 34,
+    maxPrice: 104,
+    volatility: 0.24,
+    source: "旧矿道",
+  },
+};
+
+export const MINIGAME_DEFS = {
+  hunt: {
+    id: "hunt",
+    title: "湿地巡护",
+    subtitle: "用声波脉冲驱离偷食谷物的斑翅雀，不伤害它们。",
+    scene: "island",
+    energy: 4,
+    clockMinutes: 40,
+    duration: 22,
+    action: "点击/轻触鸟群；键盘用方向键移动准星，空格发射。",
+    rewardNote: "命中越多，巡护补贴越高，生态信任也会提高。",
+  },
+  fishing: {
+    id: "fishing",
+    title: "潮汐垂钓",
+    subtitle: "等待鱼咬钩，在指针进入绿区时收线。",
+    scene: "island",
+    energy: 3,
+    clockMinutes: 35,
+    duration: 26,
+    action: "点击/轻触或按空格收线；绿区中心是完美判定。",
+    rewardNote: "每收获一条鱼都会进入现有库存与市场。",
+  },
+  mining: {
+    id: "mining",
+    title: "旧矿脉采样",
+    subtitle: "看准摆动的吊钩，把矿脉拖上来。越深的矿价值越高。",
+    scene: "quarry",
+    energy: 5,
+    clockMinutes: 45,
+    duration: 30,
+    action: "点击/轻触或按空格放下吊钩；每次采掘都有时间成本。",
+    rewardNote: "矿铜会进入贸易航线；空钩和坍塌风险会浪费一次机会。",
+  },
+  delivery: {
+    id: "delivery",
+    title: "限时运货",
+    subtitle: "把已备齐的港口订单沿潮汐公路送到码头。",
+    scene: "port",
+    energy: 4,
+    clockMinutes: 20,
+    duration: 18,
+    action: "点击/轻触左右半屏或按 A/D、方向键躲避路障。",
+    rewardNote: "成功会完成一份已接订单；碰撞会损失时间，失败会降低声誉。",
   },
 };
 
