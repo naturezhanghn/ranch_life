@@ -35,6 +35,7 @@ Development, Phaser migration slice. The real Canvas scene base is complete and 
 - `npm test`
 - Real Chromium smoke on desktop and 390×844 mobile for current Canvas scenes
 - Phaser smoke still required after each adapter change, including farm movement, action, scene dispatch, save/reload, and portrait/landscape resize
+- Node16 Playwright 1.38 audits run through `/tmp/ranch-browser-test/node_modules/playwright` against the existing 4174 server. Mobile controls, mobile scene flow, desktop scene flow, console errors, overflow, touch controls, city→council/workshop entrances, island on-site exploration, and trade port were verified.
 
 ## Risks
 
