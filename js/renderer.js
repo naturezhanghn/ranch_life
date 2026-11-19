@@ -61,7 +61,7 @@ export class WorldRenderer {
     this.drawCanalGate(ctx, state, time);
     this.drawStaticProps(ctx, time);
     this.drawScenePortals(ctx, SCENE_DEFS.farm, time);
-    this.drawForageNodes(ctx, state, time);
+    this.drawForageNode(ctx, state, time);
     this.drawSceneFinds(ctx, state, time);
 
     const drawables = [];
@@ -129,8 +129,7 @@ export class WorldRenderer {
     this.drawSceneGround(ctx, sceneId, time);
     this.drawSceneStructures(ctx, sceneId, time);
     this.drawScenePortals(ctx, scene, time);
-    this.drawSceneLandmarks(ctx, sceneId, time);
-    this.drawForageNodes(ctx, state, time);
+    this.drawSceneLandmarks(ctx, state, sceneId, time);
     this.drawSceneFinds(ctx, state, time);
 
     const drawables = [];
@@ -316,8 +315,18 @@ export class WorldRenderer {
     }
   }
 
-  drawSceneLandmarks(ctx, sceneId, time) {
+  drawSceneLandmarks(ctx, state, sceneId, time) {
     for (const interaction of SCENE_INTERACTIONS[sceneId] || []) {
+      if (
+        interaction.forageNode
+        && !(state.forage?.nodes || []).some((node) => (
+          node.interactionId === interaction.id
+            && node.scene === sceneId
+            && !node.claimed
+            && node.expiresDay === state.day
+            && state.minutes <= node.expiresMinute
+        ))
+      ) continue;
       ctx.save();
       const color = sceneId === "island" ? "#d2f0d4" : "#e7cd8d";
       ctx.globalAlpha = 0.78;
@@ -376,36 +385,6 @@ export class WorldRenderer {
     this.drawInteractionHighlight(ctx, state, runtime, time);
   }
 
-  drawForageNodes(ctx, state, time) {
-    const sceneId = state.world?.scene || "farm";
-    const nodes = (state.forage?.nodes || []).filter(
-      (node) => node.scene === sceneId && !node.claimed && node.expiresDay >= state.day,
-    );
-    for (const node of nodes) {
-      const pulse = 1 + Math.sin(time * 2.5 + node.x * 0.01) * 0.12;
-      ctx.save();
-      ctx.globalAlpha = 0.28;
-      ctx.strokeStyle = "#e7f0b2";
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(node.x, node.y + 7, 23 * pulse, 0, TAU);
-      ctx.stroke();
-      ctx.globalAlpha = 0.9;
-      ctx.fillStyle = "#e4d38b";
-      ctx.beginPath();
-      ctx.arc(node.x, node.y, 13 * pulse, 0, TAU);
-      ctx.fill();
-      ctx.fillStyle = "#5f8d5d";
-      ctx.font = "700 15px sans-serif";
-      ctx.textAlign = "center";
-      ctx.fillText(node.icon || "❋", node.x, node.y + 5);
-      ctx.fillStyle = "rgba(37, 68, 52, 0.82)";
-      ctx.font = "600 8px 'PingFang SC', sans-serif";
-      ctx.fillText("雨后足迹", node.x, node.y - 20);
-      ctx.restore();
-    }
-  }
-
   drawSceneFinds(ctx, state, time) {
     const sceneId = state.world?.scene || "farm";
     for (const find of SCENE_FINDS[sceneId] || []) {
@@ -429,6 +408,29 @@ export class WorldRenderer {
       ctx.stroke();
       ctx.restore();
     }
+  }
+
+  drawForageNode(ctx, state, time) {
+    const node = (state.forage?.nodes || []).find((entry) => (
+      entry.scene === "farm"
+        && !entry.claimed
+        && entry.expiresDay === state.day
+        && state.minutes <= entry.expiresMinute
+    ));
+    if (!node) return;
+    const pulse = 1 + Math.sin(time * 2.5) * 0.12;
+    ctx.save();
+    ctx.fillStyle = "#e4d38b";
+    ctx.globalAlpha = 0.8;
+    ctx.beginPath();
+    ctx.arc(node.x, node.y, 15 * pulse, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = "#5f8d5d";
+    ctx.font = "700 16px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("❋", node.x, node.y + 6);
+    this.drawPlaceTag(ctx, node.x, node.y - 26, node.weatherDay ? "雨后足迹" : "季节山货", "rgba(255, 247, 216, 0.9)", "#5d6136");
+    ctx.restore();
   }
 
   drawGround(ctx, state, time) {

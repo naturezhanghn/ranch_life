@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
+import { TRADE_CONTRACTS } from "../js/data.js";
 import {
-  collectForageNode,
+  advanceDay,
+  collectForage,
   createInitialState,
   discoverSceneFind,
   fulfillTradeContract,
   generateTradeContracts,
-  generateForageNodes,
   getNpcTopic,
   giveGift,
   resolveNpcTopic,
@@ -29,15 +30,17 @@ test("rain creates visible forage nodes and each node can only be claimed once",
   state.season = "春";
   state.seasonDay = 2;
   state.day = 2;
-  generateForageNodes(state, "rain", 1);
-  assert.ok(state.forage.nodes.length >= 2);
+  state.weather = "rain";
+  advanceDay(state);
+  assert.ok(state.forage.nodes.length >= 1);
   const node = state.forage.nodes[0];
+  state.world.scene = node.scene;
   const before = state.energy;
-  const first = collectForageNode(state, node.id);
+  const first = collectForage(state, node.id);
   assert.equal(first.ok, true);
   assert.equal(state.energy, before - 1);
   assert.equal(state.inventory.resources[node.itemId], 1);
-  assert.equal(collectForageNode(state, node.id).ok, false);
+  assert.equal(collectForage(state, node.id).ok, false);
 });
 
 test("scene finds persist, pay once, and complete a scene collection", () => {
@@ -96,9 +99,9 @@ test("three consecutive contract deliveries raise the market tier without double
   }
   assert.equal(state.market.tier, 1);
   assert.equal(state.market.contractStreak, 0);
-  const breakfast = generateTradeContracts(state).find((entry) => entry.id === "harbor-breakfast");
-  const baseBreakfast = 196;
-  assert.ok(breakfast.reward > baseBreakfast);
+  const generated = generateTradeContracts(state)[0];
+  const baseContract = TRADE_CONTRACTS.find((entry) => entry.id === generated.id);
+  assert.ok(generated.reward > baseContract.reward);
 });
 
 test("discoveries feed the shared collection book exactly once", () => {
@@ -106,8 +109,10 @@ test("discoveries feed the shared collection book exactly once", () => {
   state.season = "春";
   state.day = 2;
   state.seasonDay = 2;
-  generateForageNodes(state, "rain", 1);
-  collectForageNode(state, state.forage.nodes[0].id);
+  state.weather = "rain";
+  advanceDay(state);
+  state.world.scene = state.forage.nodes[0].scene;
+  collectForage(state, state.forage.nodes[0].id);
   discoverSceneFind(state, "farm", "old_gate");
   resolveNpcTopic(state, "mayor", "common");
   assert.equal(state.collection.entries.length, 3);

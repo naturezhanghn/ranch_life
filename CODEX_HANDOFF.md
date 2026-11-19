@@ -18,6 +18,8 @@ Development. The real Canvas scene base remains the default runtime; four miniga
 - `assets/generated/world-landmark-sheet.png` and `assets/generated/gameplay-elements-sheet.png` were generated through the requested imagegen function for map and activity visual direction. `assets/manifest.json` records both assets with programmatic fallbacks.
 - `GAMEPLAY_30_PLAN.md` contains 30 numbered gameplay design cards with state fields, spatial rules, rewards, failure recovery, day-end and牧心 effects, and desktop/390×844 acceptance checks. The cards were individually queued to both existing `codex` and `bailian` tmux sessions.
 - Gameplay card 01 is now implemented in the existing loop. Daily tasks are weighted by season and current scene, enforce distinct categories, pay idempotently, and report completed or incomplete items in the morning summary. The settlement is also written to牧心 memory.
+- Gameplay card 02 is now implemented in the existing loop. Rain-after nodes use stable scene-specific Canvas landmarks, `weatherDay`, `expiresDay`, `expiresMinute`, `claimed`, `claimedNodeIds`, and `combo`. Nodes can appear at the farm or city entrance, cost one energy, feed the daily forage counter, expire with risk feedback, and migrate legacy `available/collected` saves without creating a new-day reward.
+- Ambient audio now uses a slower, lower-volume generated melody per scene. Farm, city, port, council, workshop, and island switch motifs when `travelToScene` or sleep changes the active scene.
 - `state.js` remains the owner of economy, AI, saves, scene state, and day progression.
 - `js/minigames.js` owns deterministic minigame rules (hunt, fishing, mining, delivery).
 - `js/minigame-layer.js` owns the Canvas overlay, pointer/keyboard routing, and result handoff.
@@ -55,7 +57,8 @@ Development. The real Canvas scene base remains the default runtime; four miniga
 - Phaser smoke still required after each adapter change, including farm movement, action, scene dispatch, save/reload, and portrait/landscape resize
 - Node16 Playwright 1.38 audits run through `/tmp/ranch-browser-test/node_modules/playwright` against the existing 4174 server. Mobile controls, mobile scene flow, desktop scene flow, console errors, overflow, touch controls, city→council/workshop entrances, island on-site exploration, and trade port were verified.
 - Regression coverage now includes sleep returning `world.scene` and player spawn to farm, policy `coinCost` deduction, retained/expired order behavior, and safe pointer capture handling.
-- `npm test` now covers 26 state tests plus 7 minigame tests plus 6 exploration/social tests, including day-report and牧心 settlement feedback.
+- `npm test` now covers 29 state tests plus 7 minigame tests plus 6 exploration/social tests, including day-report,牧心 settlement, rain-node expiry, one-time collection, separate node identity, and energy-boundary feedback.
+- Task 02 browser smoke passed on desktop and 390×844 mobile. Farm and city forage nodes were visible and collectible with the action key, with no console errors.
 - Merged `main` verification: 25 state tests + 7 minigame tests pass; desktop and 390×844 real scene-triggered overlay paths pass with no console errors.
 - Minigame completion settlement was exercised in Chromium: hunt reward, ecology update, active-session cleanup, and overlay close all passed.
 - Live deployment check: `js/minigames.js` is served from Pages, and desktop/mobile overlay plus settlement smoke tests pass with no console errors.
@@ -84,18 +87,18 @@ Review the next queued gameplay card (08: seasonal routes) against the merged ma
 
 ## Latest slice
 
-- Implemented cards 02 rain forage window, 03 scene find collection, and 04 NPC daily topics.
-- Added `FORAGE_NODE_LAYOUT`, `SCENE_FINDS`, `NPC_TOPICS`, `social.topicDay`, `relations.npc`, and scene find state with old-save defaults.
-- Verified: `npm run check`; `npm test` (26 state + 7 minigame + 3 exploration); `exploration-smoke.js` on desktop and 390×844, no console errors or horizontal overflow.
-- Not yet merged or pushed; this branch remains isolated per the parallel-task instruction.
+- Implemented cards 02 rain forage window (rebased onto main's `FORAGE_NODE_DEFS` / `expiresMinute` model), 03 scene find collection, and 04 NPC daily topics.
+- Added `SCENE_FINDS`, `NPC_TOPICS`, `social.topicDay`, `relations.npc`, and scene find state with old-save defaults.
+- Verified: `npm run check`; `npm test` (29 state + 7 minigame + 6 exploration); `exploration-smoke.js` on desktop and 390×844, no console errors or horizontal overflow.
+- Merge in progress; this branch remains isolated until the final combined validation.
 
 ## Latest social/economy slice
 
 - Implemented cards 05 gift preferences and 06 contract tiers/streak.
 - Added `GIFT_TAGS`, `GIFT_PREFERENCES`, `MARKET_TIERS`, `social.giftDay`, `social.giftHistory`, `social.giftLog`, and market chain state with old-save defaults.
-- Verified: `npm run check`; `npm test` (26 state + 7 minigame + 5 exploration); desktop/390×844 exploration smoke including a 46px mobile gift action row, no console errors.
+- Verified: `npm run check`; `npm test` (29 state + 7 minigame + 6 exploration); desktop/390×844 exploration smoke including a 46px mobile gift action row, no console errors.
 
 ## Latest collection slice
 
 - Implemented card 07: shared collection entries/stats/first-seen days, silhouettes for unknowns, category completion rewards, and a workshop-garden/pause-menu local-history screen.
-- Verified: `npm run check`; `npm test` (26 state + 7 minigame + 6 exploration); desktop/mobile smoke remains to be rerun for the new collection screen before merge.
+- Verified: `npm run check`; `npm test` (29 state + 7 minigame + 6 exploration); desktop/mobile smoke passed for the new collection screen before merge.

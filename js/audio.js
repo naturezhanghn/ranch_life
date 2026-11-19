@@ -5,7 +5,16 @@ export class FarmAudio {
     this.master = null;
     this.ambientTimer = null;
     this.ambientStep = 0;
-    this.melody = [261.63, 329.63, 392.0, 329.63, 293.66, 349.23, 440.0, 349.23];
+    this.sceneId = "farm";
+    this.melodies = {
+      farm: [261.63, 293.66, 329.63, 392.0, 329.63, 293.66, 261.63, 220.0],
+      city: [293.66, 349.23, 392.0, 440.0, 392.0, 349.23, 293.66, 261.63],
+      port: [220.0, 261.63, 329.63, 392.0, 329.63, 261.63, 220.0, 196.0],
+      council: [246.94, 293.66, 369.99, 440.0, 369.99, 329.63, 293.66, 246.94],
+      workshop: [329.63, 392.0, 493.88, 587.33, 493.88, 392.0, 349.23, 329.63],
+      island: [261.63, 311.13, 369.99, 466.16, 369.99, 311.13, 261.63, 233.08],
+    };
+    this.melody = this.melodies.farm;
   }
 
   async unlock() {
@@ -33,6 +42,14 @@ export class FarmAudio {
     } else {
       this.stopAmbient();
     }
+  }
+
+  setScene(sceneId = "farm") {
+    const nextScene = this.melodies[sceneId] ? sceneId : "farm";
+    if (nextScene === this.sceneId) return;
+    this.sceneId = nextScene;
+    this.melody = this.melodies[nextScene];
+    this.ambientStep = 0;
   }
 
   tone(frequency, duration, options = {}) {
@@ -89,15 +106,15 @@ export class FarmAudio {
       if (!this.enabled || !this.context) return;
       const note = this.melody[this.ambientStep % this.melody.length];
       const harmony = this.ambientStep % 4 === 0 ? note / 2 : note * 1.25;
-      this.tone(note, 1.8, { type: "sine", gain: 0.018, release: 1.4 });
+      this.tone(note, 2.4, { type: "sine", gain: 0.014, release: 1.8 });
       this.tone(harmony, 2.4, {
         type: "triangle",
-        gain: 0.009,
-        release: 1.8,
+        gain: 0.006,
+        release: 2.0,
         delay: 0.18,
       });
       this.ambientStep += 1;
-    }, 3200);
+    }, 4200);
   }
 
   stopAmbient() {

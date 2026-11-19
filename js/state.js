@@ -7,9 +7,10 @@ import {
   DAILY_TASK_POOL,
   DAY_START_MINUTES,
   FORAGE_TABLE,
-  FORAGE_NODE_LAYOUT,
   GIFT_PREFERENCES,
   GIFT_TAGS,
+  FORAGE_NODE_DEFS,
+  NIGHT_MINUTES,
   HOUSE_UPGRADES,
   GOVERNMENT_POLICIES,
   ISLAND_DAILY_LIMIT,
@@ -317,12 +318,15 @@ export function createInitialState() {
     forage: {
       available: [],
       collected: {},
-      lastRefreshDay: 0,
-      weatherDay: 0,
       nodes: [],
-      claimed: {},
-      combo: 0,
+      claimedNodeIds: [],
+      weatherDay: 0,
       expiresDay: 0,
+      expiresMinute: 0,
+      combo: 0,
+      expiryNoted: false,
+      legacyMigrated: false,
+      lastRefreshDay: 0,
     },
     collection: {
       entries: [],
@@ -1785,90 +1789,153 @@ export function upgradeHouse(state) {
   return { ok: true, message: `${next.title}完成，${next.features.join("、")}已经可用。` };
 }
 
+const FORAGE_WINDOW_MINUTES = DAY_START_MINUTES + 180;
+
+function forageItemForSeason(state, itemId) {
+  return (FORAGE_TABLE[state.season] || []).find((entry) => entry.id === itemId) || null;
+}
+
+function forageNodeIsActive(state, node) {
+  return Boolean(
+    node
+      && !node.claimed
+      && node.scene === (state.world?.scene || "farm")
+      && node.expiresDay === state.day
+      && state.minutes <= node.expiresMinute,
+  );
+}
+
+function buildForageNodes(state, rainWindow) {
+  const table = FORAGE_TABLE[state.season] || [];
+  const nodes = [];
+  const weatherDay = rainWindow ? state.day - 1 : 0;
+  const expiresMinute = rainWindow ? FORAGE_WINDOW_MINUTES : NIGHT_MINUTES;
+  for (const item of table) {
+    const guaranteed = rainWindow && nodes.length === 0;
+    if (!guaranteed && nextRandom(state) >= item.chance) continue;
+    const definition = FORAGE_NODE_DEFS[Math.floor(nextRandom(state) * FORAGE_NODE_DEFS.length)] || FORAGE_NODE_DEFS[0];
+    nodes.push({
+      id: `${state.day}:${definition.id}:${item.id}`,
+      interactionId: definition.interactionId,
+      scene: definition.scene,
+      x: definition.x,
+      y: definition.y,
+      radius: definition.radius,
+      itemId: item.id,
+      spawnDay: state.day,
+      weatherDay,
+      expiresDay: state.day,
+      expiresMinute,
+      claimed: false,
+    });
+  }
+  return nodes;
+}
+
+function normalizeForageState(forage, state) {
+  const source = forage && typeof forage === "object" ? forage : {};
+  const available = Array.isArray(source.available)
+    ? source.available.filter((itemId) => forageItemForSeason(state, itemId))
+    : [];
+  const collected = source.collected && typeof source.collected === "object" ? { ...source.collected } : {};
+  const rawNodes = Array.isArray(source.nodes) ? source.nodes : [];
+  const migratingLegacy = rawNodes.length === 0 && available.length > 0;
+  const nodes = rawNodes
+    .filter((node) => (
+      node
+      && typeof node.id === "string"
+      && typeof node.scene === "string"
+      && Number.isFinite(Number(node.x))
+      && Number.isFinite(Number(node.y))
+      && forageItemForSeason(state, node.itemId)
+    ))
+    .map((node) => ({
+      ...node,
+      x: Number(node.x),
+      y: Number(node.y),
+      expiresDay: Math.max(0, Number(node.expiresDay) || 0),
+      expiresMinute: Math.max(DAY_START_MINUTES, Number(node.expiresMinute) || NIGHT_MINUTES),
+      claimed: Boolean(node.claimed),
+    }));
+  if (!nodes.length && available.length) {
+    available.slice(0, FORAGE_NODE_DEFS.length).forEach((itemId, index) => {
+      const definition = FORAGE_NODE_DEFS[index % FORAGE_NODE_DEFS.length];
+      nodes.push({
+        id: `legacy:${state.day}:${definition.id}:${itemId}`,
+        interactionId: definition.interactionId,
+        scene: definition.scene,
+        x: definition.x,
+        y: definition.y,
+        radius: definition.radius,
+        itemId,
+        spawnDay: state.day,
+        weatherDay: Number(source.weatherDay) || 0,
+        expiresDay: Math.max(0, Number(source.expiresDay) || 0),
+        expiresMinute: Math.max(DAY_START_MINUTES, Number(source.expiresMinute) || NIGHT_MINUTES),
+        claimed: Boolean(collected[itemId]),
+      });
+    });
+  }
+  const claimedNodeIds = Array.from(new Set(
+    (Array.isArray(source.claimedNodeIds) ? source.claimedNodeIds : [])
+      .filter((id) => nodes.some((node) => node.id === id)),
+  ));
+  nodes.forEach((node) => {
+    if (node.claimed && !claimedNodeIds.includes(node.id)) claimedNodeIds.push(node.id);
+  });
+  return {
+    ...state.forage,
+    ...source,
+    available,
+    collected,
+    nodes,
+    claimedNodeIds,
+    weatherDay: Math.max(0, Number(source.weatherDay) || 0),
+    expiresDay: Math.max(0, Number(source.expiresDay) || 0),
+    expiresMinute: Math.max(DAY_START_MINUTES, Number(source.expiresMinute) || 0),
+    combo: Math.max(0, Math.min(99, Number(source.combo) || 0)),
+    expiryNoted: Boolean(source.expiryNoted),
+    legacyMigrated: Boolean(source.legacyMigrated || migratingLegacy),
+    lastRefreshDay: Math.max(0, Number(source.lastRefreshDay) || 0),
+  };
+}
+
 export function collectForage(state, forageId) {
-  const item = (FORAGE_TABLE[state.season] || []).find((entry) => entry.id === forageId);
-  if (!item || !state.forage.available.includes(forageId)) return { ok: false, message: "这里今天没有新的山货。" };
-  if (state.forage.collected[forageId]) return { ok: false, message: "这份山货已经采过了。" };
+  const nodes = Array.isArray(state.forage?.nodes) ? state.forage.nodes : [];
+  const matchingNodes = nodes.filter((entry) => (
+    entry.id === forageId
+      || entry.interactionId === forageId
+      || entry.itemId === forageId
+  ));
+  const node = matchingNodes.find((entry) => !entry.claimed) || matchingNodes[0];
+  const itemId = node?.itemId || forageId;
+  const item = forageItemForSeason(state, itemId);
+  if (!item || !state.forage.available.includes(itemId)) return { ok: false, message: "这里今天没有新的山货。" };
+  if (node?.claimed || state.forage.claimedNodeIds?.includes(node.id)) return { ok: false, message: "这份山货已经采过了。" };
+  if (!node || !forageNodeIsActive(state, node)) {
+    if (!state.forage.expiryNoted && state.forage.expiresDay === state.day) {
+      state.forage.expiryNoted = true;
+      addMemory(state, "雨后采集窗口已经关闭，剩余山货留给下一次天气变化。", "risk", 2);
+    }
+    return { ok: false, message: "雨后足迹已经淡了，下一场雨后再来看看。" };
+  }
   if (state.energy < 1) return { ok: false, message: "体力不够，先回去休息吧。" };
   state.energy -= 1;
-  state.inventory.resources[forageId] = (state.inventory.resources[forageId] || 0) + 1;
-  state.forage.collected[forageId] = true;
-  addMemory(state, `你在${state.season}季山路采到${item.name}，可以放进贸易箱。`, "forage", 2);
-  return { ok: true, message: `采到${item.name}。` };
-}
-
-export function generateForageNodes(state, weather, forageRoll = 0) {
-  const shouldSpawn = weather === "rain" || forageRoll > 0.45 || state.seasonDay === 1;
-  state.forage.nodes = [];
-  state.forage.claimed = {};
-  state.forage.available = [];
-  state.forage.weatherDay = weather === "rain" ? state.day : 0;
-  state.forage.expiresDay = state.day;
-  state.forage.combo = 0;
-  if (!shouldSpawn) return;
-
-  const layouts = Object.entries(FORAGE_NODE_LAYOUT);
-  const targetCount = weather === "rain" ? 3 : 2;
-  const items = FORAGE_TABLE[state.season] || [];
-  for (let index = 0; index < targetCount; index += 1) {
-    const [scene, entries] = layouts[index % layouts.length];
-    const point = entries[Math.floor(nextRandom(state) * entries.length)] || entries[0];
-    const item = items[Math.floor(nextRandom(state) * items.length)] || items[0];
-    if (!point || !item) continue;
-    const node = {
-      id: `${point.id}-${state.day}`,
-      itemId: item.id,
-      name: item.name,
-      icon: item.icon,
-      scene,
-      x: point.x,
-      y: point.y,
-      expiresDay: state.day,
-      claimed: false,
-    };
-    state.forage.nodes.push(node);
-    if (!state.forage.available.includes(item.id)) state.forage.available.push(item.id);
-  }
-  addMemory(
-    state,
-    weather === "rain"
-      ? "雨后的地面留下了新鲜足迹。村里和牧场边缘出现了几处可以采集的当季山货。"
-      : "清晨的潮气让几处季节山货冒了出来，窗口不会持续到明天。",
-    "forage",
-    2,
-  );
-}
-
-export function collectForageNode(state, nodeId) {
-  const node = (state.forage.nodes || []).find((entry) => entry.id === nodeId);
-  if (!node || node.claimed || node.expiresDay < state.day) {
-    return { ok: false, message: "这处山货已经被采走，或者雨后的窗口已经结束。" };
-  }
-  if (state.energy < 1) return { ok: false, message: "体力不够，先休息一下吧。" };
+  state.inventory.resources[itemId] = (state.inventory.resources[itemId] || 0) + 1;
+  state.forage.collected[itemId] = true;
   node.claimed = true;
-  state.energy -= 1;
-  state.minutes = Math.min(24 * 60, state.minutes + 8);
-  state.forage.claimed[node.id] = true;
-  state.forage.combo += 1;
-  state.inventory.resources[node.itemId] = (state.inventory.resources[node.itemId] || 0) + 1;
-  recordCollection(state, "forage", node.itemId, node.name, node.scene === "farm" ? "牧场" : node.scene === "city" ? "城市花园" : "港口礁石");
-  const comboBonus = state.forage.combo === 3 ? 12 : 0;
-  if (comboBonus) {
-    state.coins += comboBonus;
-    state.stats.earned += comboBonus;
-  }
-  bumpCounter(state, "foraged");
-  addMemory(
+  if (!state.forage.claimedNodeIds.includes(node.id)) state.forage.claimedNodeIds.push(node.id);
+  state.forage.combo = Math.min(99, state.forage.combo + 1);
+  recordCollection(
     state,
-    `你在${node.scene === "farm" ? "牧场" : node.scene === "city" ? "城市花园" : "港口礁石"}采到${node.name}${comboBonus ? "，连续采集奖励了 12 金" : ""}。`,
     "forage",
-    2,
+    itemId,
+    item.name,
+    node.scene === "city" ? "村口山货" : "牧场山路",
   );
-  return {
-    ok: true,
-    message: `采到${node.name}${comboBonus ? "，连续采集奖励 12 金" : ""}。窗口结束前还可以继续寻找。`,
-    tasks: checkDailyTasks(state),
-  };
+  bumpCounter(state, "foraged");
+  addMemory(state, `你在${node.scene === "city" ? "村口" : "牧场山路"}采到${item.name}，这是本次窗口已采的第 ${state.forage.combo} 份山货。`, "forage", 2);
+  return { ok: true, message: `采到${item.name}。本次窗口已采 ${state.forage.combo} 份。`, nodeId: node.id, combo: state.forage.combo };
 }
 
 export function recordCollection(state, group, entryId, label, source) {
@@ -2030,6 +2097,10 @@ export function giveGift(state, npcId, itemId) {
 
 export function advanceDay(state) {
   const closingDay = state.day;
+  const previousWeather = state.weather;
+  const previousForageNodes = Array.isArray(state.forage?.nodes) ? state.forage.nodes : [];
+  const previousForageCollected = previousForageNodes.filter((node) => node.claimed).length;
+  const previousForageExpired = previousForageNodes.filter((node) => !node.claimed && node.expiresDay <= closingDay).length;
   const report = {
     products: [],
     grown: 0,
@@ -2040,9 +2111,19 @@ export function advanceDay(state) {
     livestock: [],
     shipping: { units: 0, value: 0, items: [] },
     dailyTasks: { completed: [], incomplete: [], reward: 0 },
+    forageStats: {
+      spawned: 0,
+      collected: previousForageCollected,
+      expired: previousForageExpired,
+      combo: Math.max(0, Number(state.forage?.combo) || 0),
+      window: false,
+    },
     systemNotes: [],
     weather: "sunny",
   };
+  if (previousForageExpired) {
+    addMemory(state, `雨后采集窗口结束了，有 ${previousForageExpired} 个节点没有被采走。`, "risk", 2);
+  }
 
   settleShipping(state, report);
 
@@ -2169,11 +2250,29 @@ export function advanceDay(state) {
   state.weather = weather;
   report.weather = weather;
 
-  const forageRoll = nextRandom(state);
-  generateForageNodes(state, weather, forageRoll);
+  const rainWindow = previousWeather === "rain";
+  const seasonalForage = rainWindow || nextRandom(state) > 0.45 || state.seasonDay === 1;
+  const forageNodes = seasonalForage ? buildForageNodes(state, rainWindow) : [];
+  state.forage = {
+    ...state.forage,
+    available: forageNodes.map((node) => node.itemId),
+    collected: {},
+    nodes: forageNodes,
+    claimedNodeIds: [],
+    weatherDay: rainWindow ? closingDay : 0,
+    expiresDay: state.day,
+    expiresMinute: rainWindow ? FORAGE_WINDOW_MINUTES : NIGHT_MINUTES,
+    combo: 0,
+    expiryNoted: false,
+    lastRefreshDay: state.day,
+  };
+  report.forageStats.spawned = forageNodes.length;
+  report.forageStats.window = rainWindow;
+  if (rainWindow && forageNodes.length) {
+    addMemory(state, "雨后足迹出现了。清晨的山货只会停留一小段时间，牧场和村口都值得走一趟。", "observation", 2);
+  }
   state.forage.lastRefreshDay = state.day;
-  report.forage = state.forage.nodes.map((node) => node.name).filter(Boolean);
-  report.forageNodes = state.forage.nodes.length;
+  report.forage = forageNodes.map((node) => forageItemForSeason(state, node.itemId)?.name).filter(Boolean);
   const townEvent = TOWN_EVENTS.find((event) => event.season === state.season && event.day === state.seasonDay);
   if (townEvent && !state.town.eventsSeen.includes(townEvent.id)) {
     state.town.eventsSeen.push(townEvent.id);
@@ -2430,6 +2529,7 @@ export function loadGame() {
         ...animal,
       }));
     }
+    merged.forage = normalizeForageState(merged.forage, merged);
     merged.daily = normalizeDailyState(merged.daily, merged);
     if (!merged.market.contracts?.length) {
       merged.market.contracts = generateTradeContracts(merged);
