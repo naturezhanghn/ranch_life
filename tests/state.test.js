@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { CROPS, DAY_START_MINUTES, TRADE_CONTRACTS, WORLD } from "../js/data.js";
+import { CROPS, DAY_START_MINUTES, POST_GAME_MODIFIERS, TRADE_CONTRACTS, WORLD } from "../js/data.js";
 import {
   advanceDay,
   applyDevelopmentChoice,
@@ -8,6 +8,7 @@ import {
   acceptTradeContract,
   assignSprite,
   brushAnimal,
+  choosePostGameModifier,
   createInitialState,
   collectForage,
   enactGovernmentPolicy,
@@ -15,6 +16,7 @@ import {
   fulfillTradeContract,
   feedAnimal,
   getClueCount,
+  getPostGameModifier,
   getTargetPlot,
   getBagUsage,
   loadGame,
@@ -422,6 +424,82 @@ test("weak trust and incomplete history produce split ending", () => {
   applyGovernanceChoice(state, "oversight");
   assert.equal(state.story.ending, null);
   assert.equal(resolveEnding(state), "split");
+});
+
+test("post-game modifier applies one constraint without rewriting the ending", () => {
+  const state = freshState();
+  state.story.ending = "common";
+  state.story.endingSeen = true;
+  state.story.endingDay = state.day;
+  state.coins = 100;
+  const civicBefore = state.government.civicPoints;
+  const result = choosePostGameModifier(state, "publicLedger");
+  assert.equal(result.ok, true);
+  assert.equal(state.story.ending, "common");
+  assert.equal(state.story.postGameModifier, "publicLedger");
+  assert.equal(state.story.postGameDeadline, state.day + 7);
+  assert.equal(state.government.civicPoints, civicBefore + 2);
+  assert.equal(choosePostGameModifier(state, "handCare").ok, false);
+  assert.equal(POST_GAME_MODIFIERS.length, 3);
+  const contract = {
+    id: "postgame-contract",
+    title: "后日谈订单",
+    reward: 100,
+    reputation: 2,
+    requirements: { egg: 1 },
+    accepted: true,
+    completed: false,
+    expiresDay: state.day + 1,
+  };
+  state.inventory.produce.egg = 1;
+  state.market.contracts = [contract];
+  const coinsBefore = state.coins;
+  const fulfilled = fulfillTradeContract(state, contract.id);
+  assert.equal(fulfilled.ok, true);
+  assert.equal(fulfilled.payout, 80);
+  assert.equal(state.coins, coinsBefore + 80);
+});
+
+test("post-game public ledger completes after three public recaps and is idempotent", () => {
+  const state = freshState();
+  state.story.ending = "common";
+  state.story.endingSeen = true;
+  choosePostGameModifier(state, "publicLedger");
+  for (let index = 0; index < 3; index += 1) {
+    state.daily.recapChoice = "public";
+    advanceDay(state);
+  }
+  const modifier = getPostGameModifier(state);
+  assert.equal(modifier.id, "publicLedger");
+  assert.equal(state.story.postGameProgress.completed, true);
+  assert.equal(state.story.postGameProgress.value, 3);
+  assert.ok(state.story.postScriptsSeen.includes("publicLedger:epilogue"));
+  const progressBefore = { ...state.story.postGameProgress };
+  advanceDay(state);
+  assert.deepEqual(state.story.postGameProgress, progressBefore);
+});
+
+test("post-game hand-care and dry-season modifiers enforce their constraints", () => {
+  const handCare = freshState();
+  handCare.story.ending = "ecology";
+  handCare.story.endingSeen = true;
+  choosePostGameModifier(handCare, "handCare");
+  for (const animal of handCare.animals) animal.fed = true;
+  const careReport = advanceDay(handCare);
+  assert.ok(careReport.helperActions.some((entry) => entry.includes("手工周")));
+  assert.equal(handCare.story.postGameProgress.value, 1);
+
+  const drySeason = freshState();
+  drySeason.story.ending = "ecology";
+  drySeason.story.endingSeen = true;
+  choosePostGameModifier(drySeason, "drySeason");
+  assert.ok(drySeason.maxWater <= 12);
+  for (let index = 0; index < 7; index += 1) {
+    drySeason.relations.community = 60;
+    advanceDay(drySeason);
+  }
+  assert.equal(drySeason.story.postGameProgress.completed, true);
+  assert.ok(drySeason.story.postScriptsSeen.includes("drySeason:epilogue"));
 });
 
 test("crop data keeps a meaningful high-investment option", () => {

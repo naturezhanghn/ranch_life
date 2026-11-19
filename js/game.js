@@ -17,6 +17,7 @@ import {
   MINIGAME_DEFS,
   MARKET_TIERS,
   NPC_TOPICS,
+  POST_GAME_MODIFIERS,
   SCENE_FINDS,
   INTERACTIONS,
   PRODUCTS,
@@ -49,6 +50,7 @@ import {
   buySeed,
   beginMinigame,
   checkDailyTasks,
+  choosePostGameModifier,
   collectSeasonalLandmark,
   collectForage,
   clearSave,
@@ -61,6 +63,7 @@ import {
   getMarketPrice,
   getMinigameAvailability,
   getNpcTopic,
+  getPostGameModifier,
   getSceneSeasonVariant,
   giveGift,
   getTargetPlot,
@@ -2416,6 +2419,21 @@ function chooseGovernance(choice) {
   });
 }
 
+function renderPostGameProgressCard() {
+  const modifier = getPostGameModifier(state);
+  if (!modifier) return "";
+  const progress = state.story.postGameProgress || {};
+  const scriptReady = Boolean(progress.scriptId);
+  return `
+    <div class="day-report-card day-postgame-card">
+      <strong>修正牌 · ${modifier.title}</strong>
+      <span>${modifier.constraint} ${modifier.boon}</span>
+      <span>目标：${modifier.goal.label} · ${Math.min(progress.value || 0, modifier.goal.target)} / ${modifier.goal.target} · 第 ${progress.daysElapsed || 0} / ${modifier.durationDays} 天</span>
+      ${scriptReady ? `<button type="button" class="settings-action" data-action="viewPostScript"><span>打开后日谈</span><span>${progress.completed ? "牌面目标达成" : "这一周已经结束"}</span></button>` : `<span>截止：第 ${state.story.postGameDeadline || state.day} 天清晨。</span>`}
+    </div>
+  `;
+}
+
 function showEnding() {
   const endingId = resolveEnding(state);
   const ending = ENDINGS[endingId];
@@ -2449,6 +2467,26 @@ function showEnding() {
         这个垂直切片验证了牧场经营、历史调查、人工智能记忆与治理选择之间的关系。
         完整版本将继续进入“边界”和“城市”两章。
       </div>
+      ${
+        state.story.postGameModifier
+          ? renderPostGameProgressCard()
+          : `
+            <div class="section-title">结局后的七天 · 选择一张修正牌</div>
+            <p class="weather-note">修正牌只改变结局之后的一周，不会改写刚刚作出的首周结局判定。每张牌都有一个明确偏向和一个代价。</p>
+            <div class="choice-grid">
+              ${POST_GAME_MODIFIERS.map((modifier, index) =>
+                choiceOption({
+                  number: ["一", "二", "三"][index] || String(index + 1),
+                  title: modifier.title,
+                  description: `${modifier.constraint} ${modifier.boon}`,
+                  cost: modifier.goal.label,
+                  action: "choosePostGameModifier",
+                  value: modifier.id,
+                }),
+              ).join("")}
+            </div>
+          `
+      }
       <div class="section-title">这段生活的关系图</div>
       ${relationMarkup}
     `,
@@ -2615,6 +2653,11 @@ function showDaySummary(report, nextEvent = null, auto = false) {
         今日天气：${weather.icon} ${weather.label}。${productList}
       </div>
       ${renderDailyRecapPanel()}
+      ${
+        report.postGame
+          ? `<div class="day-report-card"><strong>后日谈 · ${report.postGame.title}</strong><span>${report.postGame.label}：${Math.min(report.postGame.value, report.postGame.target)} / ${report.postGame.target} · 第 ${report.postGame.daysElapsed} / 7 天${report.postGame.completed ? " · 牌面目标已经达成" : report.postGame.failed ? " · 这一周已经结束" : ""}</span></div>`
+          : ""
+      }
       ${
         report.seasonVariant
           ? `<div class="day-report-card"><strong>${state.season}季路线 · ${report.seasonVariant.label}</strong><span>${report.seasonVariant.routeLabel}已经在地图上显出来。沿它走，可以找到本季专属的采集点；其他季节的入口会安静地收起，但主路始终可达。</span></div>`
@@ -2844,6 +2887,7 @@ function openMenu() {
           ${relationRow("劳动者", state.relations.workers)}
           ${relationRow("生态韧性", state.relations.ecology, "metric-track--blue")}
           ${relationRow("企业影响", state.relations.corporation, "metric-track--amber")}
+          ${state.story.postGameModifier ? renderPostGameProgressCard() : ""}
         </div>
         <div>
           <div class="section-title">背包 · ${getBagUsage(state)} / ${state.bag.slots} 格</div>
@@ -3111,6 +3155,48 @@ function handleModalClick(event) {
     case "viewEnding":
       showEnding();
       break;
+    case "choosePostGameModifier": {
+      const result = choosePostGameModifier(state, value);
+      if (result.ok) {
+        audio.play("memory");
+        saveGame(state);
+        updateHUD(true);
+        openModal({
+          kicker: "后日谈 · 修正牌",
+          title: result.modifier.title,
+          body: `
+            <p class="story-lead">${result.modifier.constraint}</p>
+            <div class="weather-note">${result.modifier.boon}</div>
+            <div class="day-report-card"><strong>七天目标</strong><span>${result.modifier.goal.label}。从明天清晨开始记录，首周结局不会再被改写。</span></div>
+          `,
+          footer: `<button type="button" class="button button--primary" data-action="continueFreeplay">开始这七天</button>`,
+        });
+      } else {
+        audio.play("error");
+        showToast(result.message, { strong: "修正牌" });
+      }
+      break;
+    }
+    case "viewPostScript": {
+      const modifier = getPostGameModifier(state);
+      const progress = state.story.postGameProgress || {};
+      if (!modifier || !progress.scriptId) {
+        showToast("这段后日谈还没有写完。", { strong: "后日谈" });
+        break;
+      }
+      const script = progress.completed ? modifier.epilogue : modifier.fail;
+      openModal({
+        kicker: `后日谈 · ${modifier.title}`,
+        title: script.title,
+        body: `
+          <p class="story-lead">${script.text}</p>
+          <div class="story-quote">${script.note}<cite>—— 修正牌「${modifier.title}」</cite></div>
+          <div class="weather-note">进度：${modifier.goal.label} · ${progress.value} / ${modifier.goal.target} · 第 ${progress.daysElapsed} / ${modifier.durationDays} 天。</div>
+        `,
+        footer: `<button type="button" class="button button--primary" data-action="close">继续生活</button>`,
+      });
+      break;
+    }
     case "continueFreeplay":
       closeModal();
       updateHUD(true);

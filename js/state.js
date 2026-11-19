@@ -20,6 +20,7 @@ import {
   MINIGAME_DEFS,
   NPC_TOPICS,
   PLAYER_START,
+  POST_GAME_MODIFIERS,
   PRODUCTS,
   PRODUCT_QUALITY_LABELS,
   PRODUCT_QUALITY_MULTIPLIERS,
@@ -514,6 +515,16 @@ export function createInitialState() {
       ending: null,
       endingSeen: false,
       endingDay: null,
+      postGameModifier: null,
+      postGameDeadline: null,
+      postGameProgress: {
+        daysElapsed: 0,
+        value: 0,
+        completed: false,
+        failed: false,
+        scriptId: null,
+      },
+      postScriptsSeen: [],
       lastTalkDay: 0,
       talkedNpcs: [],
     },
@@ -547,6 +558,84 @@ export function addMemory(state, text, type = "observation", importance = 1) {
 
 export function getSceneSeasonVariant(state, sceneId = state.world?.scene || "farm") {
   return SCENE_SEASON_VARIANTS[sceneId]?.[state.season] || null;
+}
+
+export function getPostGameModifier(state) {
+  return POST_GAME_MODIFIERS.find((modifier) => modifier.id === state.story?.postGameModifier) || null;
+}
+
+export function choosePostGameModifier(state, modifierId) {
+  const modifier = POST_GAME_MODIFIERS.find((entry) => entry.id === modifierId);
+  if (!modifier) return { ok: false, message: "没有这张修正牌。" };
+  if (!state.story.ending && !state.story.endingSeen) {
+    return { ok: false, message: "先走完首周结局，再选择修正牌。" };
+  }
+  if (state.story.postGameModifier) {
+    return { ok: false, message: "这一周已经有一张修正牌了。" };
+  }
+  state.story.postGameModifier = modifier.id;
+  state.story.postGameDeadline = state.day + modifier.durationDays;
+  state.story.postGameProgress = {
+    daysElapsed: 0,
+    value: 0,
+    completed: false,
+    failed: false,
+    scriptId: null,
+  };
+  state.story.postScriptsSeen = [];
+  state.story.step = "postGame";
+  if (modifier.id === "publicLedger") state.government.civicPoints += 2;
+  if (modifier.id === "handCare") state.relations.community = bounded(state.relations.community + 3);
+  if (modifier.id === "drySeason") {
+    state.relations.ecology = bounded(state.relations.ecology + 3);
+    state.maxWater = Math.min(state.maxWater, 12);
+    state.water = Math.min(state.water, state.maxWater);
+  }
+  addMemory(state, `结局后的修正牌「${modifier.title}」：${modifier.constraint}${modifier.boon}`, "decision", 4);
+  return { ok: true, modifier };
+}
+
+function advancePostGameDay(state, report, closingRecapChoice) {
+  const modifier = getPostGameModifier(state);
+  if (!modifier) return null;
+  const progress = state.story.postGameProgress;
+  if (progress.completed || progress.failed) return null;
+  progress.daysElapsed += 1;
+  if (modifier.goal.type === "publicActions" && closingRecapChoice === "public") {
+    progress.value += 1;
+  } else if (modifier.goal.type === "careDays" && report.animalsUnfed.length === 0) {
+    progress.value += 1;
+  } else if (modifier.goal.type === "surviveDays" && state.relations.community >= 50) {
+    progress.value += 1;
+  }
+  if (progress.value >= modifier.goal.target) {
+    progress.completed = true;
+    progress.scriptId = `${modifier.id}:epilogue`;
+    if (!state.story.postScriptsSeen.includes(progress.scriptId)) {
+      state.story.postScriptsSeen.push(progress.scriptId);
+    }
+    addMemory(state, `后日谈完成：修正牌「${modifier.title}」的牌面目标达成。${modifier.epilogue.note}`, "story", 4);
+  } else if (progress.daysElapsed >= modifier.durationDays) {
+    progress.failed = true;
+    progress.scriptId = `${modifier.id}:fail`;
+    if (!state.story.postScriptsSeen.includes(progress.scriptId)) {
+      state.story.postScriptsSeen.push(progress.scriptId);
+    }
+    addMemory(state, `后日谈结束：修正牌「${modifier.title}」没有完成牌面目标。${modifier.fail.note}`, "risk", 3);
+  }
+  report.postGame = {
+    modifierId: modifier.id,
+    title: modifier.title,
+    value: progress.value,
+    target: modifier.goal.target,
+    label: modifier.goal.label,
+    daysElapsed: progress.daysElapsed,
+    deadline: state.story.postGameDeadline,
+    completed: progress.completed,
+    failed: progress.failed,
+    scriptId: progress.scriptId,
+  };
+  return report.postGame;
 }
 
 function buildDailyRecapOptions(state, report, closingDay) {
@@ -1176,9 +1265,12 @@ export function fulfillTradeContract(state, contractId) {
   for (const [itemId, amount] of Object.entries(contract.requirements)) {
     consumeInventoryItem(state, itemId, amount);
   }
+  const payout = getPostGameModifier(state)?.id === "publicLedger"
+    ? Math.round(contract.reward * 0.8)
+    : contract.reward;
   contract.completed = true;
-  state.coins += contract.reward;
-  state.stats.earned += contract.reward;
+  state.coins += payout;
+  state.stats.earned += payout;
   state.stats.contractsFulfilled += 1;
   state.market.reputation += contract.reputation;
   state.market.contractStreak = (state.market.contractStreak || 0) + 1;
@@ -1198,8 +1290,9 @@ export function fulfillTradeContract(state, contractId) {
   addMemory(state, `你完成「${contract.title}」，港口声誉提高了 ${contract.reputation}。`, "economy", 3);
   return {
     ok: true,
-    message: `订单完成，获得 ${contract.reward} 金和 ${contract.reputation} 点声誉。${tierMessage}`,
+    message: `订单完成，获得 ${payout} 金和 ${contract.reputation} 点声誉。${tierMessage}${payout < contract.reward ? " 修正牌「公共账本」抽取了 20% 进入公共记录。" : ""}`,
     contract,
+    payout,
     tierMessage,
   };
 }
@@ -1772,6 +1865,10 @@ export function resolveEnding(state) {
 }
 
 function applySpriteAssignments(state, report) {
+  if (getPostGameModifier(state)?.id === "handCare") {
+    report.helperActions.push("修正牌「手工周」：小精灵暂停自动工作，照料必须由你亲自完成。");
+    return;
+  }
   const assignments = state.sprites?.assignments || {};
   if (assignments.watering && state.water > 0) {
     let watered = 0;
@@ -2228,6 +2325,7 @@ export function giveGift(state, npcId, itemId) {
 
 export function advanceDay(state) {
   const closingDay = state.day;
+  const closingRecapChoice = state.daily?.recapChoice || null;
   const previousWeather = state.weather;
   const previousForageNodes = Array.isArray(state.forage?.nodes) ? state.forage.nodes : [];
   const previousForageCollected = previousForageNodes.filter((node) => node.claimed).length;
@@ -2391,6 +2489,7 @@ export function advanceDay(state) {
   state.weather = weather;
   report.weather = weather;
   report.seasonVariant = getSceneSeasonVariant(state, "farm");
+  advancePostGameDay(state, report, closingRecapChoice);
 
   const rainWindow = previousWeather === "rain";
   const seasonalForage = rainWindow || nextRandom(state) > 0.45 || state.seasonDay === 1;
@@ -2427,6 +2526,9 @@ export function advanceDay(state) {
   state.world.activeRegion = "farm";
   refreshMarket(state, report);
 
+  if (getPostGameModifier(state)?.id === "drySeason") {
+    state.maxWater = Math.min(state.maxWater, 12);
+  }
   if (weather === "rain") {
     state.water = state.maxWater;
     for (const plot of state.plots) {
@@ -2666,6 +2768,13 @@ export function loadGame() {
         ...base.story,
         ...(parsed.story || {}),
         clues: { ...base.story.clues, ...(parsed.story?.clues || {}) },
+        postGameProgress: {
+          ...base.story.postGameProgress,
+          ...(parsed.story?.postGameProgress || {}),
+        },
+        postScriptsSeen: Array.isArray(parsed.story?.postScriptsSeen)
+          ? Array.from(new Set(parsed.story.postScriptsSeen))
+          : base.story.postScriptsSeen,
       },
       settings: { ...base.settings, ...(parsed.settings || {}) },
       player: { ...base.player, ...(parsed.player || {}) },
