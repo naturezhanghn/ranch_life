@@ -1840,6 +1840,8 @@ function normalizeForageState(forage, state) {
   const collected = source.collected && typeof source.collected === "object" ? { ...source.collected } : {};
   const rawNodes = Array.isArray(source.nodes) ? source.nodes : [];
   const migratingLegacy = rawNodes.length === 0 && available.length > 0;
+  const legacyRefreshDay = Number(source.lastRefreshDay) || 0;
+  const legacyExpiresDay = Number(source.expiresDay) || (legacyRefreshDay === state.day ? state.day : 0);
   const nodes = rawNodes
     .filter((node) => (
       node
@@ -1853,7 +1855,7 @@ function normalizeForageState(forage, state) {
       ...node,
       x: Number(node.x),
       y: Number(node.y),
-      expiresDay: Math.max(0, Number(node.expiresDay) || 0),
+      expiresDay: Math.max(0, Number(node.expiresDay) || (legacyRefreshDay === state.day ? state.day : 0)),
       expiresMinute: Math.max(DAY_START_MINUTES, Number(node.expiresMinute) || NIGHT_MINUTES),
       claimed: Boolean(node.claimed),
     }));
@@ -1870,7 +1872,7 @@ function normalizeForageState(forage, state) {
         itemId,
         spawnDay: state.day,
         weatherDay: Number(source.weatherDay) || 0,
-        expiresDay: Math.max(0, Number(source.expiresDay) || 0),
+        expiresDay: Math.max(0, legacyExpiresDay),
         expiresMinute: Math.max(DAY_START_MINUTES, Number(source.expiresMinute) || NIGHT_MINUTES),
         claimed: Boolean(collected[itemId]),
       });
@@ -1913,14 +1915,24 @@ export function collectForage(state, forageId) {
   if (!item || !state.forage.available.includes(itemId)) return { ok: false, message: "这里今天没有新的山货。" };
   if (node?.claimed || state.forage.claimedNodeIds?.includes(node.id)) return { ok: false, message: "这份山货已经采过了。" };
   if (!node || !forageNodeIsActive(state, node)) {
+    const rainWindow = Boolean(node?.weatherDay || state.forage.weatherDay);
     if (!state.forage.expiryNoted && state.forage.expiresDay === state.day) {
       state.forage.expiryNoted = true;
-      addMemory(state, "雨后采集窗口已经关闭，剩余山货留给下一次天气变化。", "risk", 2);
+      addMemory(
+        state,
+        rainWindow ? "雨后采集窗口已经关闭，剩余山货留给下一次天气变化。" : "季节山货采集窗口已经关闭，下一次刷新再来看看。",
+        "risk",
+        2,
+      );
     }
-    return { ok: false, message: "雨后足迹已经淡了，下一场雨后再来看看。" };
+    return {
+      ok: false,
+      message: rainWindow ? "雨后足迹已经淡了，下一场雨后再来看看。" : "这处季节山货已经过期，下一次刷新再来看看。",
+    };
   }
   if (state.energy < 1) return { ok: false, message: "体力不够，先回去休息吧。" };
   state.energy -= 1;
+  state.minutes = Math.min(24 * 60, state.minutes + 8);
   state.inventory.resources[itemId] = (state.inventory.resources[itemId] || 0) + 1;
   state.forage.collected[itemId] = true;
   node.claimed = true;
@@ -1934,6 +1946,7 @@ export function collectForage(state, forageId) {
     node.scene === "city" ? "村口山货" : "牧场山路",
   );
   bumpCounter(state, "foraged");
+  state.relations.ecology = bounded(state.relations.ecology + 1);
   addMemory(state, `你在${node.scene === "city" ? "村口" : "牧场山路"}采到${item.name}，这是本次窗口已采的第 ${state.forage.combo} 份山货。`, "forage", 2);
   return { ok: true, message: `采到${item.name}。本次窗口已采 ${state.forage.combo} 份。`, nodeId: node.id, combo: state.forage.combo };
 }
