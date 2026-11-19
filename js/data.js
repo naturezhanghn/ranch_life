@@ -555,6 +555,33 @@ export const SCENE_FINDS = {
   ],
 };
 
+export const GIFT_TAGS = {
+  turnip: ["vegetable", "humble"],
+  potato: ["vegetable", "humble"],
+  strawberry: ["fruit", "sweet"],
+  egg: ["protein", "farm"],
+  milk: ["protein", "farm"],
+  wool: ["craft", "farm"],
+  tidefish: ["sea", "protein"],
+  ore: ["mineral", "craft"],
+  seaweed: ["sea", "herb"],
+  coconut: ["fruit", "sea"],
+  pearl: ["luxury", "sea"],
+  coral: ["craft", "sea"],
+  spring_herb: ["herb", "seasonal"],
+  summer_berry: ["fruit", "seasonal"],
+  autumn_mushroom: ["herb", "seasonal"],
+  winter_root: ["herb", "seasonal"],
+};
+
+export const GIFT_PREFERENCES = {
+  mayor: { likes: ["herb", "vegetable", "seasonal"], dislikes: ["luxury"] },
+  merchant: { likes: ["sea", "fruit", "luxury"], dislikes: ["vegetable"] },
+  spriteKeeper: { likes: ["herb", "seasonal", "sweet"], dislikes: ["mineral"] },
+  islandChild: { likes: ["sea", "fruit", "sweet"], dislikes: ["mineral"] },
+  quarryForeman: { likes: ["mineral", "protein", "farm"], dislikes: ["luxury"] },
+};
+
 export const PLAYER_START = { x: 286, y: 282, facing: "down" };
 
 export const TOOLS = [
@@ -934,6 +961,13 @@ export const TRADE_CONTRACTS = [
     reputation: 10,
     description: "博物馆想收藏一枚来自旧海路的月光珍珠。",
   },
+];
+
+export const MARKET_TIERS = [
+  { level: 0, name: "合作社线", bonus: 0 },
+  { level: 1, name: "近海航线", bonus: 0.08 },
+  { level: 2, name: "远洋契约", bonus: 0.16 },
+  { level: 3, name: "共同体航线", bonus: 0.24 },
 ];
 
 export const CITY_PROJECTS = {

@@ -29,6 +29,8 @@ Development. The real Canvas scene base remains the default runtime; four miniga
 - Rainy-day forage nodes now spawn across farm/city/port layouts with one-time claims, energy/time cost, a three-node combo bonus, shared inventory, and day-end reset.
 - Scene finds are hidden landmarks in every scene; investigating them advances time, adds lore memory, grants coins, and completing a scene unlocks a civic point plus AI trust.
 - NPCs have one daily contextual topic. Choosing a response updates `relations.npc`, community/ecology where relevant, and `social.topicDay`; repeat conversations are blocked for the day.
+- Gameplay card 05 is implemented: gift tags and NPC preferences are data-driven; gifts consume inventory once per NPC/day, change `relations.npc`, return a seed/civic thank-you, and build a bounded gift history/log.
+- Gameplay card 06 is implemented: three consecutive contract deliveries raise `market.tier`, raise future contract rewards, preserve the one-night expiry behavior, and reset the streak on expiry.
 
 ## Important files
 
@@ -52,11 +54,11 @@ Development. The real Canvas scene base remains the default runtime; four miniga
 - Phaser smoke still required after each adapter change, including farm movement, action, scene dispatch, save/reload, and portrait/landscape resize
 - Node16 Playwright 1.38 audits run through `/tmp/ranch-browser-test/node_modules/playwright` against the existing 4174 server. Mobile controls, mobile scene flow, desktop scene flow, console errors, overflow, touch controls, city→council/workshop entrances, island on-site exploration, and trade port were verified.
 - Regression coverage now includes sleep returning `world.scene` and player spawn to farm, policy `coinCost` deduction, retained/expired order behavior, and safe pointer capture handling.
-- `npm test` now covers 26 state tests plus 7 minigame tests plus 3 exploration tests, including day-report and牧心 settlement feedback.
+- `npm test` now covers 26 state tests plus 7 minigame tests plus 5 exploration/social tests, including day-report and牧心 settlement feedback.
 - Merged `main` verification: 25 state tests + 7 minigame tests pass; desktop and 390×844 real scene-triggered overlay paths pass with no console errors.
 - Minigame completion settlement was exercised in Chromium: hunt reward, ecology update, active-session cleanup, and overlay close all passed.
 - Live deployment check: `js/minigames.js` is served from Pages, and desktop/mobile overlay plus settlement smoke tests pass with no console errors.
-- Exploration smoke on desktop and 390×844: scene find discovery, rainy forage claim, NPC daily topic choice, save-state changes, and touch input all pass with no console errors or horizontal overflow.
+- Exploration smoke on desktop and 390×844: scene find discovery, rainy forage claim, NPC daily topic choice, gift panel consumption, save-state changes, and touch input all pass with no console errors or horizontal overflow.
 
 ## Risks
 
@@ -69,7 +71,7 @@ Development. The real Canvas scene base remains the default runtime; four miniga
 
 ## Next safest task
 
-Review the next queued gameplay card (05: gift preferences) against the merged main, then add one isolated branch slice and browser acceptance test before merging.
+Review the next queued gameplay card (07: collection book) against the merged main, then add one isolated branch slice and browser acceptance test before merging.
 
 ## Last slice
 
@@ -85,3 +87,9 @@ Review the next queued gameplay card (05: gift preferences) against the merged m
 - Added `FORAGE_NODE_LAYOUT`, `SCENE_FINDS`, `NPC_TOPICS`, `social.topicDay`, `relations.npc`, and scene find state with old-save defaults.
 - Verified: `npm run check`; `npm test` (26 state + 7 minigame + 3 exploration); `exploration-smoke.js` on desktop and 390×844, no console errors or horizontal overflow.
 - Not yet merged or pushed; this branch remains isolated per the parallel-task instruction.
+
+## Latest social/economy slice
+
+- Implemented cards 05 gift preferences and 06 contract tiers/streak.
+- Added `GIFT_TAGS`, `GIFT_PREFERENCES`, `MARKET_TIERS`, `social.giftDay`, `social.giftHistory`, `social.giftLog`, and market chain state with old-save defaults.
+- Verified: `npm run check`; `npm test` (26 state + 7 minigame + 5 exploration); desktop/390×844 exploration smoke including a 46px mobile gift action row, no console errors.

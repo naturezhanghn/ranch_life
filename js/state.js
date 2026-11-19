@@ -7,11 +7,14 @@ import {
   DAY_START_MINUTES,
   FORAGE_TABLE,
   FORAGE_NODE_LAYOUT,
+  GIFT_PREFERENCES,
+  GIFT_TAGS,
   HOUSE_UPGRADES,
   GOVERNMENT_POLICIES,
   ISLAND_DAILY_LIMIT,
   ISLAND_SPOTS,
   MARKET_GOODS,
+  MARKET_TIERS,
   MINIGAME_DEFS,
   NPC_TOPICS,
   PLAYER_START,
@@ -121,6 +124,7 @@ const DAILY_TASK_DEFAULTS = {
 
 export function generateTradeContracts(state) {
   const anchor = `${state.day}:${state.rngState}:${state.market?.reputation || 0}`;
+  const tierBonus = MARKET_TIERS[state.market?.tier || 0]?.bonus || 0;
   return TRADE_CONTRACTS.map((contract, index) => ({
     ...contract,
     requirements: { ...contract.requirements },
@@ -131,7 +135,10 @@ export function generateTradeContracts(state) {
   }))
     .sort((a, b) => a.rank - b.rank)
     .slice(0, state.city?.projects?.marketHall ? 4 : 3)
-    .map(({ rank, ...contract }) => contract);
+    .map(({ rank, ...contract }) => ({
+      ...contract,
+      reward: Math.round(contract.reward * (1 + tierBonus)),
+    }));
 }
 
 function taskMatchesScene(task, sceneId) {
@@ -344,6 +351,7 @@ export function createInitialState() {
       fishCaught: 0,
       oreMined: 0,
       deliveryRuns: 0,
+      giftsGiven: 0,
     },
     daily: null,
     ai: {
@@ -364,6 +372,9 @@ export function createInitialState() {
     },
     social: {
       topicDay: {},
+      giftDay: {},
+      giftHistory: [],
+      giftLog: [],
     },
     world: {
       activeRegion: "farm",
@@ -405,6 +416,9 @@ export function createInitialState() {
       trend: "steady",
       reputation: 0,
       shipments: 0,
+      tier: 0,
+      contractStreak: 0,
+      contractChainId: null,
       contracts: [],
     },
     minigames: {
@@ -952,7 +966,10 @@ export function buyFeed(state) {
 }
 
 function inventoryQuantity(state, itemId) {
-  return (state.inventory.produce[itemId] || 0) + (state.inventory.resources[itemId] || 0);
+  const qualityCount = Object.entries(state.inventory.qualityProduce || {})
+    .filter(([key]) => key.startsWith(`${itemId}_`))
+    .reduce((total, [, count]) => total + (Number(count) || 0), 0);
+  return (state.inventory.produce[itemId] || 0) + (state.inventory.resources[itemId] || 0) + qualityCount;
 }
 
 function consumeInventoryItem(state, itemId, amount) {
@@ -1042,13 +1059,27 @@ export function fulfillTradeContract(state, contractId) {
   state.stats.earned += contract.reward;
   state.stats.contractsFulfilled += 1;
   state.market.reputation += contract.reputation;
+  state.market.contractStreak = (state.market.contractStreak || 0) + 1;
+  state.market.contractChainId = contract.id;
   state.government.civicPoints += 1;
+  let tierMessage = "";
+  if (state.market.contractStreak >= 3 && (state.market.tier || 0) < MARKET_TIERS.length - 1) {
+    state.market.tier = (state.market.tier || 0) + 1;
+    state.market.contractStreak = 0;
+    tierMessage = ` 航线等级提升为${MARKET_TIERS[state.market.tier].name}。`;
+    addMemory(state, `连续完成三份订单，港口把你的航线等级提升为${MARKET_TIERS[state.market.tier].name}。`, "economy", 4);
+  }
   if (state.stats.contractsFulfilled >= 3 && !state.sprites.available.includes("ember")) {
     state.sprites.available.push("ember");
     addMemory(state, "完成三份贸易订单后，烬烬终于愿意把自己的名字写进工坊名册。", "social", 3);
   }
   addMemory(state, `你完成「${contract.title}」，港口声誉提高了 ${contract.reputation}。`, "economy", 3);
-  return { ok: true, message: `订单完成，获得 ${contract.reward} 金和 ${contract.reputation} 点声誉。`, contract };
+  return {
+    ok: true,
+    message: `订单完成，获得 ${contract.reward} 金和 ${contract.reputation} 点声誉。${tierMessage}`,
+    contract,
+    tierMessage,
+  };
 }
 
 export function switchRegion(state, regionId) {
@@ -1693,6 +1724,8 @@ function refreshMarket(state, report = null) {
     if (state.day > (contract.expiresDay || state.day)) {
       state.market.reputation = Math.max(0, state.market.reputation - 2);
       state.government.civicPoints = Math.max(0, state.government.civicPoints - 1);
+      state.market.contractStreak = 0;
+      state.market.contractChainId = null;
       report?.expiredContracts?.push(contract.title);
       addMemory(state, `你错过了「${contract.title}」订单。港口声誉下降，客户开始要求更明确的交付承诺。`, "risk", 3);
     } else {
@@ -1889,6 +1922,58 @@ export function resolveNpcTopic(state, npcId, choiceId) {
     message: choice.reply,
     delta: choice.delta,
     relation: state.relations.npc[npcId],
+  };
+}
+
+export function giveGift(state, npcId, itemId) {
+  if ((state.social.giftDay[npcId] || 0) === state.day) {
+    return { ok: false, message: "今天已经给这个人送过礼物了。关系需要一点时间才能继续生长。" };
+  }
+  if (inventoryQuantity(state, itemId) < 1) {
+    return { ok: false, message: "背包里没有这份物品。" };
+  }
+  const preference = GIFT_PREFERENCES[npcId] || { likes: [], dislikes: [] };
+  const tags = GIFT_TAGS[itemId] || [];
+  const favorite = tags.some((tag) => preference.likes.includes(tag));
+  const disliked = tags.some((tag) => preference.dislikes.includes(tag));
+  const delta = favorite ? 5 : disliked ? -2 : 1;
+  consumeInventoryItem(state, itemId, 1);
+  state.social.giftDay[npcId] = state.day;
+  state.social.giftHistory.push({ day: state.day, npcId, itemId, delta });
+  state.social.giftHistory = state.social.giftHistory.slice(-24);
+  state.social.giftLog.unshift({ day: state.day, npcId, itemId, delta });
+  state.social.giftLog = state.social.giftLog.slice(0, 12);
+  state.relations.npc[npcId] = bounded((state.relations.npc[npcId] || 8) + delta, 0, 100);
+  state.stats.giftsGiven += 1;
+  let reward = null;
+  if (favorite) {
+    if (npcId === "mayor") {
+      state.government.civicPoints += 1;
+      reward = "获得 1 公民点";
+    } else {
+      state.inventory.seeds.turnip = (state.inventory.seeds.turnip || 0) + 1;
+      reward = "获得 1 份白萝卜种子";
+    }
+  }
+  const itemName = MARKET_GOODS[itemId]?.name || PRODUCTS[itemId]?.name || itemId;
+  addMemory(
+    state,
+    `你把${itemName}送给${SCENE_NPCS.find((entry) => entry.id === npcId)?.name || "一位居民"}，关系变化 ${delta > 0 ? "+" : ""}${delta}${reward ? `，${reward}` : ""}。`,
+    "social",
+    2,
+  );
+  return {
+    ok: true,
+    delta,
+    relation: state.relations.npc[npcId],
+    favorite,
+    disliked,
+    reward,
+    message: favorite
+      ? `这份礼物正合心意。关系 +5${reward ? `，${reward}` : ""}。`
+      : disliked
+        ? "对方收下了，但显然不太喜欢。关系 -2。"
+        : "对方收下了礼物。关系 +1。",
   };
 }
 
@@ -2194,6 +2279,13 @@ export function loadGame() {
         ...base.social,
         ...(parsed.social || {}),
         topicDay: { ...base.social.topicDay, ...(parsed.social?.topicDay || {}) },
+        giftDay: { ...base.social.giftDay, ...(parsed.social?.giftDay || {}) },
+        giftHistory: Array.isArray(parsed.social?.giftHistory)
+          ? parsed.social.giftHistory
+          : base.social.giftHistory,
+        giftLog: Array.isArray(parsed.social?.giftLog)
+          ? parsed.social.giftLog
+          : base.social.giftLog,
       },
       world: {
         ...base.world,

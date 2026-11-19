@@ -3,8 +3,11 @@ import {
   collectForageNode,
   createInitialState,
   discoverSceneFind,
+  fulfillTradeContract,
+  generateTradeContracts,
   generateForageNodes,
   getNpcTopic,
+  giveGift,
   resolveNpcTopic,
 } from "../js/state.js";
 
@@ -59,6 +62,43 @@ test("npc daily topic changes relationship once and can resume next day", () => 
   assert.equal(resolveNpcTopic(state, "mayor", "common").ok, false);
   state.day += 1;
   assert.ok(getNpcTopic(state, "mayor"));
+});
+
+test("gift preferences consume inventory once and return a themed thank-you", () => {
+  const state = createInitialState();
+  state.inventory.produce.turnip = 1;
+  const result = giveGift(state, "mayor", "turnip");
+  assert.equal(result.ok, true);
+  assert.equal(result.favorite, true);
+  assert.equal(state.inventory.produce.turnip, 0);
+  assert.equal(state.social.giftDay.mayor, 1);
+  assert.ok(state.relations.npc.mayor > 8);
+  assert.equal(giveGift(state, "mayor", "turnip").ok, false);
+});
+
+test("three consecutive contract deliveries raise the market tier without double paying", () => {
+  const state = createInitialState();
+  state.inventory.produce.egg = 3;
+  for (let index = 0; index < 3; index += 1) {
+    const contract = {
+      id: `chain-${index}`,
+      title: `连锁订单 ${index + 1}`,
+      rewards: 100,
+      reward: 100,
+      reputation: 2,
+      requirements: { egg: 1 },
+      accepted: true,
+      completed: false,
+      expiresDay: state.day + 1,
+    };
+    state.market.contracts = [contract];
+    assert.equal(fulfillTradeContract(state, contract.id).ok, true);
+  }
+  assert.equal(state.market.tier, 1);
+  assert.equal(state.market.contractStreak, 0);
+  const breakfast = generateTradeContracts(state).find((entry) => entry.id === "harbor-breakfast");
+  const baseBreakfast = 196;
+  assert.ok(breakfast.reward > baseBreakfast);
 });
 
 console.log(`\n${passed} exploration tests passed.`);

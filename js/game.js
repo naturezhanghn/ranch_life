@@ -7,11 +7,14 @@ import {
   ELDER_DIALOGUE,
   ENDINGS,
   GOVERNMENT_POLICIES,
+  GIFT_PREFERENCES,
+  GIFT_TAGS,
   HOUSE_UPGRADES,
   ISLAND_DAILY_LIMIT,
   ISLAND_SPOTS,
   MARKET_GOODS,
   MINIGAME_DEFS,
+  MARKET_TIERS,
   NPC_TOPICS,
   SCENE_FINDS,
   INTERACTIONS,
@@ -57,6 +60,7 @@ import {
   getMarketPrice,
   getMinigameAvailability,
   getNpcTopic,
+  giveGift,
   getTargetPlot,
   enactGovernmentPolicy,
   exploreIsland,
@@ -1084,7 +1088,54 @@ function openSceneNpcDialogue(npcId) {
     kicker: `${npc.role} · 第 ${formatClock(state.minutes)}`,
     title: npc.name,
     body: `${speakerBlock({ name: npc.name, role: npc.role, text: copy })}<div class="weather-note">日程：${state.minutes < 11 * 60 ? "上午" : state.minutes < 16 * 60 ? "午后" : "傍晚"}。再过一段时间，${npc.name}会去另一个场景。</div>`,
-    footer: `<button type="button" class="button button--primary" data-action="close">记下这句话</button>`,
+    footer: `
+      <button type="button" class="button button--ghost" data-action="close">记下这句话</button>
+      <button type="button" class="button button--primary" data-action="openGiftPanel" data-value="${npc.id}" ${
+        state.social.giftDay?.[npc.id] === state.day ? "disabled" : ""
+      }>${state.social.giftDay?.[npc.id] === state.day ? "今日已赠礼" : "送一份礼物"}</button>
+    `,
+  });
+}
+
+function openGiftPanel(npcId) {
+  const npc = SCENE_NPCS.find((entry) => entry.id === npcId);
+  if (!npc) return;
+  if (state.social.giftDay?.[npcId] === state.day) {
+    showToast("今天已经给这个人送过礼物了。", { strong: "礼物" });
+    return;
+  }
+  const rows = Object.values(MARKET_GOODS)
+    .map((good) => {
+      const qualityCount = Object.entries(state.inventory.qualityProduce || {})
+        .filter(([key]) => key.startsWith(`${good.id}_`))
+        .reduce((total, [, count]) => total + count, 0);
+      const count =
+        (state.inventory.produce[good.id] || 0) +
+        (state.inventory.resources[good.id] || 0) +
+        qualityCount;
+      return { good, count };
+    })
+    .filter((entry) => entry.count > 0);
+  openModal({
+    kicker: "关系 · 送一份礼物",
+    title: `${npc.name}会记住这份心意`,
+    body: `
+      <div class="weather-note">偏好标签：${(GIFT_PREFERENCES[npcId]?.likes || []).join("、")}。偏好礼物 +5，普通礼物 +1，讨厌礼物 -2。</div>
+      <div class="shop-grid" style="margin-top:12px;">
+        ${rows.map(({ good, count }) => `
+          <div class="shop-row">
+            <span class="item-swatch" aria-hidden="true">${good.icon}</span>
+            <span class="shop-row-copy">
+              <strong>${good.name} × ${count}</strong>
+              <small>${(GIFT_TAGS[good.id] || []).join(" · ") || "普通礼物"}</small>
+            </span>
+            <button type="button" class="shop-buy" data-action="giftItem" data-value="${npcId}|${good.id}">赠送</button>
+          </div>
+        `).join("") || '<div class="empty-note">背包里还没有可以赠送的农场产出或资源。</div>'}
+      </div>
+      <div class="weather-note">每人每天只能收一次礼物；赠送会消耗 1 份库存。</div>
+    `,
+    footer: `<button type="button" class="button button--ghost" data-action="close">收起礼物栏</button>`,
   });
 }
 
@@ -1651,9 +1702,10 @@ function renderTradePanel() {
     ${regionHero("trade", "港口价格每天刷新。普通出货箱保证稳定，贸易航线承担波动，也提供更高的上限。", [
       regionMetric("市场风向", trendLabel),
       regionMetric("航线声誉", Math.round(state.market.reputation), "is-gold"),
-      regionMetric("累计交付", state.market.shipments),
+      regionMetric("航线等级", MARKET_TIERS[state.market.tier || 0]?.name || "合作社线"),
     ].join(""))}
     <div class="region-section-heading"><span>今日报价</span><small>第 ${state.market.lastRefreshDay} 天刷新</small></div>
+    <div class="region-note">连续交付 ${state.market.contractStreak || 0} / 3 单可提升航线等级；累计交付 ${state.market.shipments} 份。</div>
     <div class="market-table">${goods}</div>
     <div class="region-section-heading"><span>港口订单</span><small>最多同时接两单</small></div>
     <div class="contract-grid">${contracts || '<div class="empty-note">今天还没有新的订单。</div>'}</div>
@@ -2894,6 +2946,27 @@ function handleModalClick(event) {
       } else {
         audio.play("error");
         showToast(result.message, { strong: "每日话题" });
+      }
+      break;
+    }
+    case "openGiftPanel":
+      openGiftPanel(value);
+      break;
+    case "giftItem": {
+      const [npcId, itemId] = value.split("|");
+      const result = giveGift(state, npcId, itemId);
+      if (result.ok) {
+        closeModal();
+        updateHUD(true);
+        saveGame(state);
+        audio.play("success");
+        showToast(result.message, {
+          strong: `${SCENE_NPCS.find((entry) => entry.id === npcId)?.name || "居民"} · 关系 ${Math.round(result.relation)}`,
+          duration: 4600,
+        });
+      } else {
+        audio.play("error");
+        showToast(result.message, { strong: "礼物" });
       }
       break;
     }
