@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
-import { CROPS, DAY_START_MINUTES, POST_GAME_MODIFIERS, TRADE_CONTRACTS, WORLD } from "../js/data.js";
+import { BRIDGE_QUEST, CROPS, DAY_START_MINUTES, POST_GAME_MODIFIERS, TRADE_CONTRACTS, WORLD } from "../js/data.js";
 import {
   advanceDay,
+  advanceBridgeQuest,
   applyDevelopmentChoice,
   applyDroughtChoice,
   applyGovernanceChoice,
@@ -17,6 +18,7 @@ import {
   fulfillTradeContract,
   feedAnimal,
   getClueCount,
+  getBridgeQuestStep,
   getPostGameModifier,
   getTargetPlot,
   getBagUsage,
@@ -26,6 +28,7 @@ import {
   recordClue,
   resolveDailyRecap,
   resolveEnding,
+  startBridgeQuest,
   sellAtMarket,
   shipProduce,
   settleShipping,
@@ -294,6 +297,67 @@ test("feedback events dedupe, persist, and feed the day report", () => {
   assert.ok(report.feedbackEvents.some((event) => event.eventId === "test_feedback"));
   assert.ok(report.feedbackEvents.some((event) => event.eventId === "test_feedback_2"));
   assert.equal(state.feedback.events.length, 2);
+});
+
+test("four-station bridge quest preserves materials and completes once", () => {
+  const state = freshState();
+  state.coins = 100;
+  state.inventory.resources.ore = 2;
+  state.inventory.produce.egg = 2;
+  assert.equal(startBridgeQuest(state).ok, true);
+  assert.equal(getBridgeQuestStep(state).id, "repair");
+  state.world.scene = "farm";
+  const repair = advanceBridgeQuest(state);
+  assert.equal(repair.ok, true);
+  assert.equal(state.coins, 60);
+  assert.equal(state.inventory.resources.ore, 0);
+  assert.equal(state.quests.bridgeMaterials, 2);
+  assert.equal(getBridgeQuestStep(state).id, "deliver");
+  state.world.scene = "port";
+  assert.equal(advanceBridgeQuest(state).ok, true);
+  assert.equal(state.inventory.produce.egg, 0);
+  assert.equal(getBridgeQuestStep(state).id, "council");
+  state.world.scene = "council";
+  assert.equal(advanceBridgeQuest(state).ok, true);
+  assert.equal(getBridgeQuestStep(state).id, "reward");
+  state.world.scene = "city";
+  const civicBefore = state.government.civicPoints;
+  const communityBefore = state.relations.community;
+  const reward = advanceBridgeQuest(state);
+  assert.equal(reward.ok, true);
+  assert.equal(reward.completed, true);
+  assert.equal(state.quests.completed, true);
+  assert.equal(state.coins, 150);
+  assert.equal(state.government.civicPoints, civicBefore + 1);
+  assert.equal(state.relations.community, communityBefore + 2);
+  assert.equal(state.stats.bridgeCompleted, 1);
+  assert.equal(advanceBridgeQuest(state).ok, false);
+  assert.equal(state.quests.completedSteps.length, BRIDGE_QUEST.steps.length);
+});
+
+test("expired bridge quest keeps steps and can be reaccepted next week", () => {
+  const state = freshState();
+  state.coins = 100;
+  state.inventory.resources.ore = 2;
+  startBridgeQuest(state);
+  state.world.scene = "farm";
+  advanceBridgeQuest(state);
+  state.quests.deadlineDay = state.day;
+  state.market.reputation = 10;
+  const reputationBefore = state.market.reputation;
+  const report = advanceDay(state);
+  assert.equal(state.quests.expired, true);
+  assert.equal(state.quests.stepIndex, 1);
+  assert.equal(state.quests.completedSteps.includes("repair"), true);
+  assert.equal(state.quests.bridgeMaterials, 2);
+  assert.equal(state.quests.retryDay, state.day + 7);
+  assert.ok(state.market.reputation < reputationBefore);
+  assert.ok(report.feedbackEvents.some((event) => event.eventId === "bridge_expired"));
+  state.day = state.quests.retryDay;
+  const resumed = startBridgeQuest(state);
+  assert.equal(resumed.ok, true);
+  assert.equal(state.quests.expired, false);
+  assert.equal(getBridgeQuestStep(state).id, "deliver");
 });
 
 test("rain forage nodes expire, collect once, and feed the day report", () => {

@@ -1,4 +1,5 @@
 import {
+  BRIDGE_QUEST,
   CROPS,
   INTERACTIONS,
   SCENE_DEFS,
@@ -77,6 +78,7 @@ export class WorldRenderer {
     this.drawForageNode(ctx, state, time);
     this.drawSceneFinds(ctx, state, time);
     this.drawSeasonalLandmark(ctx, state, "farm", farmSeasonVariant, time);
+    this.drawBridgeQuestMarker(ctx, state, "farm", time);
 
     const drawables = [];
     const sisterY = 257;
@@ -152,6 +154,7 @@ export class WorldRenderer {
     this.drawSceneLandmarks(ctx, state, sceneId, time);
     this.drawSceneFinds(ctx, state, time);
     this.drawSeasonalLandmark(ctx, state, sceneId, seasonVariant, time);
+    this.drawBridgeQuestMarker(ctx, state, sceneId, time);
 
     const drawables = [];
     for (const position of scheduledNpcPositions(state.minutes, sceneId)) {
@@ -312,6 +315,40 @@ export class WorldRenderer {
       "rgba(255, 247, 216, 0.9)",
       "#5b5231",
     );
+    ctx.restore();
+  }
+
+  drawBridgeQuestMarker(ctx, state, sceneId, time) {
+    const sign = BRIDGE_QUEST.signs[sceneId];
+    if (!sign) return;
+    const quest = state.quests || {};
+    const step = quest.activeId && !quest.expired && !quest.completed
+      ? BRIDGE_QUEST.steps[quest.stepIndex]
+      : null;
+    const activeHere = step?.scene === sceneId;
+    ctx.save();
+    ctx.fillStyle = "rgba(83, 59, 36, 0.7)";
+    ctx.fillRect(sign.x - 3, sign.y - 22, 6, 28);
+    ctx.fillStyle = activeHere ? "#f0d27f" : "rgba(225, 208, 166, 0.8)";
+    roundedRect(ctx, sign.x - 33, sign.y - 42, 66, 23, 5);
+    ctx.fill();
+    ctx.strokeStyle = activeHere ? "#fff1b6" : "rgba(112, 90, 53, 0.65)";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.fillStyle = "#4f4a35";
+    ctx.font = "700 9px 'PingFang SC', sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("桥", sign.x, sign.y - 30);
+    if (activeHere) {
+      const pulse = 1 + Math.sin(time * 2.4 + sign.x * 0.01) * 0.1;
+      ctx.strokeStyle = "rgba(255, 235, 164, 0.9)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(step.x, step.y, 26 * pulse, 0, TAU);
+      ctx.stroke();
+      this.drawPlaceTag(ctx, step.x, step.y - 44, step.label, "rgba(255, 247, 216, 0.94)", "#5b5231");
+    }
     ctx.restore();
   }
 

@@ -1,6 +1,7 @@
 import {
   ANIMAL_DEFS,
   BACKPACK_UPGRADES,
+  BRIDGE_QUEST,
   CANAL_LORE,
   CITY_PROJECTS,
   COLLECTION_DEFS,
@@ -43,6 +44,7 @@ import {
   applyDevelopmentChoice,
   applyDroughtChoice,
   applyGovernanceChoice,
+  advanceBridgeQuest,
   abortMinigame,
   acceptTradeContract,
   assignSprite,
@@ -84,6 +86,7 @@ import {
   upgradeTool,
   upgradeHouse,
   getBagUsage,
+  getBridgeQuestStep,
   recordClue,
   recordTalk,
   refillWaterAtCanal,
@@ -92,6 +95,7 @@ import {
   resolveMinigame,
   discoverSceneFind,
   resolveNpcTopic,
+  startBridgeQuest,
   saveGame,
   sellAtMarket,
   shipProduce,
@@ -612,12 +616,38 @@ function availableInteractions() {
         sceneId,
       }]
     : [];
+  const bridgeStep = getBridgeQuestStep(state);
+  const bridgeSign = BRIDGE_QUEST.signs[sceneId];
+  const bridge = bridgeStep?.scene === sceneId
+    ? [{
+        id: "bridge_quest_step",
+        x: bridgeStep.x,
+        y: bridgeStep.y,
+        radius: 52,
+        label: bridgeStep.label,
+        keycap: "E",
+        bridgeQuest: true,
+        bridgeStep,
+      }]
+    : bridgeSign
+      ? [{
+          id: "bridge_quest_sign",
+          x: bridgeSign.x,
+          y: bridgeSign.y,
+          radius: 50,
+          label: bridgeSign.label,
+          keycap: "E",
+          bridgeQuest: true,
+          bridgeSign,
+        }]
+      : [];
   return [
     ...base.filter(forageInteractionIsAvailable),
     ...sceneFinds,
     ...scenePortalInteractions(sceneId),
     ...npcs,
     ...seasonal,
+    ...bridge,
   ];
 }
 
@@ -804,6 +834,8 @@ function canMoveTo(x, y) {
   const blockers = sceneId === "farm"
     ? [...farmBlockers, ...seasonalBlockers]
     : [...(SCENE_DEFS[sceneId]?.blockers || []), ...seasonalBlockers];
+  const bridgeSign = BRIDGE_QUEST.signs[sceneId];
+  if (bridgeSign) blockers.push({ x: bridgeSign.x - 7, y: bridgeSign.y - 16, w: 14, h: 22 });
   if (blockers.some((rect) => circleHitsRect(x, y, radius, rect, 2))) return false;
 
   for (const position of scheduledNpcPositions(state.minutes, sceneId)) {
@@ -872,6 +904,56 @@ function checkStoryToast() {
   }
 }
 
+function openBridgeQuestInfo() {
+  const quest = state.quests || {};
+  const step = getBridgeQuestStep(state);
+  const canStart = currentSceneId() === "farm"
+    && !quest.completed
+    && (!quest.activeId || (quest.expired && state.day >= (quest.retryDay || 0)));
+  const progress = BRIDGE_QUEST.steps.map((entry, index) => {
+    const done = quest.completedSteps?.includes(entry.id);
+    const current = step?.id === entry.id;
+    return `<div class="clue-card ${done ? "is-found" : current ? "is-current" : "is-locked"}">
+      <span class="clue-icon">${done ? "✓" : current ? "→" : "○"}</span>
+      <span class="clue-copy"><strong>${entry.actionLabel}</strong><span>${SCENE_DEFS[entry.scene]?.name || entry.scene} · ${entry.detail}</span></span>
+      <span class="clue-status">${done ? "已完成" : current ? "当前" : "未到"}</span>
+    </div>`;
+  }).join("");
+  openModal({
+    kicker: "共同工程 · 旧渠木桥",
+    title: BRIDGE_QUEST.title,
+    wide: true,
+    body: `
+      <p class="story-lead">${BRIDGE_QUEST.description}</p>
+      <div class="weather-note">${quest.expired ? `桥材和已完成步骤仍在。下一周第 ${quest.retryDay} 天可以重新接上。` : quest.deadlineDay ? `本期期限：第 ${quest.deadlineDay} 天清晨。` : "从牧场路牌开始这条四站路线。"}</div>
+      <div class="clue-list">${progress}</div>
+      <div class="day-report-card"><strong>已保留的桥材</strong><span>${quest.bridgeMaterials || 0} 份矿铜 · 已完成 ${quest.completedSteps?.length || 0} / ${BRIDGE_QUEST.steps.length} 步</span></div>
+    `,
+    footer: canStart
+      ? `<button type="button" class="button button--ghost" data-action="close">先看看</button><button type="button" class="button button--primary" data-action="acceptBridgeQuest">${quest.expired ? "重新接上修桥路线" : "接下修桥路线"}</button>`
+      : `<button type="button" class="button button--primary" data-action="close">继续走动</button>`,
+  });
+}
+
+function handleBridgeQuestInteraction(interaction) {
+  if (!interaction.bridgeStep) {
+    openBridgeQuestInfo();
+    return;
+  }
+  const result = advanceBridgeQuest(state);
+  if (result.ok) {
+    audio.play("success");
+    triggerEffect("memory", state.player.x, state.player.y);
+    applyTaskCompletions(checkDailyTasks(state));
+  } else {
+    audio.play("error");
+  }
+  showFeedbackToast(state.feedback?.lastEvent, "旧渠木桥", 4200);
+  updateHUD(true);
+  updateInteractionHint();
+  saveGame(state);
+}
+
 function handleInteraction(id) {
   const sceneInteraction = availableInteractions().find((interaction) => interaction.id === id);
   if (sceneInteraction?.portal) {
@@ -904,6 +986,10 @@ function handleInteraction(id) {
     updateHUD(true);
     updateInteractionHint();
     saveGame(state);
+    return;
+  }
+  if (sceneInteraction?.bridgeQuest) {
+    handleBridgeQuestInteraction(sceneInteraction);
     return;
   }
   switch (id) {
@@ -2496,6 +2582,20 @@ function renderPostGameProgressCard() {
   `;
 }
 
+function renderBridgeQuestCard() {
+  const quest = state.quests || {};
+  if (!quest.activeId && !quest.completed) return "";
+  const step = getBridgeQuestStep(state);
+  const status = quest.completed
+    ? "旧渠木桥已经修好，四站路线完成。"
+    : quest.expired
+      ? `已经过期，桥材保留；第 ${quest.retryDay} 天后可重接。`
+      : step
+        ? `当前：${step.label} · ${SCENE_DEFS[step.scene]?.name || step.scene}`
+        : "路线等待下一步。";
+  return `<div class="day-report-card"><strong>共同工程 · ${BRIDGE_QUEST.title}</strong><span>${status}</span><span>桥材 ${quest.bridgeMaterials || 0} 份 · 已完成 ${quest.completedSteps?.length || 0} / ${BRIDGE_QUEST.steps.length} 步${quest.deadlineDay && !quest.completed ? ` · 期限第 ${quest.deadlineDay} 天` : ""}</span></div>`;
+}
+
 function showEnding() {
   const endingId = resolveEnding(state);
   const ending = ENDINGS[endingId];
@@ -2723,6 +2823,11 @@ function showDaySummary(report, nextEvent = null, auto = false) {
       ${
         report.feedbackEvents?.length
           ? `<div class="day-report-card"><strong>今日反馈记录</strong>${report.feedbackEvents.map((event) => `<span><code>${event.eventId}</code> · ${event.message}</span>`).join("")}</div>`
+          : ""
+      }
+      ${
+        report.questExpired
+          ? `<div class="clue-verification">共同工程「${report.questExpired}」错过期限。桥材和已完成步骤仍保留，下一周可以重新接上。</div>`
           : ""
       }
       ${
@@ -2955,6 +3060,7 @@ function openMenu() {
           ${relationRow("生态韧性", state.relations.ecology, "metric-track--blue")}
           ${relationRow("企业影响", state.relations.corporation, "metric-track--amber")}
           ${state.story.postGameModifier ? renderPostGameProgressCard() : ""}
+          ${renderBridgeQuestCard()}
         </div>
         <div>
           <div class="section-title">背包 · ${getBagUsage(state)} / ${state.bag.slots} 格</div>
@@ -3406,6 +3512,21 @@ function handleModalClick(event) {
     case "openDailyRecap":
       openDailyRecap();
       break;
+    case "acceptBridgeQuest": {
+      const result = startBridgeQuest(state);
+      if (result.ok) {
+        closeModal();
+        audio.play("success");
+        showFeedbackToast(state.feedback?.lastEvent, "旧渠木桥", 4600);
+        updateHUD(true);
+        updateInteractionHint();
+        saveGame(state);
+      } else {
+        audio.play("error");
+        showToast(result.message, { strong: "旧渠木桥" });
+      }
+      break;
+    }
     case "dailyRecap": {
       const result = resolveDailyRecap(state, value);
       if (result.ok) {

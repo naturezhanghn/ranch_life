@@ -2149,6 +2149,61 @@ export const POST_GAME_MODIFIERS = [
   },
 ];
 
+export const BRIDGE_QUEST = {
+  id: "canal_bridge",
+  title: "旧渠木桥",
+  description: "旧渠上的人行木桥断了。修好它，才能让上游的草料车重新进村。",
+  deadlineDays: 7,
+  retryDays: 7,
+  signs: {
+    farm: { x: 560, y: 620, label: "查看修桥路牌" },
+    city: { x: 760, y: 590, label: "查看城市回报路牌" },
+    port: { x: 840, y: 640, label: "查看港口交货路牌" },
+    council: { x: 700, y: 620, label: "查看议事厅盖章路牌" },
+  },
+  steps: [
+    {
+      id: "repair",
+      scene: "farm",
+      x: 560,
+      y: 620,
+      label: "修整旧渠桥桩",
+      actionLabel: "修桥",
+      detail: "用 40 金和 2 份矿铜加固桥桩。矿铜会留在桥里，不会因订单失败而丢失。",
+      cost: { coins: 40, ore: 2 },
+    },
+    {
+      id: "deliver",
+      scene: "port",
+      x: 840,
+      y: 640,
+      label: "把桥板送到港口",
+      actionLabel: "交付桥板",
+      detail: "把 2 枚鸡蛋交给港口的木匠换桥板。桥板会留在货栈，等你回来继续。",
+      cost: { egg: 2 },
+    },
+    {
+      id: "council",
+      scene: "council",
+      x: 700,
+      y: 620,
+      label: "在议事厅为修桥盖章",
+      actionLabel: "议事盖章",
+      detail: "让议事厅确认修桥是公共工程，而不是某一家的私事。",
+    },
+    {
+      id: "reward",
+      scene: "city",
+      x: 760,
+      y: 590,
+      label: "回城市路牌领取回报",
+      actionLabel: "领取回报",
+      detail: "桥修好后，城市会支付 90 金，并记下一次公共行动的信用。",
+      reward: { coins: 90, civic: 1, community: 2 },
+    },
+  ],
+};
+
 export const TIPS = [
   "浇水后的作物会在过夜时生长。雨天会自动浇灌所有田地。",
   "照料牲畜后，它们会在第二天留下鸡蛋、牛奶或羊毛。",

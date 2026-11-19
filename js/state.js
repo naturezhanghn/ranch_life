@@ -1,6 +1,7 @@
 import {
   ANIMAL_DEFS,
   BACKPACK_UPGRADES,
+  BRIDGE_QUEST,
   CITY_PROJECTS,
   COLLECTION_DEFS,
   CROPS,
@@ -352,6 +353,16 @@ export function createInitialState() {
       seen: {},
       lastEvent: null,
     },
+    quests: {
+      activeId: null,
+      stepIndex: 0,
+      completedSteps: [],
+      deadlineDay: null,
+      retryDay: null,
+      expired: false,
+      completed: false,
+      bridgeMaterials: 0,
+    },
     town: { eventsSeen: [], birthdayGifts: {}, festivalBonus: 0 },
     plots: createPlots(),
     animals: createAnimals(),
@@ -381,6 +392,7 @@ export function createInitialState() {
       oreMined: 0,
       deliveryRuns: 0,
       giftsGiven: 0,
+      bridgeCompleted: 0,
     },
     daily: null,
     ai: {
@@ -593,6 +605,94 @@ export function emitFeedback(state, {
   state.feedback.events = [event, ...(state.feedback.events || [])].slice(0, 40);
   state.feedback.lastEvent = event;
   return event;
+}
+
+export function getBridgeQuestStep(state) {
+  const quest = state.quests;
+  if (!quest?.activeId || quest.completed || quest.expired) return null;
+  return BRIDGE_QUEST.steps[quest.stepIndex] || null;
+}
+
+export function startBridgeQuest(state) {
+  const quest = state.quests;
+  if (quest.completed) return { ok: false, message: "旧渠木桥已经修好了。" };
+  if (quest.activeId && !quest.expired) return { ok: false, message: "修桥路线已经开始了，去当前路牌继续。" };
+  if (quest.expired && state.day < (quest.retryDay || 0)) {
+    return { ok: false, message: `桥材还在，下一周第 ${quest.retryDay} 天可以重新接上。` };
+  }
+  quest.activeId = BRIDGE_QUEST.id;
+  quest.expired = false;
+  quest.retryDay = null;
+  quest.deadlineDay = state.day + BRIDGE_QUEST.deadlineDays;
+  emitFeedback(state, {
+    eventId: "bridge_started",
+    kind: "quest",
+    severity: "info",
+    message: `${BRIDGE_QUEST.title}开工：先去牧场修桥桩。`,
+    dedupeKey: `bridge_started:${state.day}`,
+  });
+  addMemory(state, `你接下了「${BRIDGE_QUEST.title}」。修桥不是一笔私人支出，它会把牧场、港口、议事厅和城市重新连在一起。`, "quest", 3);
+  return { ok: true, message: "修桥路线已接下。先去牧场路牌修整桥桩。" };
+}
+
+export function advanceBridgeQuest(state) {
+  const step = getBridgeQuestStep(state);
+  if (!step) {
+    return { ok: false, message: state.quests?.completed ? "旧渠木桥已经修好了。" : "先在牧场路牌接下修桥路线。" };
+  }
+  if (step.scene !== state.world?.scene) {
+    return { ok: false, message: `这一步要去${SCENE_DEFS[step.scene]?.name || step.scene}完成。` };
+  }
+  if (step.cost?.coins && state.coins < step.cost.coins) {
+    return { ok: false, message: `还差 ${step.cost.coins - state.coins} 金才能修桥。` };
+  }
+  if (step.cost?.ore && (state.inventory.resources.ore || 0) < step.cost.ore) {
+    return { ok: false, message: `还差 ${step.cost.ore - (state.inventory.resources.ore || 0)} 份矿铜。` };
+  }
+  if (step.cost?.egg && (state.inventory.produce.egg || 0) < step.cost.egg) {
+    return { ok: false, message: `还差 ${step.cost.egg - (state.inventory.produce.egg || 0)} 枚鸡蛋交给木匠。` };
+  }
+  if (step.cost?.coins) state.coins -= step.cost.coins;
+  if (step.cost?.ore) {
+    state.inventory.resources.ore -= step.cost.ore;
+    state.quests.bridgeMaterials += step.cost.ore;
+  }
+  if (step.cost?.egg) state.inventory.produce.egg -= step.cost.egg;
+  state.minutes = Math.min(24 * 60, state.minutes + 8);
+  state.quests.completedSteps.push(step.id);
+  state.quests.stepIndex += 1;
+  const completed = state.quests.stepIndex >= BRIDGE_QUEST.steps.length;
+  if (completed) {
+    state.quests.completed = true;
+    state.quests.deadlineDay = null;
+    state.coins += step.reward?.coins || 0;
+    state.stats.earned += step.reward?.coins || 0;
+    state.government.civicPoints += step.reward?.civic || 0;
+    state.relations.community = bounded(state.relations.community + (step.reward?.community || 0));
+    state.stats.bridgeCompleted = (state.stats.bridgeCompleted || 0) + 1;
+  }
+  emitFeedback(state, {
+    eventId: completed ? "bridge_complete" : "bridge_step",
+    kind: "quest",
+    severity: "success",
+    message: completed ? "旧渠木桥修好了，草料车重新进村。" : `完成「${step.actionLabel}」，下一站已经出现在路牌上。`,
+    dedupeKey: `bridge_step:${step.id}:${state.day}`,
+  });
+  addMemory(
+    state,
+    completed
+      ? "旧渠木桥重新通行。修桥的四站没有把功劳归给一个人，桥桩、桥板、印章和回报都被写进了同一份地方记录。"
+      : `修桥进度：${step.actionLabel}完成，桥材和已完成步骤会保留到下一次。`,
+    "quest",
+    3,
+  );
+  return {
+    ok: true,
+    step,
+    completed,
+    nextStep: BRIDGE_QUEST.steps[state.quests.stepIndex] || null,
+    message: completed ? "旧渠木桥修好了，城市回报已经到账。" : `「${step.actionLabel}」完成，去下一块路牌。`,
+  };
 }
 
 export function getSceneSeasonVariant(state, sceneId = state.world?.scene || "farm") {
@@ -2443,6 +2543,7 @@ export function advanceDay(state) {
       window: false,
     },
     seasonVariant: null,
+    questExpired: null,
     systemNotes: [],
     weather: "sunny",
   };
@@ -2562,6 +2663,28 @@ export function advanceDay(state) {
       "season",
       3,
     );
+  }
+  if (
+    state.quests.activeId
+    && !state.quests.completed
+    && !state.quests.expired
+    && state.quests.deadlineDay
+    && state.day > state.quests.deadlineDay
+  ) {
+    state.quests.expired = true;
+    state.quests.retryDay = state.day + BRIDGE_QUEST.retryDays;
+    state.market.reputation = Math.max(0, state.market.reputation - 2);
+    state.government.civicPoints = Math.max(0, state.government.civicPoints - 1);
+    report.questExpired = BRIDGE_QUEST.title;
+    emitFeedback(state, {
+      eventId: "bridge_expired",
+      kind: "quest",
+      severity: "warning",
+      sourceScene: state.world?.scene || "farm",
+      message: `「${BRIDGE_QUEST.title}」错过了期限，桥材和已完成步骤仍然保留。`,
+      dedupeKey: `bridge_expired:${state.day}`,
+    });
+    addMemory(state, `「${BRIDGE_QUEST.title}」错过了期限，港口声誉下降。桥材和已完成步骤被保留，下一周可以重新接上。`, "risk", 3);
   }
   state.minutes = DAY_START_MINUTES;
   state.energy = state.maxEnergy;
@@ -2776,6 +2899,13 @@ export function loadGame() {
           ? { ...parsed.feedback.seen }
           : {},
         lastEvent: parsed.feedback?.lastEvent || null,
+      },
+      quests: {
+        ...base.quests,
+        ...(parsed.quests || {}),
+        completedSteps: Array.isArray(parsed.quests?.completedSteps)
+          ? parsed.quests.completedSteps
+          : base.quests.completedSteps,
       },
       town: { ...base.town, ...(parsed.town || {}), eventsSeen: Array.isArray(parsed.town?.eventsSeen) ? parsed.town.eventsSeen : base.town.eventsSeen, birthdayGifts: { ...base.town.birthdayGifts, ...(parsed.town?.birthdayGifts || {}) } },
       stats: { ...base.stats, ...(parsed.stats || {}) },
