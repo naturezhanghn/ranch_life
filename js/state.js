@@ -193,6 +193,10 @@ export function generateDailyTasks(state) {
       rewarded: false,
     })),
     rewarded: false,
+    recapFacts: [],
+    recapOptions: [],
+    recapChoice: null,
+    recapDay: null,
   };
 }
 
@@ -241,6 +245,10 @@ function normalizeDailyState(daily, state) {
     counters: { ...DAILY_TASK_COUNTER_DEFAULTS, ...(source.counters || {}) },
     tasks: sourceTasks.map((task, index) => normalizeDailyTask(task, index)),
     rewarded: source.rewarded === true,
+    recapOptions: Array.isArray(source.recapOptions) ? source.recapOptions.slice(0, 2) : [],
+    recapFacts: Array.isArray(source.recapFacts) ? source.recapFacts.slice(0, 4) : [],
+    recapChoice: typeof source.recapChoice === "string" ? source.recapChoice : null,
+    recapDay: Number(source.recapDay) || null,
   };
 }
 
@@ -539,6 +547,59 @@ export function addMemory(state, text, type = "observation", importance = 1) {
 
 export function getSceneSeasonVariant(state, sceneId = state.world?.scene || "farm") {
   return SCENE_SEASON_VARIANTS[sceneId]?.[state.season] || null;
+}
+
+function buildDailyRecapOptions(state, report, closingDay) {
+  const completed = report.dailyTasks?.completed?.length || 0;
+  const incomplete = report.dailyTasks?.incomplete?.length || 0;
+  const collected = report.forageStats?.collected || 0;
+  const products = report.products?.length || 0;
+  const facts = [
+    `今日清单：完成 ${completed} 项，未完成 ${incomplete} 项。`,
+    collected
+      ? `山货与季节路线：采到 ${collected} 份，窗口结束后节点会收起。`
+      : products
+        ? `牲畜棚留下了 ${products} 件产品，明天的现金流有了着落。`
+        : "今天没有新的采集或牲畜产品，时间更多花在照料和判断上。",
+    `社区信任 ${Math.round(state.relations.community)} · 生态韧性 ${Math.round(state.relations.ecology)} · 牧心信任 ${Math.round(state.ai.trust)}。`,
+  ];
+  return {
+    day: closingDay,
+    facts,
+    options: [
+      {
+        id: "ai",
+        label: "写进牧心",
+        detail: "让牧心把今天的取舍纳入长期记忆，优先提高它的信任与判断权重。",
+        effect: "牧心信任 +2",
+        facts,
+      },
+      {
+        id: "public",
+        label: "转为公共行动",
+        detail: "把今天的经验整理成村务建议，让社区共享这段判断，而不是只留在机器里。",
+        effect: "公民点 +1 · 社区信任 +1",
+        facts,
+      },
+    ],
+  };
+}
+
+export function resolveDailyRecap(state, choiceId) {
+  const options = Array.isArray(state.daily?.recapOptions) ? state.daily.recapOptions : [];
+  const option = options.find((entry) => entry.id === choiceId);
+  if (!option) return { ok: false, message: "这不是今天留下的一个解释。" };
+  if (state.daily.recapChoice) return { ok: false, message: "今天的日结解释已经写下了。" };
+  state.daily.recapChoice = option.id;
+  if (option.id === "ai") {
+    state.ai.trust = bounded(state.ai.trust + 2);
+    addMemory(state, `日结解释写入牧心：你选择让机器记住今天的取舍，牧心信任提高了 2 点。`, "routine", 3);
+  } else {
+    state.government.civicPoints += 1;
+    state.relations.community = bounded(state.relations.community + 1);
+    addMemory(state, `日结解释转为公共行动：你把今天的经验带进村务讨论，公民点 +1，社区信任 +1。`, "routine", 3);
+  }
+  return { ok: true, option };
 }
 
 export function collectSeasonalLandmark(state, sceneId = state.world?.scene || "farm") {
@@ -2192,6 +2253,9 @@ export function advanceDay(state) {
     systemNotes: [],
     weather: "sunny",
   };
+  if (state.daily?.recapOptions?.length && !state.daily.recapChoice) {
+    addMemory(state, "昨天的日结解释没有落笔。牧心把这段留白记成一次未决的取舍。", "routine", 1);
+  }
   if (previousForageExpired) {
     addMemory(state, `雨后采集窗口结束了，有 ${previousForageExpired} 个节点没有被采走。`, "risk", 2);
   }
@@ -2384,6 +2448,12 @@ export function advanceDay(state) {
   }
 
   state.daily = generateDailyTasks(state);
+  const recap = buildDailyRecapOptions(state, report, closingDay);
+  state.daily.recapFacts = recap.facts;
+  state.daily.recapOptions = recap.options;
+  state.daily.recapChoice = null;
+  state.daily.recapDay = closingDay;
+  report.recap = recap;
   state.story.talkedNpcs = [];
 
   if (state.story.developmentChoice && !state.story.governanceChoice) {

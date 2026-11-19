@@ -36,6 +36,7 @@ Development. The real Canvas scene base remains the default runtime; four miniga
 - Gameplay card 06 is implemented: three consecutive contract deliveries raise `market.tier`, raise future contract rewards, preserve the one-night expiry behavior, and reset the streak on expiry.
 - Gameplay card 07 is implemented: scene finds, forage, and NPC topics append to one shared collection book; unknown entries render as silhouettes, category completion grants civic points/AI trust, and the book is reachable from the workshop garden or pause menu.
 - Gameplay card 08 is implemented: every scene has four season variants with their own palette, route label, exclusive landmark, and small optional blockers. Seasonal landmarks grant the season's forage item once per day, advance six minutes, add ecology, and enter the collection book. The farm legacy renderer and the non-farm scene renderer both draw the seasonal route, landmark, blocker, and particles.
+- Gameplay card 09 is implemented: after sleep, the morning report shows three facts and two explanations. `resolveDailyRecap` pays either AI trust +2 or civic point +1 and community +1, exactly once. The pause menu exposes an unresolved recap so closing the morning card does not silently lose the choice; an unopened recap is marked as a deliberate blank at the next day boundary.
 - The branch is synchronized with `main` at `f09b381`. The merge keeps main's `FORAGE_NODE_DEFS`/`expiresMinute` implementation, legacy-node recovery, 8-minute collection time cost, and ecology gain, while retaining the shared collection hook.
 
 ## Important files
@@ -95,6 +96,7 @@ Review the next queued gameplay card (08: seasonal routes) against the merged ma
 - Synchronized the isolated branch with `main` at `f09b381`; the state merge retains both the hardened forage migration and the shared collection book.
 - Final combined verification before card 08: `npm run check`; `npm test` (30 state + 7 minigame + 6 exploration); desktop and 390×844 exploration smoke; 844×390 landscape smoke. No console errors or horizontal overflow.
 - Card 08 verification: `npm test` (30 state + 7 minigame + 8 exploration); four-season desktop smoke confirmed distinct palettes, correct landmark hints, one exclusive resource per season, and no overflow; 390×844 touch gathering and `?phaser=1` farm movement/action passed with no console errors.
+- Card 09 verification: `npm test` (32 state + 7 minigame + 8 exploration); auto-sleep desktop smoke showed 2 options and 3 facts, paid AI +2 once, then verified the public path from the pause-menu recap; 390×844 tap smoke showed stacked 86px options, public +1 civic point, no overflow, and no console errors.
 - This branch remains isolated until review and explicit merge approval.
 
 ## Latest social/economy slice

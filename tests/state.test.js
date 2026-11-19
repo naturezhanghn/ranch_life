@@ -21,6 +21,7 @@ import {
   investInCity,
   recruitSprite,
   recordClue,
+  resolveDailyRecap,
   resolveEnding,
   sellAtMarket,
   shipProduce,
@@ -218,6 +219,42 @@ test("daily task settlement is shown in the day report and牧心 memory", () => 
   assert.equal(report.dailyTasks.reward, 25);
   assert.ok(report.systemNotes.some((note) => note.includes("今日清单结算")));
   assert.ok(state.ai.memories.some((memory) => memory.text.includes("今日清单结算")));
+});
+
+test("daily recap offers one interpretation once and applies only its choice", () => {
+  const state = freshState();
+  state.relations.community = 60;
+  const trustBefore = state.ai.trust;
+  const civicBefore = state.government.civicPoints;
+  const report = advanceDay(state);
+  assert.equal(report.recap.facts.length, 3);
+  assert.equal(state.daily.recapOptions.length, 2);
+  assert.equal(state.daily.recapChoice, null);
+  const aiChoice = resolveDailyRecap(state, "ai");
+  assert.equal(aiChoice.ok, true);
+  assert.equal(state.ai.trust, trustBefore + 2);
+  assert.equal(state.government.civicPoints, civicBefore);
+  assert.equal(state.daily.recapChoice, "ai");
+  assert.equal(resolveDailyRecap(state, "public").ok, false);
+  assert.equal(state.relations.community, 60);
+  const next = advanceDay(state);
+  assert.equal(next.recap.options.length, 2);
+  assert.equal(state.daily.recapChoice, null);
+});
+
+test("public daily recap pays civic point and community without repeating", () => {
+  const state = freshState();
+  state.relations.community = 60;
+  const trustBefore = state.ai.trust;
+  const civicBefore = state.government.civicPoints;
+  advanceDay(state);
+  const result = resolveDailyRecap(state, "public");
+  assert.equal(result.ok, true);
+  assert.equal(state.government.civicPoints, civicBefore + 1);
+  assert.equal(state.relations.community, 61);
+  assert.equal(state.ai.trust, trustBefore);
+  assert.equal(resolveDailyRecap(state, "public").ok, false);
+  assert.equal(state.government.civicPoints, civicBefore + 1);
 });
 
 test("rain forage nodes expire, collect once, and feed the day report", () => {

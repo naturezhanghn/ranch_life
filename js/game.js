@@ -83,6 +83,7 @@ import {
   recordTalk,
   refillWaterAtCanal,
   resolveEnding,
+  resolveDailyRecap,
   resolveMinigame,
   discoverSceneFind,
   resolveNpcTopic,
@@ -2543,6 +2544,53 @@ function sleepAndAdvance(auto = false) {
   showDaySummary(report, willStartDrought ? "drought" : willMeetInvestor ? "investor" : null, auto);
 }
 
+function renderDailyRecapPanel() {
+  const options = Array.isArray(state.daily?.recapOptions) ? state.daily.recapOptions : [];
+  if (!options.length) return "";
+  const facts = Array.isArray(state.daily?.recapFacts) ? state.daily.recapFacts : [];
+  if (state.daily.recapChoice) {
+    const chosen = options.find((option) => option.id === state.daily.recapChoice);
+    return `
+      <div class="day-recap-card is-resolved" data-recap-panel>
+        <strong>今天的解释已经写下</strong>
+        <span>${chosen ? `${chosen.label} · ${chosen.effect}` : "你把这段经验留在了自己的记录里。"}</span>
+      </div>
+    `;
+  }
+  return `
+    <div class="day-recap-card" data-recap-panel>
+      <strong>第 ${state.daily.recapDay || state.day - 1} 天 · 这些事实应该怎样被记住？</strong>
+      <ul class="day-recap-facts">
+        ${facts.map((fact) => `<li>${fact}</li>`).join("")}
+      </ul>
+      <div class="day-recap-actions">
+        ${options.map((option) => `
+          <button type="button" class="day-recap-option" data-action="dailyRecap" data-value="${option.id}">
+            <b>${option.label}</b>
+            <span>${option.detail}</span>
+            <small>${option.effect}</small>
+          </button>
+        `).join("")}
+      </div>
+    </div>
+  `;
+}
+
+function openDailyRecap() {
+  const options = Array.isArray(state.daily?.recapOptions) ? state.daily.recapOptions : [];
+  if (!options.length) {
+    showToast("今天还没有需要解释的日结。", { strong: "牧心回顾" });
+    return;
+  }
+  openModal({
+    kicker: "牧心回顾 · 昨日取舍",
+    title: "把劳动解释成什么",
+    wide: true,
+    body: renderDailyRecapPanel(),
+    footer: `<span class="pause-label">选择只会结算一次</span><button type="button" class="button button--ghost" data-action="close">稍后再写</button>`,
+  });
+}
+
 function showDaySummary(report, nextEvent = null, auto = false) {
   pendingMorningEvent = nextEvent;
   const weather = weatherPresentation[report.weather] || weatherPresentation.sunny;
@@ -2566,6 +2614,7 @@ function showDaySummary(report, nextEvent = null, auto = false) {
       <div class="weather-note">
         今日天气：${weather.icon} ${weather.label}。${productList}
       </div>
+      ${renderDailyRecapPanel()}
       ${
         report.seasonVariant
           ? `<div class="day-report-card"><strong>${state.season}季路线 · ${report.seasonVariant.label}</strong><span>${report.seasonVariant.routeLabel}已经在地图上显出来。沿它走，可以找到本季专属的采集点；其他季节的入口会安静地收起，但主路始终可达。</span></div>`
@@ -2807,6 +2856,13 @@ function openMenu() {
           </div>
           <div class="section-title">设置</div>
           <div class="settings-list">
+            ${
+              state.daily?.recapOptions?.length && !state.daily.recapChoice
+                ? `<button type="button" class="settings-action" data-action="openDailyRecap">
+                    <span>昨日回顾</span><span>还有一段解释没有写下</span>
+                  </button>`
+                : ""
+            }
             <button type="button" class="settings-action" data-action="openCollection">
               <span>共同地方志</span><span>${state.collection.entries.length} 条已收录</span>
             </button>
@@ -3194,6 +3250,25 @@ function handleModalClick(event) {
     case "openCollection":
       openCollectionBook();
       break;
+    case "openDailyRecap":
+      openDailyRecap();
+      break;
+    case "dailyRecap": {
+      const result = resolveDailyRecap(state, value);
+      if (result.ok) {
+        for (const panel of document.querySelectorAll("[data-recap-panel]")) {
+          panel.outerHTML = renderDailyRecapPanel();
+        }
+        audio.play("success");
+        showToast(result.option.effect, { strong: `日结解释 · ${result.option.label}`, duration: 4200 });
+        updateHUD(true);
+        saveGame(state);
+      } else {
+        audio.play("error");
+        showToast(result.message, { strong: "日结解释" });
+      }
+      break;
+    }
     case "toggleBlur":
       showToast("当前网页版本已经使用完整画面细节。");
       break;
