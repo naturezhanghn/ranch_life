@@ -69,6 +69,7 @@ import {
   giveGift,
   getTargetPlot,
   enactGovernmentPolicy,
+  emitFeedback,
   exploreIsland,
   fulfillTradeContract,
   holdTownHall,
@@ -292,6 +293,7 @@ function showToast(message, options = {}) {
   if (!message) return;
   const toast = document.createElement("div");
   toast.className = "toast";
+  if (options.feedbackId) toast.dataset.feedbackId = options.feedbackId;
   toast.innerHTML = options.strong
     ? `<strong>${escapeHtml(options.strong)}</strong> ${escapeHtml(message)}`
     : escapeHtml(message);
@@ -304,6 +306,12 @@ function showToast(message, options = {}) {
     window.setTimeout(() => toast.remove(), 260);
   }, options.duration || 3200);
   dom.liveRegion.textContent = `${options.strong || ""} ${message}`.trim();
+}
+
+function showFeedbackToast(event, strong = "牧场反馈", duration = 3200) {
+  if (!event) return false;
+  showToast(event.message, { strong, duration, feedbackId: event.id });
+  return true;
 }
 
 function applyTaskCompletions(tasks = []) {
@@ -888,10 +896,10 @@ function handleInteraction(id) {
       audio.play("forage");
       triggerEffect("forage", state.player.x, state.player.y);
       applyTaskCompletions(checkDailyTasks(state));
-      showToast(result.message, { strong: "季节路线", duration: 4600 });
+      showFeedbackToast(state.feedback?.lastEvent, "季节路线", 4600);
     } else {
       audio.play("error");
-      showToast(result.message, { strong: "季节路线" });
+      showFeedbackToast(state.feedback?.lastEvent, "季节路线");
     }
     updateHUD(true);
     updateInteractionHint();
@@ -905,8 +913,8 @@ function handleInteraction(id) {
     case "forage":
     case "city_forage": {
       const result = collectForage(state, id);
-      if (result.ok) { saveGame(state); updateHUD(true); showToast(result.message, { strong: "季节山货" }); }
-      else showToast(result.message);
+      if (result.ok) { saveGame(state); updateHUD(true); }
+      showFeedbackToast(state.feedback?.lastEvent, "季节山货");
       break;
     }
     case "ai":
@@ -1049,12 +1057,28 @@ function startSceneMinigame(type) {
   const availability = getMinigameAvailability(state, type);
   if (!availability.ok) {
     audio.play("error");
-    showToast(availability.message, { strong: MINIGAME_DEFS[type].title });
+    const event = emitFeedback(state, {
+      eventId: "activity_blocked",
+      kind: "activity",
+      severity: "warning",
+      sourceScene: currentSceneId(),
+      message: availability.message,
+      dedupeKey: `activity_blocked:${type}:${state.day}`,
+    });
+    showFeedbackToast(event, MINIGAME_DEFS[type].title);
     return;
   }
   if (availability.def.scene !== currentSceneId()) {
     audio.play("error");
-    showToast(`请先前往${SCENE_DEFS[availability.def.scene]?.name || "对应地点"}。`);
+    const event = emitFeedback(state, {
+      eventId: "activity_wrong_scene",
+      kind: "activity",
+      severity: "warning",
+      sourceScene: currentSceneId(),
+      message: `请先前往${SCENE_DEFS[availability.def.scene]?.name || "对应地点"}。`,
+      dedupeKey: `activity_wrong_scene:${type}:${state.day}`,
+    });
+    showFeedbackToast(event, MINIGAME_DEFS[type].title);
     return;
   }
   const started = beginMinigame(state, type);
@@ -1074,11 +1098,28 @@ function startSceneMinigame(type) {
       if (resolved.ok) {
         applyTaskCompletions(checkDailyTasks(state));
         audio.play("success");
-        showToast(resolved.message, { strong: MINIGAME_DEFS[type].title, duration: 4600 });
+        const event = emitFeedback(state, {
+          eventId: "activity_complete",
+          kind: "activity",
+          severity: "success",
+          sourceScene: currentSceneId(),
+          message: resolved.message,
+          dedupeKey: `activity_complete:${type}:${state.day}`,
+          ttlMs: 3600,
+        });
+        showFeedbackToast(event, MINIGAME_DEFS[type].title, 4600);
         addMemory(state, `小游戏结算：${MINIGAME_DEFS[type].title}完成，结果已写入当日记录。`, "activity", 2);
       } else {
         audio.play("error");
-        showToast(resolved.message, { strong: MINIGAME_DEFS[type].title });
+        const event = emitFeedback(state, {
+          eventId: "activity_failed",
+          kind: "activity",
+          severity: "warning",
+          sourceScene: currentSceneId(),
+          message: resolved.message,
+          dedupeKey: `activity_failed:${type}:${state.day}`,
+        });
+        showFeedbackToast(event, MINIGAME_DEFS[type].title);
       }
       updateHUD(true);
       saveGame(state);
@@ -1086,7 +1127,15 @@ function startSceneMinigame(type) {
     onAbort: () => {
       abortMinigame(state);
       audio.play("error");
-      showToast("你暂时离开了活动，今天的机会已经用掉。", { strong: MINIGAME_DEFS[type].title });
+      const event = emitFeedback(state, {
+        eventId: "activity_aborted",
+        kind: "activity",
+        severity: "warning",
+        sourceScene: currentSceneId(),
+        message: "你暂时离开了活动，今天的机会已经用掉。",
+        dedupeKey: `activity_aborted:${type}:${state.day}`,
+      });
+      showFeedbackToast(event, MINIGAME_DEFS[type].title);
       updateHUD(true);
       saveGame(state);
     },
@@ -1872,7 +1921,15 @@ function travelToScene(sceneId, mode = "road") {
   if (!scene) return;
   const alreadyVisited = state.world.visitedScenes?.includes(sceneId);
   if (mode === "quick" && !alreadyVisited) {
-    showToast(`还没有走过${scene.name}。请从当前地图找到道路入口。`, { strong: "世界导航" });
+    const event = emitFeedback(state, {
+      eventId: "travel_unvisited",
+      kind: "travel",
+      severity: "warning",
+      sourceScene: currentSceneId(),
+      message: `还没有走过${scene.name}。请从当前地图找到道路入口。`,
+      dedupeKey: `travel_unvisited:${sceneId}:${state.day}`,
+    });
+    showFeedbackToast(event, "世界导航");
     return;
   }
   if (modalOpen) {
@@ -1881,7 +1938,15 @@ function travelToScene(sceneId, mode = "road") {
   }
   const result = switchScene(state, sceneId, mode);
   if (!result.ok) {
-    showToast(result.message, { strong: "路线未开放" });
+    const event = emitFeedback(state, {
+      eventId: "travel_blocked",
+      kind: "travel",
+      severity: "warning",
+      sourceScene: currentSceneId(),
+      message: result.message,
+      dedupeKey: `travel_blocked:${sceneId}:${state.day}`,
+    });
+    showFeedbackToast(event, "路线未开放");
     return;
   }
   audio.setScene(sceneId);
@@ -2653,6 +2718,11 @@ function showDaySummary(report, nextEvent = null, auto = false) {
       ${
         report.postGame
           ? `<div class="day-report-card"><strong>后日谈 · ${report.postGame.title}</strong><span>${report.postGame.label}：${Math.min(report.postGame.value, report.postGame.target)} / ${report.postGame.target} · 第 ${report.postGame.daysElapsed} / 7 天${report.postGame.completed ? " · 牌面目标已经达成" : report.postGame.failed ? " · 这一周已经结束" : ""}</span></div>`
+          : ""
+      }
+      ${
+        report.feedbackEvents?.length
+          ? `<div class="day-report-card"><strong>今日反馈记录</strong>${report.feedbackEvents.map((event) => `<span><code>${event.eventId}</code> · ${event.message}</span>`).join("")}</div>`
           : ""
       }
       ${

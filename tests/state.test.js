@@ -11,6 +11,7 @@ import {
   choosePostGameModifier,
   createInitialState,
   collectForage,
+  emitFeedback,
   enactGovernmentPolicy,
   exploreIsland,
   fulfillTradeContract,
@@ -257,6 +258,42 @@ test("public daily recap pays civic point and community without repeating", () =
   assert.equal(state.ai.trust, trustBefore);
   assert.equal(resolveDailyRecap(state, "public").ok, false);
   assert.equal(state.government.civicPoints, civicBefore + 1);
+});
+
+test("feedback events dedupe, persist, and feed the day report", () => {
+  const state = freshState();
+  const first = emitFeedback(state, {
+    eventId: "test_feedback",
+    kind: "travel",
+    sourceScene: "city",
+    severity: "warning",
+    message: "这条路今天不通。",
+    dedupeKey: "test-feedback-key",
+  });
+  assert.ok(first);
+  assert.equal(first.eventId, "test_feedback");
+  assert.equal(first.message, "这条路今天不通。");
+  const duplicate = emitFeedback(state, {
+    eventId: "test_feedback",
+    kind: "travel",
+    sourceScene: "city",
+    message: "这条路今天不通。",
+    dedupeKey: "test-feedback-key",
+  });
+  assert.equal(duplicate, null);
+  const second = emitFeedback(state, {
+    eventId: "test_feedback_2",
+    kind: "season",
+    sourceScene: "farm",
+    severity: "success",
+    message: "季节路线已经记录。",
+    dedupeKey: "test-feedback-key-2",
+  });
+  assert.ok(second);
+  const report = advanceDay(state);
+  assert.ok(report.feedbackEvents.some((event) => event.eventId === "test_feedback"));
+  assert.ok(report.feedbackEvents.some((event) => event.eventId === "test_feedback_2"));
+  assert.equal(state.feedback.events.length, 2);
 });
 
 test("rain forage nodes expire, collect once, and feed the day report", () => {

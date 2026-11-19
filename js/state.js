@@ -347,6 +347,11 @@ export function createInitialState() {
       stats: {},
       firstSeenDay: {},
     },
+    feedback: {
+      events: [],
+      seen: {},
+      lastEvent: null,
+    },
     town: { eventsSeen: [], birthdayGifts: {}, festivalBonus: 0 },
     plots: createPlots(),
     animals: createAnimals(),
@@ -556,6 +561,40 @@ export function addMemory(state, text, type = "observation", importance = 1) {
   state.ai.memories = state.ai.memories.slice(0, 16);
 }
 
+export function emitFeedback(state, {
+  eventId,
+  kind = "info",
+  sourceScene = state.world?.scene || "farm",
+  severity = "info",
+  message,
+  dedupeKey = `${eventId}:${state.day}:${sourceScene}`,
+  dedupeWindowMs = 1600,
+  ttlMs = 2600,
+} = {}) {
+  if (!state.feedback) state.feedback = { events: [], seen: {}, lastEvent: null };
+  const now = Date.now();
+  const previous = state.feedback.seen?.[dedupeKey] || 0;
+  if (now - previous < dedupeWindowMs) return null;
+  state.feedback.seen = state.feedback.seen || {};
+  state.feedback.seen[dedupeKey] = now;
+  const event = {
+    id: `${eventId}:${now}:${state.feedback.events.length}`,
+    eventId,
+    kind,
+    sourceScene,
+    severity,
+    message: message || eventId,
+    dedupeKey,
+    day: state.day,
+    minute: Math.round(state.minutes),
+    createdAt: now,
+    expiresAt: now + ttlMs,
+  };
+  state.feedback.events = [event, ...(state.feedback.events || [])].slice(0, 40);
+  state.feedback.lastEvent = event;
+  return event;
+}
+
 export function getSceneSeasonVariant(state, sceneId = state.world?.scene || "farm") {
   return SCENE_SEASON_VARIANTS[sceneId]?.[state.season] || null;
 }
@@ -699,15 +738,38 @@ export function collectSeasonalLandmark(state, sceneId = state.world?.scene || "
   state.seasonRoutes = state.seasonRoutes || { claims: {}, lastNotice: {} };
   state.seasonRoutes.claims = state.seasonRoutes.claims || {};
   if ((state.seasonRoutes.claims[claimKey] || 0) === state.day) {
+    emitFeedback(state, {
+      eventId: "season_claimed",
+      kind: "season",
+      severity: "info",
+      message: "这条季节小径今天已经走过了。",
+      dedupeKey: `${claimKey}:${state.day}`,
+    });
     return { ok: false, message: "这条季节小径今天已经走过了，明天再来看看。" };
   }
-  if (state.energy < 1) return { ok: false, message: "体力不够，先在附近歇一会儿吧。" };
+  if (state.energy < 1) {
+    emitFeedback(state, {
+      eventId: "season_energy",
+      kind: "season",
+      severity: "warning",
+      message: "体力不够，先回去休息，季节小径不会在今天消失。",
+      dedupeKey: `season_energy:${state.day}`,
+    });
+    return { ok: false, message: "体力不够，先在附近歇一会儿吧。" };
+  }
   const item = (FORAGE_TABLE[state.season] || []).find((entry) => entry.id === landmark.itemId);
   if (!item) return { ok: false, message: "这里今天的季节物还没有成熟。" };
   state.energy -= 1;
   state.minutes = Math.min(24 * 60, state.minutes + 6);
   state.inventory.resources[item.id] = (state.inventory.resources[item.id] || 0) + 1;
   state.seasonRoutes.claims[claimKey] = state.day;
+  emitFeedback(state, {
+    eventId: "season_gathered",
+    kind: "season",
+    severity: "success",
+    message: `沿${variant.routeLabel}采到${item.name}。`,
+    dedupeKey: `${claimKey}:${state.day}`,
+  });
   recordCollection(
     state,
     "forage",
@@ -1952,6 +2014,14 @@ function refreshMarket(state, report = null) {
       state.market.contractStreak = 0;
       state.market.contractChainId = null;
       report?.expiredContracts?.push(contract.title);
+      emitFeedback(state, {
+        eventId: "contract_expired",
+        kind: "order",
+        severity: "warning",
+        sourceScene: "port",
+        message: `订单「${contract.title}」已经过期，声誉和公民点下降。`,
+        dedupeKey: `contract_expired:${contract.id}:${state.day}`,
+      });
       addMemory(state, `你错过了「${contract.title}」订单。港口声誉下降，客户开始要求更明确的交付承诺。`, "risk", 3);
     } else {
       activeContracts.push(contract);
@@ -2128,7 +2198,16 @@ export function collectForage(state, forageId) {
   const itemId = node?.itemId || forageId;
   const item = forageItemForSeason(state, itemId);
   if (!item || !state.forage.available.includes(itemId)) return { ok: false, message: "这里今天没有新的山货。" };
-  if (node?.claimed || state.forage.claimedNodeIds?.includes(node.id)) return { ok: false, message: "这份山货已经采过了。" };
+  if (node?.claimed || state.forage.claimedNodeIds?.includes(node.id)) {
+    emitFeedback(state, {
+      eventId: "forage_claimed",
+      kind: "forage",
+      severity: "info",
+      message: "这份山货已经采过了。",
+      dedupeKey: `forage_claimed:${node?.id || itemId}:${state.day}`,
+    });
+    return { ok: false, message: "这份山货已经采过了。" };
+  }
   if (!node || !forageNodeIsActive(state, node)) {
     const rainWindow = Boolean(node?.weatherDay || state.forage.weatherDay);
     if (!state.forage.expiryNoted && state.forage.expiresDay === state.day) {
@@ -2140,9 +2219,17 @@ export function collectForage(state, forageId) {
         2,
       );
     }
+    const expiredMessage = rainWindow ? "雨后足迹已经淡了，下一场雨后再来看看。" : "这处季节山货已经过期，下一次刷新再来看看。";
+    emitFeedback(state, {
+      eventId: "forage_expired",
+      kind: "forage",
+      severity: "warning",
+      message: expiredMessage,
+      dedupeKey: `forage_expired:${node?.id || itemId}:${state.day}`,
+    });
     return {
       ok: false,
-      message: rainWindow ? "雨后足迹已经淡了，下一场雨后再来看看。" : "这处季节山货已经过期，下一次刷新再来看看。",
+      message: expiredMessage,
     };
   }
   if (state.energy < 1) return { ok: false, message: "体力不够，先回去休息吧。" };
@@ -2162,6 +2249,13 @@ export function collectForage(state, forageId) {
   );
   bumpCounter(state, "foraged");
   state.relations.ecology = bounded(state.relations.ecology + 1);
+  emitFeedback(state, {
+    eventId: "forage_gathered",
+    kind: "forage",
+    severity: "success",
+    message: `采到${item.name}。本次窗口已采 ${state.forage.combo} 份。`,
+    dedupeKey: `forage_gathered:${node.id}:${state.day}`,
+  });
   addMemory(state, `你在${node.scene === "city" ? "村口" : "牧场山路"}采到${item.name}，这是本次窗口已采的第 ${state.forage.combo} 份山货。`, "forage", 2);
   return { ok: true, message: `采到${item.name}。本次窗口已采 ${state.forage.combo} 份。`, nodeId: node.id, combo: state.forage.combo };
 }
@@ -2324,6 +2418,7 @@ export function giveGift(state, npcId, itemId) {
 }
 
 export function advanceDay(state) {
+  const reportStartedAt = Date.now();
   const closingDay = state.day;
   const closingRecapChoice = state.daily?.recapChoice || null;
   const previousWeather = state.weather;
@@ -2562,6 +2657,9 @@ export function advanceDay(state) {
     state.story.step = "aiAudit";
   }
 
+  report.feedbackEvents = (state.feedback?.events || [])
+    .filter((event) => event.day === closingDay || event.createdAt >= reportStartedAt)
+    .slice(0, 4);
   report.systemNotes = state.ai.memories
     .filter((memory) => memory.day === closingDay)
     .slice(0, 4)
@@ -2671,6 +2769,13 @@ export function loadGame() {
           : base.collection.entries,
         stats: { ...base.collection.stats, ...(parsed.collection?.stats || {}) },
         firstSeenDay: { ...base.collection.firstSeenDay, ...(parsed.collection?.firstSeenDay || {}) },
+      },
+      feedback: {
+        events: Array.isArray(parsed.feedback?.events) ? parsed.feedback.events.slice(0, 40) : [],
+        seen: parsed.feedback?.seen && typeof parsed.feedback.seen === "object"
+          ? { ...parsed.feedback.seen }
+          : {},
+        lastEvent: parsed.feedback?.lastEvent || null,
       },
       town: { ...base.town, ...(parsed.town || {}), eventsSeen: Array.isArray(parsed.town?.eventsSeen) ? parsed.town.eventsSeen : base.town.eventsSeen, birthdayGifts: { ...base.town.birthdayGifts, ...(parsed.town?.birthdayGifts || {}) } },
       stats: { ...base.stats, ...(parsed.stats || {}) },

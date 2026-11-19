@@ -3363,6 +3363,7 @@ body.region-switching .app-shell {
 
 .day-report-card strong { color: #37604c; font-size: 10px; }
 .day-report-card span { color: #6b7e70; }
+.day-report-card code { color: #7b5d35; font-size: inherit; }
 .day-report-card--ai { border-color: rgba(80, 139, 128, 0.22); background: rgba(198, 230, 221, 0.42); }
 
 .day-recap-card {
@@ -3436,6 +3437,13 @@ body.region-switching .app-shell {
 @media (max-width: 620px) {
   .day-recap-actions {
     grid-template-columns: 1fr;
+  }
+  .day-report-card,
+  .day-recap-card {
+    font-size: 11px;
+  }
+  .day-report-card strong {
+    font-size: 11px;
   }
 }
 

@@ -122,6 +122,7 @@ export class WorldRenderer {
 
     this.drawFieldHighlight(ctx, state, runtime, time);
     this.drawInteractionHighlight(ctx, state, runtime, time);
+    this.drawFeedbackLabel(ctx, state);
     this.drawForegroundFlora(ctx, time);
     this.drawFloatingAtmosphere(ctx, state, time);
     this.drawSeasonalAtmosphere(ctx, state, farmSeasonVariant, time);
@@ -170,6 +171,7 @@ export class WorldRenderer {
     });
 
     this.drawSceneInteractionHighlight(ctx, state, runtime, time);
+    this.drawFeedbackLabel(ctx, state);
     this.drawSceneAtmosphere(ctx, sceneId, time);
     this.drawSeasonalAtmosphere(ctx, state, seasonVariant, time);
     this.drawWeather(ctx, state, time);
@@ -513,6 +515,39 @@ export class WorldRenderer {
 
   drawSceneInteractionHighlight(ctx, state, runtime, time) {
     this.drawInteractionHighlight(ctx, state, runtime, time);
+  }
+
+  drawFeedbackLabel(ctx, state) {
+    const event = state.feedback?.lastEvent;
+    if (!event || Date.now() > (event.expiresAt || 0)) return;
+    const remaining = Math.max(0, (event.expiresAt - Date.now()) / 1000);
+    const alpha = Math.min(1, remaining / 0.5);
+    const colors = {
+      success: ["rgba(214, 238, 190, 0.94)", "#2f5c46", "#d8f0b8"],
+      warning: ["rgba(248, 224, 173, 0.95)", "#6b4d28", "#c9903d"],
+      info: ["rgba(218, 235, 224, 0.94)", "#365e52", "#8eb9a4"],
+    }[event.severity] || ["rgba(218, 235, 224, 0.94)", "#365e52", "#8eb9a4"];
+    const message = event.message.length > 30 ? `${event.message.slice(0, 30)}…` : event.message;
+    const x = Math.max(150, Math.min(WORLD.width - 150, state.player.x));
+    const y = Math.max(100, state.player.y - 74);
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.font = "700 11px 'PingFang SC', sans-serif";
+    const width = Math.max(180, Math.min(340, ctx.measureText(message).width + 28));
+    ctx.fillStyle = colors[0];
+    roundedRect(ctx, x - width / 2, y - 24, width, 38, 11);
+    ctx.fill();
+    ctx.strokeStyle = colors[2];
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.fillStyle = colors[1];
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(message, x, y - 10);
+    ctx.font = "700 7px 'PingFang SC', sans-serif";
+    ctx.globalAlpha = alpha * 0.68;
+    ctx.fillText(event.eventId, x, y + 4);
+    ctx.restore();
   }
 
   drawSceneFinds(ctx, state, time) {
