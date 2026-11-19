@@ -516,6 +516,30 @@ export function checkDailyTasks(state) {
   return completed;
 }
 
+function summarizeDailyTasks(state) {
+  const tasks = Array.isArray(state.daily?.tasks) ? state.daily.tasks : [];
+  const completed = tasks
+    .filter((task) => task.done || task.rewarded)
+    .map((task) => ({
+      id: task.id,
+      text: task.text,
+      reward: Number(task.reward) || 0,
+    }));
+  const incomplete = tasks
+    .filter((task) => !task.done && !task.rewarded)
+    .map((task) => ({
+      id: task.id,
+      text: task.text,
+      progress: Math.min(state.daily?.counters?.[task.counter] || 0, task.target),
+      target: task.target,
+    }));
+  return {
+    completed,
+    incomplete,
+    reward: completed.reduce((total, task) => total + task.reward, 0),
+  };
+}
+
 function animalDefinition(animalId) {
   return ANIMAL_DEFS.find((entry) => entry.id === animalId);
 }
@@ -1725,6 +1749,7 @@ export function advanceDay(state) {
     expiredContracts: [],
     livestock: [],
     shipping: { units: 0, value: 0, items: [] },
+    dailyTasks: { completed: [], incomplete: [], reward: 0 },
     systemNotes: [],
     weather: "sunny",
   };
@@ -1810,6 +1835,21 @@ export function advanceDay(state) {
     }
     plot.watered = false;
   }
+
+  report.dailyTasks = summarizeDailyTasks(state);
+  const completedText = report.dailyTasks.completed.length
+    ? `完成${report.dailyTasks.completed.map((task) => `「${task.text}」`).join("、")}`
+    : "没有完成今日清单";
+  const incompleteText = report.dailyTasks.incomplete.length
+    ? `未完成${report.dailyTasks.incomplete.map((task) => `「${task.text}」`).join("、")}`
+    : "今日清单全部完成";
+  addMemory(
+    state,
+    `今日清单结算：${completedText}；${incompleteText}，获得 ${report.dailyTasks.reward} 金。牧心会把这次取舍留在明天的判断里。`,
+    "routine",
+    2,
+  );
+
 
   state.day += 1;
   state.seasonDay += 1;

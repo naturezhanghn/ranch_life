@@ -2365,6 +2365,7 @@ function showDaySummary(report, nextEvent = null, auto = false) {
           : ""
       }
       ${report.shipping?.units ? `<div class="day-report-card"><strong>出货箱结算</strong><span>昨日交付 ${report.shipping.units} 份，到账 ${report.shipping.value} 金。</span></div>` : ""}
+      ${report.dailyTasks ? `<div class="day-report-card"><strong>今日清单</strong><span>完成 ${report.dailyTasks.completed.length} 项，未完成 ${report.dailyTasks.incomplete.length} 项，已获得 ${report.dailyTasks.reward} 金。${report.dailyTasks.incomplete.length ? "未完成：" + report.dailyTasks.incomplete.map((task) => task.text + "（" + task.progress + "/" + task.target + "）").join("、") : "明天继续保持这个节奏。"}</span></div>` : ""}
       ${report.livestock?.length ? `<div class="day-report-card"><strong>牲畜日结</strong><span>${report.livestock.map((animal) => `${animal.name} · ${animal.sick ? "生病" : animal.unhappy ? "不开心" : "状态稳定"} · 健康 ${Math.round(animal.health)} · 亲密 ${Math.round(animal.affection)} · 放牧 ${Math.round(animal.outdoorMinutes)} 分钟`).join("；")}</span></div>` : ""}
       ${report.systemNotes?.length ? `<div class="day-report-card day-report-card--ai"><strong>牧心记录</strong><span>${report.systemNotes.join("；")}</span></div>` : ""}
       ${report.forage?.length ? `<div class="day-report-card"><strong>季节山货</strong><span>今天在${state.season}季山路发现：${report.forage.join("、")}。雨后更容易遇到采集物。</span></div>` : ""}

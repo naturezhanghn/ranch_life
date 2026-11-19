@@ -182,6 +182,42 @@ test("daily task rewards are paid once", () => {
   assert.equal(state.coins, 165);
 });
 
+test("daily task settlement is shown in the day report and牧心 memory", () => {
+  const state = freshState();
+  state.daily.tasks = [
+    {
+      id: "test-water",
+      text: "浇一块地",
+      counter: "watered",
+      target: 1,
+      reward: 25,
+      done: false,
+      rewarded: false,
+    },
+    {
+      id: "test-talk",
+      text: "和村民交谈",
+      counter: "talked",
+      target: 1,
+      reward: 10,
+      done: false,
+      rewarded: false,
+    },
+  ];
+  standAtPlot(state, 0, 0);
+  useToolOnPlot(state, "hoe");
+  useToolOnPlot(state, "seed");
+  useToolOnPlot(state, "water");
+  const report = advanceDay(state);
+  assert.equal(report.dailyTasks.completed.length, 1);
+  assert.equal(report.dailyTasks.completed[0].text, "浇一块地");
+  assert.equal(report.dailyTasks.incomplete.length, 1);
+  assert.equal(report.dailyTasks.incomplete[0].progress, 0);
+  assert.equal(report.dailyTasks.reward, 25);
+  assert.ok(report.systemNotes.some((note) => note.includes("今日清单结算")));
+  assert.ok(state.ai.memories.some((memory) => memory.text.includes("今日清单结算")));
+});
+
 test("cooperative, oversight, complete evidence yields common-ground ending", () => {
   const state = freshState();
   establishClues(state);
