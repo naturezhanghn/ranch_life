@@ -18,7 +18,10 @@ export class MinigameLayer {
   }
 
   bindEvents() {
-    this.closeButton?.addEventListener("click", () => this.abort());
+    this.closeButton?.addEventListener("click", () => {
+      if (this.game?.finished) this.completeNow();
+      else this.abort();
+    });
     this.canvas?.addEventListener("pointerdown", (event) => {
       if (!this.active) return;
       event.preventDefault();
