@@ -6,7 +6,7 @@ Keep `js/state.js` authoritative for economy, AI, saves, and scene progression w
 
 ## Phase
 
-Development. The real Canvas scene base remains the default runtime; four minigame slices are being integrated through scene landmarks. Phaser 4.2.1 stays opt-in at `?phaser=1`.
+Development. The real Canvas scene base remains the default runtime; four minigame slices are integrated through scene landmarks and the `bailian/game-space` slice has been merged into `main`. Phaser 4.2.1 stays opt-in at `?phaser=1`.
 
 ## Current status
 
@@ -21,6 +21,7 @@ Development. The real Canvas scene base remains the default runtime; four miniga
 - `js/minigame-layer.js` owns the Canvas overlay, pointer/keyboard routing, and result handoff.
 - New sites are scene interactions, not standalone menu pages: `island_patrol`, `island_fishing`, `quarry_vein`, and `port_delivery_run`.
 - Old saves receive `minigames` defaults; active sessions are intentionally cleared on load.
+- The game-space slice is merged into `main`; its branch remains available for audit.
 
 ## Important files
 
@@ -45,6 +46,8 @@ Development. The real Canvas scene base remains the default runtime; four miniga
 - Node16 Playwright 1.38 audits run through `/tmp/ranch-browser-test/node_modules/playwright` against the existing 4174 server. Mobile controls, mobile scene flow, desktop scene flow, console errors, overflow, touch controls, city→council/workshop entrances, island on-site exploration, and trade port were verified.
 - Regression coverage now includes sleep returning `world.scene` and player spawn to farm, policy `coinCost` deduction, retained/expired order behavior, and safe pointer capture handling.
 - `npm test` now covers 25 state tests plus 7 minigame tests.
+- Merged `main` verification: 25 state tests + 7 minigame tests pass; desktop and 390×844 real scene-triggered overlay paths pass with no console errors.
+- Minigame completion settlement was exercised in Chromium: hunt reward, ecology update, active-session cleanup, and overlay close all passed.
 
 ## Risks
 
@@ -56,7 +59,7 @@ Development. The real Canvas scene base remains the default runtime; four miniga
 
 ## Next safest task
 
-Finish the browser acceptance matrix for all four scene-triggered activity overlays on desktop and 390×844 touch, then merge the isolated `bailian/game-space` slice into the active worktree and run the combined suite. After that, continue Phaser parity.
+Push the merged `main` commit and re-run Pages; then run the opt-in Phaser farm slice against the merged code before migrating additional scenes.
 
 ## Last slice
 
@@ -64,4 +67,4 @@ Finish the browser acceptance matrix for all four scene-triggered activity overl
 - Added island patrol/fishing landmarks, the quarry scene and mining landmark, and the port delivery landmark.
 - Added deterministic hunt/fishing/mining/delivery state machines and a reusable Canvas overlay.
 - Added daily gating, energy costs, AI memory entries, result settlement, accepted-contract delivery logic, and save migration.
-- Verified: `npm run check`; `npm test` (25 state + 7 minigame); desktop and 390×844 overlay smoke from `/tmp/ranch-browser-test/minigame-smoke.js`; completion settlement smoke from `minigame-completion-test.js`.
+- Verified: `npm run check`; `npm test` (25 state + 7 minigame); scene-triggered desktop/mobile path from `scene-minigame-path.js`; overlay smoke from `minigame-smoke.js`; completion settlement smoke from `minigame-completion-test.js`; `npm run story-paths` still reports all five endings reachable.
