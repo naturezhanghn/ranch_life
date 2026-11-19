@@ -44,7 +44,7 @@ export const HOUSE_UPGRADES = [
 ];
 export const TOWN_EVENTS = [
   { id: "spring_market", season: "春", day: 7, title: "春芽集市", reward: 80, description: "城镇广场收购春季作物，价格提高。" },
-  { id: "summer_festival", season: "夏", day: 14, title: "潮灯节", reward: 120, description: "贸易港与海岛声誉获得额外提升。" },
+  { id: "summer_festival", season: "夏", day: 14, title: "潮灯节", reward: 120, description: "贸易港与海岛声誉获得额外提升。", festivalId: "tide_lantern" },
   { id: "autumn_harvest", season: "秋", day: 21, title: "丰收会", reward: 160, description: "高品质牲畜产品获得额外结算。" },
   { id: "winter_birthdays", season: "冬", day: 3, title: "冬日生日会", reward: 60, description: "给当天的居民送礼可获得双倍关系。" },
 ];
@@ -2279,6 +2279,23 @@ export const SHIPPING_ROUTES = {
     feeRate: 0.08,
     priceMultiplier: 1.28,
     risk: 0.22,
+  },
+};
+
+export const FESTIVALS = {
+  tide_lantern: {
+    id: "tide_lantern",
+    name: "潮灯节",
+    season: "夏",
+    day: 14,
+    scene: "port",
+    description: "港口把灯船推到水面，摊位和临时订单只在这一天出现。",
+    activities: [
+      { id: "soup", x: 600, y: 560, label: "尝一碗节日汤", cost: { coins: 10 }, community: 1, detail: "给夜班船工留一碗热汤。" },
+      { id: "lantern", x: 760, y: 560, label: "折一盏潮灯", cost: { turnip: 1 }, community: 1, detail: "把一盏写有村名的灯放上灯船。" },
+      { id: "crate", x: 900, y: 560, label: "帮船工搬一箱货", cost: {}, reputation: 1, detail: "把临时订单搬上灯船，换来船工的信任。" },
+    ],
+    reward: { coins: 80, civic: 1, community: 2 },
   },
 };
 

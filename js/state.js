@@ -8,6 +8,7 @@ import {
   DAILY_TASK_POOL,
   DAY_START_MINUTES,
   FORAGE_TABLE,
+  FESTIVALS,
   GIFT_PREFERENCES,
   GIFT_TAGS,
   FORAGE_NODE_DEFS,
@@ -375,6 +376,13 @@ export function createInitialState() {
       completedIds: [],
       expiredIds: [],
       deliveredCounts: {},
+    },
+    festival: {
+      activeId: null,
+      year: 0,
+      activityFlags: {},
+      rewardClaimed: false,
+      materialRefunded: false,
     },
     town: { eventsSeen: [], birthdayGifts: {}, festivalBonus: 0 },
     plots: createPlots(),
@@ -755,6 +763,77 @@ export function ensureWeeklyBoard(state, force = false) {
     deliveredCounts: state.weekly.deliveredCounts || {},
   };
   return state.weekly;
+}
+
+export function getActiveFestival(state) {
+  const definition = Object.values(FESTIVALS).find((festival) => (
+    festival.season === state.season && festival.day === state.seasonDay
+  ));
+  if (!definition) return null;
+  const year = Math.floor((state.day - 1) / (SEASON_DAYS * SEASONS.length)) + 1;
+  if (
+    !state.festival
+    || state.festival.activeId !== definition.id
+    || state.festival.year !== year
+  ) {
+    state.festival = {
+      activeId: definition.id,
+      year,
+      activityFlags: {},
+      rewardClaimed: false,
+      materialRefunded: false,
+    };
+  }
+  return { ...definition, year, flags: state.festival.activityFlags, rewardClaimed: state.festival.rewardClaimed };
+}
+
+export function joinFestivalActivity(state, activityId) {
+  const festival = getActiveFestival(state);
+  if (!festival) return { ok: false, message: "今天港口没有节日活动。" };
+  const activity = festival.activities.find((entry) => entry.id === activityId);
+  if (!activity) return { ok: false, message: "这个摊位还没有开张。" };
+  if (state.festival.activityFlags[activityId]) return { ok: false, message: "这项节日活动今天已经完成了。" };
+  if (activity.cost?.coins && state.coins < activity.cost.coins) {
+    return { ok: false, message: `还差 ${activity.cost.coins - state.coins} 金才能参加。` };
+  }
+  if (activity.cost?.turnip && (state.inventory.produce.turnip || 0) < activity.cost.turnip) {
+    return { ok: false, message: "背包里没有足够的白萝卜来折潮灯。" };
+  }
+  if (activity.cost?.coins) state.coins -= activity.cost.coins;
+  if (activity.cost?.turnip) state.inventory.produce.turnip -= activity.cost.turnip;
+  state.festival.activityFlags[activityId] = true;
+  state.relations.community = bounded(state.relations.community + (activity.community || 0));
+  state.market.reputation += activity.reputation || 0;
+  const completed = Object.keys(state.festival.activityFlags).length;
+  let reward = null;
+  if (completed >= 2 && !state.festival.rewardClaimed) {
+    state.festival.rewardClaimed = true;
+    state.coins += festival.reward.coins;
+    state.stats.earned += festival.reward.coins;
+    state.government.civicPoints += festival.reward.civic;
+    state.relations.community = bounded(state.relations.community + festival.reward.community);
+    reward = festival.reward;
+  }
+  emitFeedback(state, {
+    eventId: reward ? "festival_complete" : "festival_activity",
+    kind: "festival",
+    severity: "success",
+    sourceScene: "port",
+    message: reward
+      ? `${festival.name}完成两项活动，获得 ${reward.coins} 金和 ${reward.civic} 公民点。`
+      : `${activity.label}完成，节日现场又多了一盏灯。`,
+    dedupeKey: `festival:${festival.id}:${festival.year}:${activityId}`,
+  });
+  addMemory(state, `${festival.name}：${activity.detail}${reward ? ` 完成两项现场活动，获得节日回报。` : ""}`, "festival", 3);
+  return {
+    ok: true,
+    activity,
+    completed,
+    reward,
+    message: reward
+      ? `${festival.name}完成两项活动，获得 ${reward.coins} 金。`
+      : `${activity.label}完成，还差 ${Math.max(0, 2 - completed)} 项领取节日回报。`,
+  };
 }
 
 export function acceptWeeklyRequest(state, requestId) {
@@ -3168,6 +3247,12 @@ export function loadGame() {
           ? parsed.weekly.expiredIds
           : base.weekly.expiredIds,
         deliveredCounts: { ...base.weekly.deliveredCounts, ...(parsed.weekly?.deliveredCounts || {}) },
+      },
+      festival: {
+        ...base.festival,
+        ...(parsed.festival || {}),
+        activityFlags: { ...base.festival.activityFlags, ...(parsed.festival?.activityFlags || {}) },
+        rewardClaimed: parsed.festival?.rewardClaimed === true,
       },
       town: { ...base.town, ...(parsed.town || {}), eventsSeen: Array.isArray(parsed.town?.eventsSeen) ? parsed.town.eventsSeen : base.town.eventsSeen, birthdayGifts: { ...base.town.birthdayGifts, ...(parsed.town?.birthdayGifts || {}) } },
       stats: { ...base.stats, ...(parsed.stats || {}) },

@@ -8,6 +8,7 @@ import {
   CROPS,
   ELDER_DIALOGUE,
   ENDINGS,
+  FESTIVALS,
   GOVERNMENT_POLICIES,
   GIFT_PREFERENCES,
   GIFT_TAGS,
@@ -64,6 +65,7 @@ import {
   feedAnimal,
   formatClock,
   getAiPrediction,
+  getActiveFestival,
   getClueCount,
   getMarketPrice,
   getMinigameAvailability,
@@ -78,6 +80,7 @@ import {
   fulfillTradeContract,
   holdTownHall,
   investInCity,
+  joinFestivalActivity,
   loadGame,
   recruitSprite,
   brushAnimal,
@@ -646,6 +649,20 @@ function availableInteractions() {
           bridgeSign,
         }]
       : [];
+  const festival = getActiveFestival(state);
+  const festivalInteractions = festival && festival.scene === sceneId && !festival.rewardClaimed
+    ? festival.activities
+        .filter((activity) => !festival.flags[activity.id])
+        .map((activity) => ({
+          id: `festival_${activity.id}`,
+          x: activity.x,
+          y: activity.y,
+          radius: 54,
+          label: activity.label,
+          keycap: "E",
+          festivalActivity: activity.id,
+        }))
+    : [];
   return [
     ...base.filter(forageInteractionIsAvailable),
     ...sceneFinds,
@@ -653,6 +670,7 @@ function availableInteractions() {
     ...npcs,
     ...seasonal,
     ...bridge,
+    ...festivalInteractions,
   ];
 }
 
@@ -1040,6 +1058,22 @@ function handleInteraction(id) {
   }
   if (sceneInteraction?.bridgeQuest) {
     handleBridgeQuestInteraction(sceneInteraction);
+    return;
+  }
+  if (sceneInteraction?.festivalActivity) {
+    const result = joinFestivalActivity(state, sceneInteraction.festivalActivity);
+    if (result.ok) {
+      audio.play("success");
+      triggerEffect("festival", state.player.x, state.player.y);
+      showFeedbackToast(state.feedback?.lastEvent, "潮灯节", 4600);
+      applyTaskCompletions(checkDailyTasks(state));
+    } else {
+      audio.play("error");
+      showToast(result.message, { strong: "潮灯节" });
+    }
+    updateHUD(true);
+    updateInteractionHint();
+    saveGame(state);
     return;
   }
   switch (id) {
@@ -2902,6 +2936,11 @@ function showDaySummary(report, nextEvent = null, auto = false) {
       ${
         report.seasonVariant
           ? `<div class="day-report-card"><strong>${state.season}季路线 · ${report.seasonVariant.label}</strong><span>${report.seasonVariant.routeLabel}已经在地图上显出来。沿它走，可以找到本季专属的采集点；其他季节的入口会安静地收起，但主路始终可达。</span></div>`
+          : ""
+      }
+      ${
+        getActiveFestival(state)
+          ? `<div class="day-report-card"><strong>节日现场 · 潮灯节</strong><span>港口今天的摊位和灯船只在今天出现。完成任意两项现场活动，可以领取节日回报。</span></div>`
           : ""
       }
       ${

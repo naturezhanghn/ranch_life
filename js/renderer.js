@@ -1,6 +1,7 @@
 import {
   BRIDGE_QUEST,
   CROPS,
+  FESTIVALS,
   INTERACTIONS,
   SCENE_DEFS,
   SCENE_FINDS,
@@ -79,6 +80,7 @@ export class WorldRenderer {
     this.drawSceneFinds(ctx, state, time);
     this.drawSeasonalLandmark(ctx, state, "farm", farmSeasonVariant, time);
     this.drawBridgeQuestMarker(ctx, state, "farm", time);
+    this.drawFestivalMarkers(ctx, state, "farm", time);
 
     const drawables = [];
     const sisterY = 257;
@@ -155,6 +157,7 @@ export class WorldRenderer {
     this.drawSceneFinds(ctx, state, time);
     this.drawSeasonalLandmark(ctx, state, sceneId, seasonVariant, time);
     this.drawBridgeQuestMarker(ctx, state, sceneId, time);
+    this.drawFestivalMarkers(ctx, state, sceneId, time);
 
     const drawables = [];
     for (const position of scheduledNpcPositions(state.minutes, sceneId)) {
@@ -348,6 +351,42 @@ export class WorldRenderer {
       ctx.arc(step.x, step.y, 26 * pulse, 0, TAU);
       ctx.stroke();
       this.drawPlaceTag(ctx, step.x, step.y - 44, step.label, "rgba(255, 247, 216, 0.94)", "#5b5231");
+    }
+    ctx.restore();
+  }
+
+  drawFestivalMarkers(ctx, state, sceneId, time) {
+    const festival = Object.values(FESTIVALS).find((entry) => (
+      entry.season === state.season && entry.day === state.seasonDay && entry.scene === sceneId
+    ));
+    if (!festival) return;
+    ctx.save();
+    for (const activity of festival.activities) {
+      const completed = state.festival?.activityFlags?.[activity.id];
+      ctx.globalAlpha = completed ? 0.38 : 0.86;
+      ctx.fillStyle = completed ? "#b7c7b3" : "#d69b57";
+      ctx.beginPath();
+      ctx.moveTo(activity.x - 30, activity.y - 8);
+      ctx.lineTo(activity.x, activity.y - 48);
+      ctx.lineTo(activity.x + 30, activity.y - 8);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = "rgba(255, 240, 187, 0.78)";
+      ctx.fillRect(activity.x - 25, activity.y - 8, 50, 6);
+      ctx.fillStyle = completed ? "#647568" : "#fff2bd";
+      ctx.globalAlpha = 0.82;
+      ctx.beginPath();
+      ctx.arc(activity.x, activity.y - 54 + Math.sin(time * 2 + activity.x) * 2, 5, 0, TAU);
+      ctx.fill();
+      this.drawPlaceTag(
+        ctx,
+        activity.x,
+        activity.y - 70,
+        completed ? `${festival.name} · 已完成` : activity.label,
+        "rgba(255, 247, 216, 0.92)",
+        "#6b4a2d",
+      );
+      ctx.globalAlpha = 1;
     }
     ctx.restore();
   }

@@ -21,12 +21,14 @@ import {
   fulfillTradeContract,
   feedAnimal,
   getClueCount,
+  getActiveFestival,
   getBridgeQuestStep,
   getPostGameModifier,
   getTargetPlot,
   getBagUsage,
   loadGame,
   investInCity,
+  joinFestivalActivity,
   recruitSprite,
   recordClue,
   resolveDailyRecap,
@@ -398,6 +400,33 @@ test("weekly request expiry charges reputation and refreshes the board", () => {
   assert.ok(state.market.reputation < 10);
   assert.ok(state.government.civicPoints < 5);
   assert.ok(state.weekly.requests.some((entry) => entry.id !== request.id));
+});
+
+test("festival activities require two completions and pay once", () => {
+  const state = freshState();
+  state.season = "夏";
+  state.seasonDay = 14;
+  state.day = 14;
+  state.coins = 20;
+  state.inventory.produce.turnip = 1;
+  state.relations.community = 50;
+  const festival = getActiveFestival(state);
+  assert.equal(festival.id, "tide_lantern");
+  assert.equal(festival.activities.length, 3);
+  const soup = joinFestivalActivity(state, "soup");
+  assert.equal(soup.ok, true);
+  assert.equal(state.coins, 10);
+  assert.equal(soup.reward, null);
+  const lantern = joinFestivalActivity(state, "lantern");
+  assert.equal(lantern.ok, true);
+  assert.equal(state.inventory.produce.turnip, 0);
+  assert.equal(state.festival.rewardClaimed, true);
+  assert.equal(state.coins, 90);
+  assert.equal(state.government.civicPoints, 4);
+  assert.equal(state.relations.community, 54);
+  assert.equal(joinFestivalActivity(state, "soup").ok, false);
+  state.seasonDay = 15;
+  assert.equal(getActiveFestival(state), null);
 });
 
 test("rain forage nodes expire, collect once, and feed the day report", () => {
