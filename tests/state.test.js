@@ -119,8 +119,8 @@ test("longform story offers one daily choice and records it once", () => {
 test("home scene activities cook, watch, and play", () => {
   const state = freshState();
   state.house.kitchen = false;
-  state.inventory.produce.turnip = 1;
-  state.inventory.produce.potato = 1;
+  state.shipping.bin.turnip = 1;
+  state.shipping.bin.potato = 1;
   const cooked = cookRecipe(state, "farm_stew");
   assert.equal(cooked.ok, true);
   assert.equal(state.inventory.cooked.farm_stew, 1);
@@ -180,6 +180,24 @@ test("watered crops and fed animals produce outcomes overnight", () => {
   assert.equal(state.day, 2);
   assert.equal(state.minutes, 360);
   assert.equal(state.energy, state.maxEnergy);
+});
+
+test("harvested crops bypass the backpack and enter the shipping bin", () => {
+  const state = freshState();
+  state.bag.slots = 1;
+  state.inventory.resources.ore = 1;
+  standAtPlot(state, 0, 0);
+  state.plots[0].state = "tilled";
+  state.plots[0].crop = "turnip";
+  state.plots[0].growth = CROPS.turnip.days;
+  state.plots[0].wateredDays = CROPS.turnip.days;
+  const result = useToolOnPlot(state, "harvest");
+  assert.equal(result.ok, true);
+  assert.equal(state.shipping.bin.turnip, 2);
+  assert.equal(state.inventory.produce.turnip, 0);
+  assert.equal(getBagUsage(state), 1);
+  assert.equal(shipProduce(state).ok, true);
+  assert.equal(state.shipping.bin.turnip, 0);
 });
 
 test("feeding all three animals advances chapter-one objective", () => {
@@ -867,6 +885,7 @@ test("human employees can be hired, assigned, and paid from daily work", () => {
   assert.equal(state.plots.filter((plot) => plot.crop).length, 2);
   assert.equal(state.plots[0].crop, "turnip");
   assert.ok(report.helperActions.some((entry) => entry.includes("收获")));
+  assert.equal(state.shipping.bin.turnip, 2);
 });
 
 test("animal employee completes feeding, companionship, grooming, and grazing", () => {

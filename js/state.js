@@ -358,6 +358,7 @@ export function createInitialState() {
       harvest: 0,
     },
     shipping: {
+      bin: {},
       pending: [],
       dailyConsignedUnits: 0,
       dailyConsignedValue: 0,
@@ -1537,10 +1538,9 @@ export function useToolOnPlot(state, toolId) {
     }
     const energyCost = Math.max(1, 2 - (state.toolLevels.harvest || 0));
     if (state.energy < energyCost) return { ok: false, message: "体力不够了。" };
-    if (!hasBagSpace(state, crop.id)) return { ok: false, message: "背包没有空位了，先去出货箱整理收成。" };
     const amount = plot.wateredDays >= crop.days ? 2 : 1;
     state.energy -= energyCost;
-    state.inventory.produce[crop.id] += amount;
+    state.shipping.bin[crop.id] = (state.shipping.bin[crop.id] || 0) + amount;
     plot.crop = null;
     plot.growth = 0;
     plot.watered = false;
@@ -1555,7 +1555,7 @@ export function useToolOnPlot(state, toolId) {
     );
     return {
       ok: true,
-      message: `收获 ${amount} 份${crop.name}。${amount > 1 ? "照料得当，多收了一份。" : ""}`,
+      message: `收获 ${amount} 份${crop.name}，已直接送入出货箱。${amount > 1 ? "照料得当，多收了一份。" : ""}`,
       tasks: checkDailyTasks(state),
     };
   }
@@ -1598,6 +1598,13 @@ export function shipProduce(state, routeId = state.shipping.selectedRoute) {
   const consignments = [];
   const consumed = [];
   const qualityCounts = {};
+  for (const [itemId, count] of Object.entries(state.shipping.bin || {})) {
+    if (count <= 0) continue;
+    const product = PRODUCTS[itemId];
+    if (!product || product.kind !== "crop") continue;
+    consignments.push({ itemId, quality: null, amount: count, unitPrice: product.sellPrice });
+    consumed.push({ bucket: "shippingBin", id: itemId, amount: count });
+  }
   for (const [qualityId, count] of Object.entries(state.inventory.qualityProduce || {})) {
     if (count <= 0) continue;
     const [itemId, quality] = qualityId.split("_");
@@ -1636,7 +1643,11 @@ export function shipProduce(state, routeId = state.shipping.selectedRoute) {
     return { ok: false, message: "这一班船已经离港，货物留在出货箱里，等下一班。" };
   }
   for (const item of consumed) {
-    state.inventory[item.bucket][item.id] = Math.max(0, (state.inventory[item.bucket][item.id] || 0) - item.amount);
+    if (item.bucket === "shippingBin") {
+      state.shipping.bin[item.id] = Math.max(0, (state.shipping.bin[item.id] || 0) - item.amount);
+    } else {
+      state.inventory[item.bucket][item.id] = Math.max(0, (state.inventory[item.bucket][item.id] || 0) - item.amount);
+    }
   }
   let trip = existingTrip;
   if (!trip) {
@@ -1695,7 +1706,10 @@ function inventoryQuantity(state, itemId) {
   const qualityCount = Object.entries(state.inventory.qualityProduce || {})
     .filter(([key]) => key.startsWith(`${itemId}_`))
     .reduce((total, [, count]) => total + (Number(count) || 0), 0);
-  return (state.inventory.produce[itemId] || 0) + (state.inventory.resources[itemId] || 0) + qualityCount;
+  return (state.inventory.produce[itemId] || 0)
+    + (state.inventory.resources[itemId] || 0)
+    + (state.shipping?.bin?.[itemId] || 0)
+    + qualityCount;
 }
 
 function consumeInventoryItem(state, itemId, amount) {
@@ -1715,6 +1729,11 @@ function consumeInventoryItem(state, itemId, amount) {
     const resourceCount = Math.min(state.inventory.resources[itemId] || 0, remaining);
     state.inventory.resources[itemId] -= resourceCount;
     remaining -= resourceCount;
+  }
+  if (remaining > 0) {
+    const binCount = Math.min(state.shipping?.bin?.[itemId] || 0, remaining);
+    if (state.shipping?.bin?.[itemId] !== undefined) state.shipping.bin[itemId] -= binCount;
+    remaining -= binCount;
   }
   return remaining === 0;
 }
@@ -2624,9 +2643,8 @@ function applyWorkerAssignments(state, report) {
     for (const plot of state.plots) {
       if (harvested >= 2 || !plot.crop || plot.growth < CROPS[plot.crop].days) continue;
       const harvestCrop = CROPS[plot.crop];
-      if (!hasBagSpace(state, harvestCrop.id, 1)) break;
       const amount = plot.wateredDays >= harvestCrop.days ? 2 : 1;
-      state.inventory.produce[harvestCrop.id] += amount;
+      state.shipping.bin[harvestCrop.id] = (state.shipping.bin[harvestCrop.id] || 0) + amount;
       plot.crop = null;
       plot.growth = 0;
       plot.watered = false;
@@ -2898,17 +2916,11 @@ export function cookRecipe(state, recipeId) {
     return { ok: false, message: "先完成厨房扩建，料理台才有火。" };
   }
   const missing = Object.entries(recipe.ingredients).find(([itemId, amount]) => {
-    const bag = state.inventory.produce[itemId] !== undefined
-      ? state.inventory.produce
-      : state.inventory.resources;
-    return (bag[itemId] || 0) < amount;
+    return inventoryQuantity(state, itemId) < amount;
   });
   if (missing) return { ok: false, message: `还缺少 ${missing[1]} 份${missing[0]}。` };
   for (const [itemId, amount] of Object.entries(recipe.ingredients)) {
-    const bag = state.inventory.produce[itemId] !== undefined
-      ? state.inventory.produce
-      : state.inventory.resources;
-    bag[itemId] -= amount;
+    consumeInventoryItem(state, itemId, amount);
   }
   state.inventory.cooked[recipe.id] = (state.inventory.cooked[recipe.id] || 0) + 1;
   state.home.mealsCooked += 1;
@@ -3669,6 +3681,7 @@ export function loadGame() {
       shipping: {
         ...base.shipping,
         ...(parsed.shipping || {}),
+        bin: { ...base.shipping.bin, ...(parsed.shipping?.bin || {}) },
         pending: Array.isArray(parsed.shipping?.pending) ? parsed.shipping.pending : base.shipping.pending,
         settlements: Array.isArray(parsed.shipping?.settlements) ? parsed.shipping.settlements : base.shipping.settlements,
         tripHistory: Array.isArray(parsed.shipping?.tripHistory)
@@ -3862,6 +3875,11 @@ export function loadGame() {
 
     merged.season = SEASONS.includes(merged.season) ? merged.season : base.season;
     merged.selectedSeed = CROPS[merged.selectedSeed] ? merged.selectedSeed : base.selectedSeed;
+    merged.shipping.bin = Object.fromEntries(
+      Object.entries(merged.shipping.bin || {})
+        .filter(([itemId, count]) => CROPS[itemId] && Number.isFinite(Number(count)) && Number(count) > 0)
+        .map(([itemId, count]) => [itemId, Math.floor(Number(count))]),
+    );
     merged.day = Number.isFinite(Number(merged.day)) ? Math.max(1, Math.floor(Number(merged.day))) : base.day;
     merged.seasonDay = Number.isFinite(Number(merged.seasonDay))
       ? Math.max(1, Math.min(SEASON_DAYS, Math.floor(Number(merged.seasonDay))))

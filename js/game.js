@@ -2889,10 +2889,9 @@ function showEnding() {
 }
 
 function homeIngredientCount(itemId) {
-  const source = state.inventory.produce[itemId] !== undefined
-    ? state.inventory.produce
-    : state.inventory.resources;
-  return source[itemId] || 0;
+  return (state.inventory.produce[itemId] || 0)
+    + (state.inventory.resources[itemId] || 0)
+    + (state.shipping.bin?.[itemId] || 0);
 }
 
 function openHouseKitchen() {
@@ -3256,6 +3255,11 @@ function showInvestorArrival() {
 
 function openShippingBin() {
   const rows = [];
+  for (const [id, count] of Object.entries(state.shipping.bin || {})) {
+    const product = PRODUCTS[id];
+    if (!product || count <= 0) continue;
+    rows.push(`<div class="shop-row"><span class="item-swatch" aria-hidden="true">${product.icon}</span><span class="shop-row-copy"><strong>${product.name} × ${count}</strong><small>刚收获，已直接进入出货箱 · ${product.sellPrice} 金 / 份</small></span><span class="clue-status">${product.sellPrice * count} 金</span></div>`);
+  }
   for (const [qualityId, count] of Object.entries(state.inventory.qualityProduce || {})) {
     if (count <= 0) continue;
     const [id, quality] = qualityId.split("_");
@@ -3279,8 +3283,11 @@ function openShippingBin() {
     rows.push(`<div class="shop-row"><span class="item-swatch" aria-hidden="true">${MARKET_GOODS[id].icon}</span><span class="shop-row-copy"><strong>${MARKET_GOODS[id].name} × ${count}</strong><small>海岛资源 · ${price} 金 / 份</small></span><span class="clue-status">${price * count} 金</span></div>`);
   }
   const qualityProductPriceForUi = (id, quality) => Math.round((PRODUCTS[id]?.sellPrice || 0) * ({ S: 1, M: 1.35, L: 1.8 }[quality] || 1));
+  const binValue = Object.entries(state.shipping.bin || {}).reduce((sum, [id, count]) => {
+    return sum + count * (PRODUCTS[id]?.sellPrice || 0);
+  }, 0);
   const total = rows.length
-    ? Object.entries(state.inventory.qualityProduce || {}).reduce((sum, [qualityId, count]) => {
+    ? binValue + Object.entries(state.inventory.qualityProduce || {}).reduce((sum, [qualityId, count]) => {
         const [id, quality] = qualityId.split("_");
         return sum + count * qualityProductPriceForUi(id, quality);
       }, 0) + Object.entries(state.inventory.produce).reduce((sum, [id, count]) => {
@@ -3316,11 +3323,11 @@ function openShippingBin() {
         <div class="weather-note">${tripNote}</div>
       </div>
       <div class="shop-grid">
-        ${rows.join("") || '<div class="empty-note">出货箱里还空着。收获作物或照料牲畜后再来看看。</div>'}
+        ${rows.join("") || '<div class="empty-note">出货箱里还空着。收获作物会直接放进这里，不占背包。</div>'}
       </div>
       <div class="day-summary-grid"><div class="summary-tile"><strong>${state.shipping.dailyConsignedUnits}</strong><span>今日交付</span></div><div class="summary-tile"><strong>${state.shipping.totalUnits}</strong><span>累计件数</span></div><div class="summary-tile"><strong>${state.shipping.totalValue}</strong><span>累计金币</span></div></div>
       <div class="weather-note">
-        出货收入会在隔夜日结到账。品质越高，结算单价越高，牧心会同时记住你对稳定收入和照料质量的取舍。
+        收获作物会直接进入出货箱，不占背包。出货收入会在隔夜日结到账，品质越高，结算单价越高。
       </div>
     `,
     footer: `
