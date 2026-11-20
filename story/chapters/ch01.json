@@ -1,0 +1,203 @@
+[
+  {
+    "id": "ch01_return_001",
+    "chapter": 1,
+    "scene": "farm",
+    "actor": "protagonist",
+    "title": "门口的缺口锄头",
+    "trigger": { "dayRange": [1, 1], "requiredFlags": [] },
+    "lines": [
+      { "speaker": "主角", "text": "门还是那扇门，锄头却比记忆里轻了一点。" },
+      { "speaker": "彤彤", "text": "不是锄头变轻了，是你终于知道一块地要花多少力气。" }
+    ],
+    "next": "ch01_return_002",
+    "fallback": { "missed": "彤彤把锄头靠在门边，等你愿意再看它一眼。", "replay": "缺口还在，锄头旁边多了一双适合雨天的手套。" },
+    "recap": "主角带着一把缺口锄头回到月溪牧场。"
+  },
+  {
+    "id": "ch01_return_002",
+    "chapter": 1,
+    "scene": "workshop",
+    "actor": "tongtong",
+    "title": "彤彤的技术棚",
+    "trigger": { "dayRange": [1, 1], "requiredFlags": ["story.introSeen"] },
+    "lines": [
+      { "speaker": "彤彤", "text": "牧心观察了很多年，却没有人告诉它哪些变化值得害怕。" },
+      { "speaker": "牧心", "text": "我能预测土壤含水量，但不能预测你为什么现在回来。" }
+    ],
+    "choices": [
+      { "id": "answer_land", "text": "因为这片地还在等人照料。", "effects": { "trust": 2 }, "next": "ch01_return_003" },
+      { "id": "answer_family", "text": "因为我想把彤彤接回家。", "effects": { "relation": { "tongtong": 2 } }, "next": "ch01_return_003" }
+    ],
+    "fallback": { "missed": "技术棚的灯亮到深夜，牧心把问题保留到明天。", "replay": "牧心还记得你第一次没有谈产量。" },
+    "recap": "彤彤让牧心从观察模式进入共同记录。"
+  },
+  {
+    "id": "ch01_return_003",
+    "chapter": 1,
+    "scene": "farm",
+    "actor": "zhouhe",
+    "title": "先看土，再看表",
+    "trigger": { "dayRange": [1, 2], "requiredFlags": ["story.sisterMet"] },
+    "lines": [
+      { "speaker": "周禾", "text": "先用手背碰土，不要先看终端。数字是提醒，不是命令。" },
+      { "speaker": "主角", "text": "那什么时候该相信数字？" },
+      { "speaker": "周禾", "text": "当你知道它漏掉了什么，还愿意和它一起看。" }
+    ],
+    "next": "ch01_return_004",
+    "fallback": { "missed": "周禾把土样封好，约你下一次浇水前再看。", "replay": "周禾又让你先闭上眼睛摸土。" },
+    "recap": "周禾把农人的经验和牧心的测量放到同一张桌上。"
+  },
+  {
+    "id": "ch01_return_004",
+    "chapter": 1,
+    "scene": "farm",
+    "actor": "protagonist",
+    "title": "第一道田垄",
+    "trigger": { "dayRange": [1, 2], "requiredStats": { "tilled": 1 } },
+    "lines": [
+      { "speaker": "主角", "text": "土被翻开以后，旧根和新石头一起露了出来。" },
+      { "speaker": "牧心", "text": "记录：人类把不可预测的东西暂时放在脚边。" }
+    ],
+    "next": "ch01_return_005",
+    "fallback": { "missed": "雨水把第一道痕迹填平，地仍然可以重新开垦。", "replay": "你发现那块石头已经被周禾放到田埂边。" },
+    "recap": "第一道田垄被开出来，牧心开始记录劳动过程。"
+  },
+  {
+    "id": "ch01_return_005",
+    "chapter": 1,
+    "scene": "farm",
+    "actor": "linmu",
+    "title": "让动物先看见你",
+    "trigger": { "dayRange": [2, 3], "requiredFlags": ["story.sisterMet"] },
+    "lines": [
+      { "speaker": "林牧", "text": "进牛羊区前先停一下，让它们看见你。门开得太快，动物会把照料当成追赶。" },
+      { "speaker": "主角", "text": "如果它们不愿意靠近呢？" },
+      { "speaker": "林牧", "text": "那就把饲料放下，退半步。关系不是把谁拉到身边。" }
+    ],
+    "next": "ch01_return_006",
+    "fallback": { "missed": "林牧把饲料桶放在门内，今天不强求动物靠近。", "replay": "林牧记得你上次退后的那半步。" },
+    "recap": "林牧教主角用等待替代追赶，建立与牲畜的第一份信任。"
+  },
+  {
+    "id": "ch01_return_006",
+    "chapter": 1,
+    "scene": "farm",
+    "actor": "zhouhe",
+    "title": "给种子留下名字",
+    "trigger": { "dayRange": [2, 4], "requiredStats": { "planted": 1 } },
+    "lines": [
+      { "speaker": "周禾", "text": "种子袋上要写来源、季节和明年能不能分给别人。" },
+      { "speaker": "主角", "text": "写这么多，出货时不是更慢吗？" },
+      { "speaker": "周禾", "text": "慢一点，才知道收成究竟从谁的手里经过。" }
+    ],
+    "choices": [
+      { "id": "share_seed", "text": "留出两包种子给邻居。", "effects": { "relation": { "community": 2 }, "coins": -8 }, "next": "ch01_return_007" },
+      { "id": "keep_seed", "text": "先保住牧场的下一季。", "effects": { "coins": 6 }, "next": "ch01_return_007" }
+    ],
+    "fallback": { "missed": "周禾替你把种袋收好，等下一次播种再决定。", "replay": "你们重新核对种子的来处。" },
+    "recap": "种子的来源成为主角第一次面对的共同资源问题。"
+  },
+  {
+    "id": "ch01_return_007",
+    "chapter": 1,
+    "scene": "farm",
+    "actor": "irrigator",
+    "title": "雨前要不要浇水",
+    "trigger": { "dayRange": [3, 4], "requiredFlags": ["story.plantedForStory"] },
+    "lines": [
+      { "speaker": "沈露", "text": "终端说今晚有六成概率下雨。田边那块土已经裂了。" },
+      { "speaker": "主角", "text": "浇，还是等？" },
+      { "speaker": "沈露", "text": "先走到裂缝旁边。判断不是从按钮开始的。" }
+    ],
+    "next": "ch01_return_008",
+    "fallback": { "missed": "沈露把水壶放回架上，给明天留下一个可修正的选择。", "replay": "那道裂缝比昨天短了一点。" },
+    "recap": "灌溉员工沈露让主角理解预测和现场观察的关系。"
+  },
+  {
+    "id": "ch01_return_008",
+    "chapter": 1,
+    "scene": "farm",
+    "actor": "maoxin",
+    "title": "没有指令的羊",
+    "trigger": { "dayRange": [4, 5], "requiredFlags": ["story.feedAnimals"] },
+    "lines": [
+      { "speaker": "牧心", "text": "一只羊离开了围栏。建议立即召回。" },
+      { "speaker": "主角", "text": "先把门打开。它也许只是想看看外面。" },
+      { "speaker": "牧心", "text": "更新记录：没有指令的选择，也可能降低风险。" }
+    ],
+    "next": "ch01_return_009",
+    "fallback": { "missed": "羊自己回到棚里，牧心没有把它标成异常。", "replay": "门廊下的草又长高了一点。" },
+    "recap": "牧心第一次把一个不由指令产生的选择写进长期记忆。"
+  },
+  {
+    "id": "ch01_return_009",
+    "chapter": 1,
+    "scene": "farm",
+    "actor": "worker_team",
+    "title": "一次雇佣，一整天的工作",
+    "trigger": { "dayRange": [5, 6], "requiredFlags": ["worker.anyHired"] },
+    "lines": [
+      { "speaker": "周禾", "text": "一次雇佣不能只把最轻松的任务交给人。浇水、播种、收获和收工后的清理都算工作。" },
+      { "speaker": "主角", "text": "那报酬也要按完整的一天算。" },
+      { "speaker": "周禾", "text": "对。让人来帮忙之前，先想清楚你愿意承担什么。" }
+    ],
+    "choices": [
+      { "id": "full_shift", "text": "把整套轮班和工资写进公告。", "effects": { "relation": { "workers": 2 }, "coins": -12 }, "next": "ch01_return_010" },
+      { "id": "trial_shift", "text": "先试用一天，再决定长期安排。", "effects": { "relation": { "workers": -1 }, "coins": -6 }, "next": "ch01_return_010" }
+    ],
+    "fallback": { "missed": "员工们仍然完成当天工作，但把工资疑问留在公告栏。", "replay": "公告栏上多了一行关于收工时间的补充。" },
+    "recap": "员工系统从‘雇用一个岗位’转向‘承担一整天的劳动’。"
+  },
+  {
+    "id": "ch01_return_010",
+    "chapter": 1,
+    "scene": "farm",
+    "actor": "pondkeeper",
+    "title": "鱼塘边的第一声水响",
+    "trigger": { "dayRange": [6, 7], "requiredFlags": ["fishPond.open"] },
+    "lines": [
+      { "speaker": "许波", "text": "鱼塘不能只看能捞多少，还要看今天有多少鱼愿意躲回水草。" },
+      { "speaker": "主角", "text": "那养鱼的第一件事是什么？" },
+      { "speaker": "许波", "text": "先学会不把整片水面都搅动。" }
+    ],
+    "next": "ch01_return_011",
+    "fallback": { "missed": "许波把鱼料收回桶里，水面慢慢恢复平静。", "replay": "水草间有新的小鱼影子。" },
+    "recap": "鱼塘员工许波把产量之外的水质与栖息地纳入养鱼日结。"
+  },
+  {
+    "id": "ch01_return_011",
+    "chapter": 1,
+    "scene": "farm",
+    "actor": "elder",
+    "title": "水渠发出的声音",
+    "trigger": { "dayRange": [7, 7], "requiredFlags": ["story.plantedForStory"] },
+    "lines": [
+      { "speaker": "阿婆", "text": "听见了吗？水渠不是空的，只是水还没走到这里。" },
+      { "speaker": "主角", "text": "上游有人放水？" },
+      { "speaker": "阿婆", "text": "也可能是有人在等你们去问。" }
+    ],
+    "next": "ch01_return_012",
+    "fallback": { "missed": "阿婆把三根旧布收好，说明天还会来。", "replay": "渠边的布结换了一个方向。" },
+    "recap": "旧水渠在第七天发出声音，引出第二章的共同用水调查。"
+  },
+  {
+    "id": "ch01_return_012",
+    "chapter": 1,
+    "scene": "farm",
+    "actor": "tongtong",
+    "title": "把明天留出来",
+    "trigger": { "dayRange": [7, 7], "requiredFlags": ["story.canReturn"] },
+    "lines": [
+      { "speaker": "彤彤", "text": "第一周没有把牧场变回从前，但每个人都知道明天从哪里开始。" },
+      { "speaker": "主角", "text": "你要跟我沿渠走吗？" },
+      { "speaker": "彤彤", "text": "我会先把终端关掉一会儿。路上的答案不一定能写成表格。" }
+    ],
+    "choices": [
+      { "id": "follow_canal", "text": "和彤彤一起沿渠出发。", "effects": { "relation": { "tongtong": 2 }, "chapter": 2 }, "next": "ch02_canal_001" },
+      { "id": "prepare_ranch", "text": "先安排员工照看牧场，再出发。", "effects": { "relation": { "workers": 2 }, "chapter": 2 }, "next": "ch02_canal_001" }
+    ],
+    "fallback": { "missed": "第二天清晨，彤彤把沿渠路线画在门上。", "replay": "门上的路线旁又多了一个员工交接点。" },
+    "recap": "第一章结束，主角在照料土地与走向水渠之间安排了下一步。"
+  }
+]
