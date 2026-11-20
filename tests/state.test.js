@@ -34,6 +34,7 @@ import {
   recruitSprite,
   recordClue,
   resolveDailyRecap,
+  resolveLongformChoice,
   resolveEnding,
   saveGame,
   startBridgeQuest,
@@ -51,6 +52,7 @@ import {
   upgradeHouse,
   useToolOnPlot,
 } from "../js/state.js";
+import { getLongformStoryBeat } from "../js/longform-story.js";
 
 let passed = 0;
 
@@ -97,6 +99,17 @@ test("initial state has the vertical-slice scope", () => {
   assert.equal(state.coins, 140);
   assert.equal(state.feed, 6);
   assert.equal(state.story.step, "meetSister");
+});
+
+test("longform story offers one daily choice and records it once", () => {
+  const state = freshState();
+  state.day = 3;
+  const beat = getLongformStoryBeat(state);
+  assert.equal(beat.choice.id, "return_listen");
+  const result = resolveLongformChoice(state, beat.choice.id);
+  assert.equal(result.ok, true);
+  assert.equal(state.story.longform.choices["3:return_listen"], "return_listen");
+  assert.equal(resolveLongformChoice(state, beat.choice.id).ok, false);
 });
 
 test("target plot follows the player's facing direction", () => {

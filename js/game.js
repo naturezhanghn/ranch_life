@@ -103,6 +103,7 @@ import {
   refillWaterAtCanal,
   resolveEnding,
   resolveDailyRecap,
+  resolveLongformChoice,
   resolveMinigame,
   discoverSceneFind,
   deliverWeeklyRequest,
@@ -120,6 +121,7 @@ import {
 import { FarmAudio } from "./audio.js";
 import { MinigameLayer } from "./minigame-layer.js";
 import { WorldRenderer } from "./renderer.js";
+import { getLongformStoryBeat } from "./longform-story.js";
 
 const canvas = document.getElementById("gameCanvas");
 const renderer = new WorldRenderer(canvas);
@@ -2944,6 +2946,33 @@ function renderDailyRecapPanel() {
   `;
 }
 
+function renderLongformStoryPanel() {
+  const beat = getLongformStoryBeat(state);
+  const choice = beat.choice;
+  const selected = beat.selectedChoice;
+  const choiceMarkup = choice
+    ? `
+      <div class="longform-story-choice">
+        <strong>这一刻，你会怎么做？</strong>
+        <button type="button" class="day-recap-option" data-action="longformChoice" data-value="${escapeHtml(choice.id)}">
+          <b>${escapeHtml(choice.label)}</b>
+          <span>${escapeHtml(choice.effect)}</span>
+        </button>
+      </div>
+    `
+    : selected
+      ? `<div class="longform-story-choice is-resolved"><strong>你留下的选择</strong><span>${escapeHtml(selected.label)} · ${escapeHtml(selected.effect)}</span></div>`
+      : "";
+  return `
+    <div class="longform-story-card" data-longform-panel>
+      <div class="longform-story-meta"><span>${escapeHtml(beat.title)}</span><span>第 ${beat.progress} 天 · ${escapeHtml(beat.setting)}</span></div>
+      <strong>${escapeHtml(beat.cast.join(" · "))}</strong>
+      <p>${escapeHtml(beat.text)}</p>
+      ${choiceMarkup}
+    </div>
+  `;
+}
+
 function openDailyRecap() {
   const options = Array.isArray(state.daily?.recapOptions) ? state.daily.recapOptions : [];
   if (!options.length) {
@@ -2983,6 +3012,7 @@ function showDaySummary(report, nextEvent = null, auto = false) {
         今日天气：${weather.icon} ${weather.label}。${productList}
       </div>
       ${renderDailyRecapPanel()}
+      ${renderLongformStoryPanel()}
       ${
         report.postGame
           ? `<div class="day-report-card"><strong>后日谈 · ${report.postGame.title}</strong><span>${report.postGame.label}：${Math.min(report.postGame.value, report.postGame.target)} / ${report.postGame.target} · 第 ${report.postGame.daysElapsed} / 7 天${report.postGame.completed ? " · 牌面目标已经达成" : report.postGame.failed ? " · 这一周已经结束" : ""}</span></div>`
@@ -3800,6 +3830,22 @@ function handleModalClick(event) {
       } else {
         audio.play("error");
         showToast(result.message, { strong: "日结解释" });
+      }
+      break;
+    }
+    case "longformChoice": {
+      const result = resolveLongformChoice(state, value);
+      if (result.ok) {
+        for (const panel of document.querySelectorAll("[data-longform-panel]")) {
+          panel.outerHTML = renderLongformStoryPanel();
+        }
+        audio.play("memory");
+        showToast(result.message, { strong: "长线剧情", duration: 4400 });
+        updateHUD(true);
+        saveGame(state);
+      } else {
+        audio.play("error");
+        showToast(result.message, { strong: "长线剧情" });
       }
       break;
     }

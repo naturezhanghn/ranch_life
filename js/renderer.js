@@ -39,6 +39,66 @@ function ellipse(ctx, x, y, rx, ry, fill) {
   ctx.fill();
 }
 
+// Residents follow short loops around the part of the ranch they are
+// responsible for. Keeping these routes in the renderer makes their activity
+// visible even while the daily simulation continues to run in state.js.
+const FARM_EMPLOYEE_ROUTES = {
+  planting: [
+    { x: 326, y: 330 },
+    { x: 492, y: 330 },
+    { x: 694, y: 380 },
+    { x: 686, y: 506 },
+    { x: 432, y: 515 },
+  ],
+  watering: [
+    { x: 322, y: 462 },
+    { x: 452, y: 286 },
+    { x: 658, y: 286 },
+    { x: 728, y: 462 },
+    { x: 560, y: 532 },
+  ],
+  animals: [
+    { x: 824, y: 116 },
+    { x: 1010, y: 96 },
+    { x: 1150, y: 172 },
+    { x: 1080, y: 292 },
+    { x: 880, y: 286 },
+  ],
+  trade: [
+    { x: 196, y: 644 },
+    { x: 352, y: 644 },
+    { x: 584, y: 586 },
+    { x: 752, y: 360 },
+    { x: 818, y: 344 },
+  ],
+  island: [
+    { x: 714, y: 604 },
+    { x: 830, y: 556 },
+    { x: 902, y: 514 },
+    { x: 820, y: 552 },
+  ],
+  fishing: [
+    { x: 820, y: 658 },
+    { x: 956, y: 682 },
+    { x: 1118, y: 678 },
+    { x: 1192, y: 628 },
+    { x: 1030, y: 584 },
+  ],
+  fishery: [
+    { x: 858, y: 548 },
+    { x: 1008, y: 524 },
+    { x: 1164, y: 548 },
+    { x: 1178, y: 590 },
+    { x: 948, y: 592 },
+  ],
+  rest: [
+    { x: 670, y: 642 },
+    { x: 730, y: 628 },
+    { x: 784, y: 650 },
+    { x: 730, y: 674 },
+  ],
+};
+
 export class WorldRenderer {
   constructor(canvas) {
     this.canvas = canvas;
@@ -97,24 +157,15 @@ export class WorldRenderer {
       draw: () => this.drawWorker(ctx, 705, workerY, time),
     });
 
-    const workerSpots = {
-      watering: { x: 590, y: 478 },
-      planting: { x: 510, y: 505 },
-      animals: { x: 1060, y: 448 },
-      trade: { x: 240, y: 650 },
-      island: { x: 198, y: 546 },
-      fishing: { x: 1090, y: 610 },
-      fishery: { x: 980, y: 690 },
-    };
     const assignedWorkers = new Set();
     for (const [role, workerId] of Object.entries(state.workers?.assignments || {})) {
       const worker = WORKER_DEFS[workerId];
-      const spot = workerSpots[role];
-      if (!worker || !spot || assignedWorkers.has(workerId)) continue;
+      if (!worker || !FARM_EMPLOYEE_ROUTES[role] || assignedWorkers.has(workerId)) continue;
       assignedWorkers.add(workerId);
+      const motion = this.getFarmEmployeeMotion(role, workerId, time);
       drawables.push({
-        y: spot.y,
-        draw: () => this.drawFarmEmployee(ctx, spot.x, spot.y, worker, role, time),
+        y: motion.y,
+        draw: () => this.drawFarmEmployee(ctx, motion.x, motion.y, worker, role, time, motion),
       });
     }
     const unassignedWorkers = (state.workers?.hired || [])
@@ -122,11 +173,10 @@ export class WorldRenderer {
       .map((workerId) => WORKER_DEFS[workerId])
       .filter(Boolean);
     unassignedWorkers.forEach((worker, index) => {
-      const x = 760 + (index % 3) * 42;
-      const y = 650 + Math.floor(index / 3) * 22;
+      const motion = this.getFarmEmployeeMotion("休息", worker.id, time, index);
       drawables.push({
-        y,
-        draw: () => this.drawFarmEmployee(ctx, x, y, worker, "休息", time),
+        y: motion.y,
+        draw: () => this.drawFarmEmployee(ctx, motion.x, motion.y, worker, "休息", time, motion),
       });
     });
 
@@ -2263,9 +2313,43 @@ export class WorldRenderer {
     ctx.restore();
   }
 
-  drawFarmEmployee(ctx, x, y, worker, role, time) {
-    this.drawShadow(ctx, x, y + 4, 18, 6);
-    const bob = Math.sin(time * 1.6 + x * 0.02) * 0.8;
+  getFarmEmployeeMotion(role, workerId, time, lane = 0) {
+    const route = FARM_EMPLOYEE_ROUTES[role] || FARM_EMPLOYEE_ROUTES.rest;
+    const workerKey = String(workerId || role || "worker");
+    const seed = [...workerKey].reduce((total, character, index) => (
+      total + character.charCodeAt(0) * (index + 1)
+    ), 0);
+    const offset = hash01(seed) * route.length + lane * 0.18;
+    const progress = (time * (0.27 + (seed % 5) * 0.012) + offset) % route.length;
+    const segment = Math.floor(progress);
+    const segmentPhase = progress - segment;
+    const from = route[segment];
+    const to = route[(segment + 1) % route.length];
+    const traveling = segmentPhase < 0.78;
+    const travelPhase = Math.min(segmentPhase / 0.78, 1);
+    const easedPhase = travelPhase * travelPhase * (3 - 2 * travelPhase);
+    const x = from.x + (to.x - from.x) * easedPhase;
+    const y = from.y + (to.y - from.y) * easedPhase;
+    const horizontalDelta = to.x - from.x;
+    const facing = Math.abs(horizontalDelta) > 4 ? Math.sign(horizontalDelta) : 1;
+    return {
+      x,
+      y,
+      facing,
+      moving: traveling,
+      working: !traveling && role !== "休息",
+      seed,
+      walkPhase: time * 9 + seed * 0.07,
+      actionPhase: time * 3.6 + seed * 0.11,
+    };
+  }
+
+  drawFarmEmployee(ctx, x, y, worker, role, time, motion = null) {
+    const employeeMotion = motion || this.getFarmEmployeeMotion(role, worker?.id, time);
+    const bob = employeeMotion.moving
+      ? Math.sin(employeeMotion.walkPhase) * 1.25
+      : Math.sin(time * 2.4 + employeeMotion.seed) * 0.45;
+    this.drawShadow(ctx, x, y + 4, employeeMotion.moving ? 19 : 18, 6);
     const colors = {
       planting: "#b97855",
       watering: "#5d8d9a",
@@ -2276,9 +2360,15 @@ export class WorldRenderer {
       island: "#6f9464",
       休息: "#89705f",
     };
+    const bodyColor = colors[role] || "#7c6d5c";
+    const legSwing = employeeMotion.moving ? Math.sin(employeeMotion.walkPhase) * 3 : 0;
+    const armSwing = employeeMotion.moving ? Math.sin(employeeMotion.walkPhase + Math.PI) * 3 : 0;
+    const handX = employeeMotion.facing * 13;
+    const actionSwing = Math.sin(employeeMotion.actionPhase) * 4;
+
     ctx.save();
     ctx.translate(x, y + bob);
-    ctx.fillStyle = colors[role] || "#7c6d5c";
+    ctx.fillStyle = bodyColor;
     ctx.fillRect(-13, -38, 26, 30);
     ctx.fillStyle = "#d8ad86";
     ctx.beginPath();
@@ -2289,31 +2379,148 @@ export class WorldRenderer {
     ctx.arc(0, -54, 12, Math.PI, 0);
     ctx.fill();
     ctx.fillRect(-14, -55, 28, 4);
+
+    // A small stride and arm swing keeps walking employees readable at the
+    // same scale as the rest of the ranch cast.
     ctx.fillStyle = "#3f493f";
-    ctx.fillRect(-10, -8, 7, 9);
-    ctx.fillRect(3, -8, 7, 9);
+    ctx.fillRect(-10 + legSwing, -8, 7, 9);
+    ctx.fillRect(3 - legSwing, -8, 7, 9);
+    ctx.strokeStyle = bodyColor;
+    ctx.lineWidth = 4;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(employeeMotion.facing * 9, -29);
+    ctx.lineTo(employeeMotion.facing * (15 + armSwing), -18);
+    ctx.stroke();
+
     ctx.strokeStyle = role === "watering" ? "#afd2d0" : role === "planting" ? "#dfbd72" : "#c8a36e";
     ctx.lineWidth = 2;
+    ctx.lineCap = "round";
     if (role === "planting") {
+      const toolX = employeeMotion.facing * (21 + (employeeMotion.working ? actionSwing : 0));
       ctx.beginPath();
-      ctx.moveTo(14, -10);
-      ctx.lineTo(22, 5);
+      ctx.moveTo(handX, -13);
+      ctx.lineTo(toolX, employeeMotion.working ? 6 : 1);
       ctx.stroke();
+      if (employeeMotion.working) {
+        ctx.globalAlpha = 0.72;
+        ellipse(ctx, toolX, 7, 5, 2, "#d5b875");
+        ctx.fillStyle = "#a7c978";
+        ctx.beginPath();
+        ctx.arc(toolX + employeeMotion.facing * 5, 1, 2, 0, TAU);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
     } else if (role === "watering") {
+      const canX = employeeMotion.facing * 16;
+      ctx.fillStyle = "#86b9b7";
+      roundedRect(ctx, canX - employeeMotion.facing * 7, -22, 14, 10, 3);
+      ctx.fill();
+      ctx.strokeStyle = "#afd2d0";
       ctx.beginPath();
-      ctx.moveTo(14, -19);
-      ctx.lineTo(24, -8);
+      ctx.moveTo(canX + employeeMotion.facing * 5, -17);
+      ctx.lineTo(employeeMotion.facing * 26, -9 + (employeeMotion.working ? actionSwing : 0));
       ctx.stroke();
-    } else if (role === "fishing" || role === "fishery") {
+      if (employeeMotion.working) {
+        ctx.fillStyle = "#bce9e2";
+        for (let drop = 0; drop < 3; drop += 1) {
+          const dropPhase = (time * 1.4 + employeeMotion.seed * 0.03 + drop * 0.28) % 1;
+          const dropX = employeeMotion.facing * (27 + dropPhase * 16);
+          const dropY = -7 + dropPhase * 12 + (drop % 2) * 3;
+          ctx.globalAlpha = 0.78 - dropPhase * 0.5;
+          ctx.beginPath();
+          ctx.arc(dropX, dropY, 1.7, 0, TAU);
+          ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+      }
+    } else if (role === "fishing") {
+      const tipX = employeeMotion.facing * 38;
+      const tipY = -42 + (employeeMotion.working ? actionSwing : 0);
+      ctx.strokeStyle = "#bd8f5e";
       ctx.beginPath();
-      ctx.moveTo(14, -22);
-      ctx.lineTo(25, -34);
+      ctx.moveTo(handX, -17);
+      ctx.lineTo(tipX, tipY);
       ctx.stroke();
+      ctx.strokeStyle = "#d5ead3";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(tipX, tipY);
+      ctx.lineTo(employeeMotion.facing * 34, -4);
+      ctx.stroke();
+      ctx.fillStyle = "#dd8067";
+      ctx.beginPath();
+      ctx.arc(employeeMotion.facing * 34, -2 + Math.sin(employeeMotion.actionPhase) * 2, 3, 0, TAU);
+      ctx.fill();
+      if (employeeMotion.working) {
+        ctx.strokeStyle = "rgba(220, 242, 211, 0.72)";
+        ctx.beginPath();
+        ctx.ellipse(employeeMotion.facing * 34, 6, 10 + Math.sin(employeeMotion.actionPhase) * 3, 3, 0, 0, TAU);
+        ctx.stroke();
+      }
+    } else if (role === "fishery") {
+      const netX = employeeMotion.facing * 17;
+      ctx.strokeStyle = "#d4c58e";
+      ctx.beginPath();
+      ctx.moveTo(handX, -16);
+      ctx.lineTo(netX, -29);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(netX + employeeMotion.facing * 7, -32, 8, 0, TAU);
+      ctx.stroke();
+      if (employeeMotion.working) {
+        ctx.fillStyle = "#f2cf82";
+        for (let feed = 0; feed < 3; feed += 1) {
+          const feedPhase = (time * 1.1 + feed * 0.31 + employeeMotion.seed * 0.02) % 1;
+          ctx.globalAlpha = 0.7 - feedPhase * 0.4;
+          ctx.beginPath();
+          ctx.arc(employeeMotion.facing * (23 + feedPhase * 16), -6 + feedPhase * 9, 2, 0, TAU);
+          ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+      }
     } else if (role === "animals") {
+      const bucketX = employeeMotion.facing * 19;
       ctx.beginPath();
-      ctx.arc(18, -6, 5, 0, TAU);
+      ctx.arc(bucketX, -7, 6, 0, TAU);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(bucketX, -9, 4, Math.PI, TAU);
+      ctx.stroke();
+      if (employeeMotion.working) {
+        ctx.fillStyle = "#ead393";
+        for (let feed = 0; feed < 3; feed += 1) {
+          const feedPhase = (time * 1.3 + feed * 0.32 + employeeMotion.seed * 0.02) % 1;
+          ctx.globalAlpha = 0.72 - feedPhase * 0.45;
+          ctx.beginPath();
+          ctx.arc(bucketX + employeeMotion.facing * feedPhase * 14, -1 + feedPhase * 7, 2, 0, TAU);
+          ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+      }
+    } else if (role === "trade") {
+      const crateX = employeeMotion.facing * 19;
+      ctx.fillStyle = "#bf9057";
+      ctx.fillRect(crateX - 7, -19, 14, 13);
+      ctx.strokeStyle = "#7b5436";
+      ctx.beginPath();
+      ctx.moveTo(crateX - 7, -13);
+      ctx.lineTo(crateX + 7, -13);
+      ctx.moveTo(crateX, -19);
+      ctx.lineTo(crateX, -6);
+      ctx.stroke();
+    } else if (role === "island") {
+      const bagX = employeeMotion.facing * 17;
+      ctx.fillStyle = "#9a6e4f";
+      roundedRect(ctx, bagX - 7, -18, 14, 12, 3);
+      ctx.fill();
+      ctx.strokeStyle = "#d9c18a";
+      ctx.beginPath();
+      ctx.moveTo(bagX - 5, -19);
+      ctx.quadraticCurveTo(bagX, -27, bagX + 5, -19);
       ctx.stroke();
     }
+
     ctx.fillStyle = "rgba(255, 247, 218, 0.94)";
     ctx.font = "700 8px 'PingFang SC', sans-serif";
     ctx.textAlign = "center";

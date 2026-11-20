@@ -1,0 +1,90 @@
+version: 1
+project: ranch-life-common-ground
+milestone: longform-v1
+owner: main-agent
+updated: 2026-11-20
+
+gates:
+  - id: syntax
+    command: npm run check
+  - id: assets
+    command: npm run check:assets
+  - id: tests
+    command: npm test
+  - id: story-paths
+    command: npm run story-paths
+  - id: diff
+    command: git diff --check
+
+agents:
+  narrative-director:
+    allowed_paths: [docs/story, story/outlines, orchestrator]
+    forbidden_paths: [js, css, assets]
+  script-writer:
+    allowed_paths: [story/chapters, story/reports]
+    forbidden_paths: [js, css, assets]
+  systems-integrator:
+    allowed_paths: [js/data.js, js/state.js, js/game.js, tests]
+    forbidden_paths: [story/chapters, assets]
+  employee-animation:
+    allowed_paths: [js/renderer.js, css/style.css, tests]
+    forbidden_paths: [js/state.js, story/chapters]
+  art-audio:
+    allowed_paths: [assets, docs/asset-reports]
+    forbidden_paths: [js/state.js, js/game.js]
+  test-balance:
+    allowed_paths: [tests, reports]
+    forbidden_paths: [js, story/chapters]
+  release:
+    allowed_paths: [README.md, docs, CHANGELOG.md]
+    forbidden_paths: [js, story/chapters, assets]
+
+tasks:
+  - id: narrative-bible
+    agent: narrative-director
+    status: done
+    depends_on: []
+    deliverables: [docs/large-version-blueprint.md]
+    checks: [diff]
+  - id: employee-motion
+    agent: employee-animation
+    status: done
+    depends_on: []
+    deliverables: [js/renderer.js]
+    checks: [syntax, assets, tests, diff]
+  - id: longform-runtime
+    agent: systems-integrator
+    status: done
+    depends_on: [narrative-bible]
+    deliverables: [js/longform-story.js, js/state.js, js/game.js, css/style.css]
+    checks: [syntax, assets, tests, diff]
+  - id: chapter-pack-01
+    agent: script-writer
+    status: queued
+    depends_on: [narrative-bible]
+    deliverables: [story/chapters/ch01.json, story/reports/ch01.md]
+    checks: [story-ids, story-word-count, story-fallbacks]
+  - id: chapter-pack-02
+    agent: script-writer
+    status: queued
+    depends_on: [chapter-pack-01]
+    deliverables: [story/chapters/ch02.json, story/reports/ch02.md]
+    checks: [story-ids, story-word-count, story-fallbacks]
+  - id: story-integration-01
+    agent: systems-integrator
+    status: queued
+    depends_on: [chapter-pack-01, longform-runtime]
+    deliverables: [js/data.js, js/state.js, js/game.js, tests/story.test.js]
+    checks: [syntax, tests, story-paths, diff]
+  - id: balance-pass-01
+    agent: test-balance
+    status: queued
+    depends_on: [story-integration-01]
+    deliverables: [reports/balance-01.md]
+    checks: [tests, story-paths]
+  - id: release-v1
+    agent: release
+    status: queued
+    depends_on: [balance-pass-01]
+    deliverables: [CHANGELOG.md, docs/deployment.md]
+    checks: [syntax, assets, tests, story-paths, diff]

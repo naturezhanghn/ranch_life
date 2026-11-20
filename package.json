@@ -7,7 +7,7 @@
   "scripts": {
     "serve": "python3 -m http.server 4173",
     "build": "npm run check && npm run check:assets && npm test",
-    "check": "node --check js/data.js && node --check js/state.js && node --check js/audio.js && node --check js/renderer.js && node --check js/game.js",
+    "check": "node --check js/data.js && node --check js/state.js && node --check js/audio.js && node --check js/renderer.js && node --check js/longform-story.js && node --check js/game.js",
     "check:assets": "node tools/check_assets.js",
     "test": "node tests/state.test.js && node tests/minigames.test.js && node tests/exploration.test.js",
     "story-paths": "node tools/story_paths.js",

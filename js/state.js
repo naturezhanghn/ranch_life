@@ -49,6 +49,7 @@ import {
   TRADE_CONTRACTS,
   WORLD,
 } from "./data.js";
+import { getLongformStoryBeat } from "./longform-story.js";
 
 function seedFromString(value) {
   let hash = 2166136261;
@@ -598,6 +599,10 @@ export function createInitialState() {
       postScriptsSeen: [],
       lastTalkDay: 0,
       talkedNpcs: [],
+      longform: {
+        choices: {},
+        lastBeatDay: 0,
+      },
     },
     settings: {
       sound: true,
@@ -626,6 +631,37 @@ export function addMemory(state, text, type = "observation", importance = 1) {
     text,
   });
   state.ai.memories = state.ai.memories.slice(0, 16);
+}
+
+export function resolveLongformChoice(state, choiceId) {
+  const beat = getLongformStoryBeat(state);
+  const choice = beat.chapter.choices.find((entry) => entry.id === choiceId && entry.day === beat.day);
+  if (!choice) return { ok: false, message: "这段剧情目前没有可记录的选择。" };
+  if (!state.story.longform || typeof state.story.longform !== "object") {
+    state.story.longform = { choices: {}, lastBeatDay: 0 };
+  }
+  if (!state.story.longform.choices || typeof state.story.longform.choices !== "object") {
+    state.story.longform.choices = {};
+  }
+  const key = `${beat.day}:${choice.id}`;
+  if (state.story.longform.choices[key]) {
+    return { ok: false, message: "这段选择已经写入牧心的长期记忆。" };
+  }
+  state.story.longform.choices[key] = choice.id;
+  state.story.longform.lastBeatDay = beat.day;
+  for (const [relation, delta] of Object.entries(choice.relation || {})) {
+    if (typeof state.relations[relation] !== "number") continue;
+    state.relations[relation] = bounded(state.relations[relation] + delta, 0, 100);
+  }
+  if (choice.aiTrust) state.ai.trust = bounded(state.ai.trust + choice.aiTrust, 0, 100);
+  if (choice.coins) state.coins = Math.max(0, state.coins + choice.coins);
+  if (choice.energy) state.energy = Math.max(0, state.energy + choice.energy);
+  addMemory(state, `长线剧情第${beat.day}天：${choice.label}。${choice.effect}`, "story", 3);
+  return {
+    ok: true,
+    choice,
+    message: `${choice.label}。${choice.effect}`,
+  };
 }
 
 export function emitFeedback(state, {
@@ -3643,6 +3679,14 @@ export function loadGame() {
         postGameProgress: {
           ...base.story.postGameProgress,
           ...(parsed.story?.postGameProgress || {}),
+        },
+        longform: {
+          ...base.story.longform,
+          ...(parsed.story?.longform || {}),
+          choices: {
+            ...base.story.longform.choices,
+            ...(parsed.story?.longform?.choices || {}),
+          },
         },
         postScriptsSeen: Array.isArray(parsed.story?.postScriptsSeen)
           ? Array.from(new Set(parsed.story.postScriptsSeen))
