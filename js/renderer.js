@@ -1335,6 +1335,22 @@ export class WorldRenderer {
       ctx.fillRect(x + w - 12, yy, 7, 16);
     }
 
+    // The lower-left fence has a visible gate so the enlarged pasture reads
+    // as a walkable part of the ranch instead of a decorative backdrop.
+    ctx.fillStyle = "#779956";
+    ctx.fillRect(x + 2, y + h - 78, 16, 54);
+    ctx.fillStyle = "#8b6846";
+    ctx.fillRect(x - 1, y + h - 82, 7, 62);
+    ctx.fillRect(x + 20, y + h - 82, 7, 62);
+    ctx.strokeStyle = "#d2b17d";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(x + 4, y + h - 68);
+    ctx.lineTo(x + 22, y + h - 50);
+    ctx.moveTo(x + 22, y + h - 68);
+    ctx.lineTo(x + 4, y + h - 50);
+    ctx.stroke();
+
     ctx.fillStyle = "#7a5a3d";
     roundedRect(ctx, x + 20, y + 155, 168, 57, 4);
     ctx.fill();
@@ -1365,15 +1381,16 @@ export class WorldRenderer {
 
     ctx.save();
     ctx.fillStyle = "#62472f";
-    ctx.fillRect(734, 213, 32, 57);
+    const feedX = x - 46;
+    ctx.fillRect(feedX, y + 158, 32, 57);
     ctx.fillStyle = "#9a7449";
-    ctx.fillRect(738, 217, 24, 49);
+    ctx.fillRect(feedX + 4, y + 162, 24, 49);
     ctx.fillStyle = "#4a3a27";
-    ctx.fillRect(742, 224, 16, 29);
+    ctx.fillRect(feedX + 8, y + 169, 16, 29);
     ctx.fillStyle = "#d7bd80";
     ctx.font = "700 8px 'PingFang SC', sans-serif";
     ctx.textAlign = "center";
-    ctx.fillText("饲料", 750, 242);
+    ctx.fillText("饲料", feedX + 16, y + 187);
     ctx.restore();
   }
 
@@ -1402,6 +1419,26 @@ export class WorldRenderer {
         },
       });
     }
+    // The expanded pasture also has a few young animals in the shared herd.
+    // They are decorative until the player expands the livestock roster, so
+    // they do not create duplicate feeding records in legacy saves.
+    const youngHerd = [
+      { type: "sheep", x: 832, y: 292, scale: 0.66 },
+      { type: "cow", x: 1048, y: 294, scale: 0.72 },
+      { type: "chicken", x: 1145, y: 274, scale: 0.62 },
+    ];
+    youngHerd.forEach((animal, index) => {
+      const x = animal.x + Math.sin(time * 0.34 + index) * 8;
+      const y = animal.y + Math.cos(time * 0.27 + index) * 3;
+      drawables.push({
+        y,
+        draw: () => {
+          if (animal.type === "chicken") this.drawChicken(ctx, x, y, animal.scale, time);
+          if (animal.type === "sheep") this.drawSheep(ctx, x, y, animal.scale, time);
+          if (animal.type === "cow") this.drawCow(ctx, x, y, animal.scale, time);
+        },
+      });
+    });
   }
 
   drawChicken(ctx, x, y, scale, time) {

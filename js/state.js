@@ -2523,68 +2523,88 @@ function applyWorkerAssignments(state, report) {
   state.coins -= payroll;
   workforce.lastPayrollDay = state.day;
   report.helperActions.push(`已支付 ${payroll} 金员工工资`);
-  const nameForRole = (role) => WORKER_DEFS[workforce.assignments?.[role]]?.name || "员工";
-
-  const plantingWorker = workforce.assignments?.planting;
   const cropId = state.selectedSeed;
   const crop = CROPS[cropId];
   const calendar = SEASONAL_CROP_CALENDAR[cropId];
-  let planted = 0;
-  if (plantingWorker && crop && (!calendar || calendar.seasons.includes(state.season))) {
+  const assigned = new Set(Object.values(workforce.assignments || {}));
+
+  // Every hired resident is a paid all-round ranch hand. Their optional
+  // assignment gives them an extra specialty, while the daily shift always
+  // includes harvesting, sowing, watering, and basic animal care.
+  for (const workerId of workforce.hired) {
+    const worker = WORKER_DEFS[workerId];
+    if (!worker) continue;
+    let harvested = 0;
     for (const plot of state.plots) {
-      if (planted >= 2 || (state.inventory.seeds[cropId] || 0) <= 0) break;
-      if (plot.crop) continue;
-      plot.state = "tilled";
-      plot.crop = cropId;
+      if (harvested >= 2 || !plot.crop || plot.growth < CROPS[plot.crop].days) continue;
+      const harvestCrop = CROPS[plot.crop];
+      if (!hasBagSpace(state, harvestCrop.id, 1)) break;
+      const amount = plot.wateredDays >= harvestCrop.days ? 2 : 1;
+      state.inventory.produce[harvestCrop.id] += amount;
+      plot.crop = null;
       plot.growth = 0;
       plot.watered = false;
       plot.wateredDays = 0;
-      state.inventory.seeds[cropId] -= 1;
-      planted += 1;
-      bumpCounter(state, "tilled");
-      bumpCounter(state, "planted");
+      bumpCounter(state, "harvested", amount);
+      harvested += 1;
     }
-  }
-  if (planted) report.helperActions.push(`${nameForRole("planting")}播下了 ${planted} 颗${crop.name}`);
-
-  const wateringWorker = workforce.assignments?.watering;
-  if (wateringWorker && state.water > 0) {
+    let planted = 0;
+    if (crop && (!calendar || calendar.seasons.includes(state.season))) {
+      for (const plot of state.plots) {
+        if (planted >= 2 || (state.inventory.seeds[cropId] || 0) <= 0) break;
+        if (plot.crop) continue;
+        plot.state = "tilled";
+        plot.crop = cropId;
+        plot.growth = 0;
+        plot.watered = false;
+        plot.wateredDays = 0;
+        state.inventory.seeds[cropId] -= 1;
+        planted += 1;
+        bumpCounter(state, "tilled");
+        bumpCounter(state, "planted");
+      }
+    }
     let watered = 0;
-    for (const plot of state.plots) {
-      if (watered >= 2 || state.water <= 0) break;
-      if (!plot.crop || plot.watered) continue;
-      plot.watered = true;
-      plot.wateredDays += 1;
-      state.water -= 1;
-      watered += 1;
-      bumpCounter(state, "watered");
+    if (state.water > 0) {
+      for (const plot of state.plots) {
+        if (watered >= 2 || state.water <= 0) break;
+        if (!plot.crop || plot.watered) continue;
+        plot.watered = true;
+        plot.wateredDays += 1;
+        state.water -= 1;
+        watered += 1;
+        bumpCounter(state, "watered");
+      }
     }
-    if (watered) report.helperActions.push(`${nameForRole("watering")}浇了 ${watered} 格田地`);
-  }
-
-  const animalWorker = workforce.assignments?.animals;
-  if (animalWorker && state.feed > 0) {
     let cared = 0;
-    for (const animal of state.animals) {
-      if (state.feed <= 0) break;
-      if (animal.fed) continue;
-      animal.fed = true;
-      state.feed -= 1;
-      animal.mood = Math.min(100, animal.mood + 4);
-      animal.affection = Math.min(100, animal.affection + 2);
-      bumpCounter(state, "fed");
-      cared += 1;
+    if (state.feed > 0) {
+      for (const animal of state.animals) {
+        if (state.feed <= 0 || animal.fed) break;
+        animal.fed = true;
+        state.feed -= 1;
+        animal.mood = Math.min(100, animal.mood + 4);
+        animal.affection = Math.min(100, animal.affection + 2);
+        bumpCounter(state, "fed");
+        cared += 1;
+      }
     }
-    if (cared) report.helperActions.push(`${nameForRole("animals")}照料了 ${cared} 只牲畜`);
+    const actions = [];
+    if (harvested) actions.push(`收获 ${harvested} 块成熟作物`);
+    if (planted) actions.push(`播种 ${planted} 格${crop.name}`);
+    if (watered) actions.push(`浇水 ${watered} 格`);
+    if (cared) actions.push(`照料 ${cared} 只牲畜`);
+    if (actions.length) report.helperActions.push(`${worker.name}：${actions.join("、")}`);
   }
 
-  if (workforce.assignments?.fishing && state.world.unlockedRegions.includes("island")) {
+  const nameForRole = (role) => WORKER_DEFS[workforce.assignments?.[role]]?.name || "员工";
+
+  if (workforce.assignments?.fishing && assigned.has(workforce.assignments.fishing) && state.world.unlockedRegions.includes("island")) {
     state.inventory.resources.tidefish = (state.inventory.resources.tidefish || 0) + 1;
     state.stats.fishCaught += 1;
     bumpCounter(state, "explored");
     report.helperActions.push(`${nameForRole("fishing")}钓回了 1 条鱼`);
   }
-  if (workforce.assignments?.fishery && state.fishPond) {
+  if (workforce.assignments?.fishery && assigned.has(workforce.assignments.fishery) && state.fishPond) {
     state.fishPond.stock = Math.min(state.fishPond.capacity, state.fishPond.stock + 2);
     state.fishPond.health = Math.min(100, state.fishPond.health + 5);
     if (state.fishPond.stock >= 3) {
@@ -3666,7 +3686,8 @@ export function loadGame() {
       y: Number.isFinite(Number(merged.player?.y)) ? Number(merged.player.y) : base.player.y,
     };
     if (!Array.isArray(merged.plots) || merged.plots.length !== WORLD.field.cols * WORLD.field.rows) {
-      merged.plots = base.plots;
+      const legacyPlots = Array.isArray(merged.plots) ? merged.plots : [];
+      merged.plots = base.plots.map((plot, index) => ({ ...plot, ...(legacyPlots[index] || {}) }));
     }
     if (!Array.isArray(merged.animals) || merged.animals.length !== ANIMAL_DEFS.length) {
       merged.animals = base.animals;

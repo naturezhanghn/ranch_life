@@ -870,7 +870,6 @@ function canMoveTo(x, y) {
   const farmBlockers = [
     WORLD.house,
     WORLD.aiShed,
-    WORLD.pasture,
     WORLD.villageShop,
     WORLD.archive,
     WORLD.noticeboard,
@@ -2123,7 +2122,7 @@ function renderSpritesPanel() {
     <div class="sprite-roster worker-roster">${workerRoster}</div>
     <div class="region-section-heading"><span>工坊名册</span><small>点击分工按钮即可重新安排</small></div>
     <div class="sprite-roster">${roster}</div>
-    <div class="region-note">员工可以分别负责浇水、播种、牲畜、钓鱼和鱼塘。播种员工会自动开垦空地并使用当前选中的种子，养鱼员工会让鱼塘逐渐产出鲜鱼。</div>
+    <div class="region-note">每位居民员工都是全能班组：每天都会尝试收获成熟作物、播种空地、浇水和照料牲畜。岗位按钮用于增加钓鱼、养鱼、贸易等专长。</div>
   `;
 }
 

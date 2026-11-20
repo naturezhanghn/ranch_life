@@ -88,7 +88,7 @@ function establishClues(state) {
 
 test("initial state has the vertical-slice scope", () => {
   const state = freshState();
-  assert.equal(state.plots.length, 21);
+  assert.equal(state.plots.length, 32);
   assert.equal(state.animals.length, 3);
   assert.deepEqual(
     state.animals.map((animal) => animal.id),
