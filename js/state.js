@@ -2721,6 +2721,21 @@ function applyWorkerAssignments(state, report) {
   }
 }
 
+function restoreOvernightWeeds(state, report) {
+  const weedChance = state.season === "冬" ? 0.08 : 0.14;
+  let regrown = 0;
+  for (const plot of state.plots) {
+    if (plot.crop || plot.state !== "tilled") continue;
+    if (nextRandom(state) >= weedChance) continue;
+    plot.state = "wild";
+    regrown += 1;
+  }
+  if (regrown) {
+    report.helperActions.push(`夜间有 ${regrown} 块空地恢复了杂草状态，员工会重新翻土`);
+    addMemory(state, `${regrown} 块没有作物的田垄长回了杂草。牧心把它标记为需要重新开垦的土地。`, "risk", 1);
+  }
+}
+
 function refreshMarket(state, report = null) {
   const previousPrices = state.market.prices || createMarketPrices();
   let trendTotal = 0;
@@ -3273,6 +3288,7 @@ export function advanceDay(state) {
 
   settleShipping(state, report);
 
+  restoreOvernightWeeds(state, report);
   applySpriteAssignments(state, report);
   applyWorkerAssignments(state, report);
 

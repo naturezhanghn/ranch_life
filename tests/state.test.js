@@ -802,6 +802,10 @@ test("workforce can plant crops, care for livestock, fish, and raise fish", () =
 test("human employees can be hired, assigned, and paid from daily work", () => {
   const state = freshState();
   state.coins = 300;
+  state.plots[0].state = "tilled";
+  state.plots[0].crop = "turnip";
+  state.plots[0].growth = 4;
+  state.plots[0].wateredDays = 4;
   assert.equal(hireWorker(state, "farmer").ok, true);
   assert.equal(assignWorker(state, "farmer", "planting").ok, true);
   const before = state.coins;
@@ -809,6 +813,8 @@ test("human employees can be hired, assigned, and paid from daily work", () => {
   assert.equal(state.coins, before - 14);
   assert.ok(report.helperActions.some((entry) => entry.includes("周禾")));
   assert.equal(state.plots.filter((plot) => plot.crop).length, 2);
+  assert.equal(state.plots[0].crop, "turnip");
+  assert.ok(report.helperActions.some((entry) => entry.includes("收获")));
 });
 
 test("animal employee completes feeding, companionship, grooming, and grazing", () => {
