@@ -703,6 +703,11 @@ body.phaser-runtime #phaserCanvas { display: block; }
   display: none;
 }
 
+.action-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 .tool-dock {
   min-height: 88px;
   padding: 10px 17px;
@@ -1109,6 +1114,13 @@ body.phaser-runtime #phaserCanvas { display: block; }
   transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
 }
 
+.button:disabled {
+  cursor: wait;
+  opacity: 0.52;
+  transform: none;
+  box-shadow: none;
+}
+
 .button:hover {
   transform: translateY(-2px);
 }
@@ -1130,6 +1142,8 @@ body.phaser-runtime #phaserCanvas { display: block; }
   opacity: 0.56;
   font-size: 8px;
   letter-spacing: 0.04em;
+  line-height: 1.45;
+  white-space: normal;
 }
 
 .button--primary {
@@ -1175,6 +1189,13 @@ body.phaser-runtime #phaserCanvas { display: block; }
   font-size: 9px;
 }
 
+.welcome-status {
+  min-height: 1.4em;
+  margin: 15px 0 0;
+  color: rgba(247, 238, 217, 0.7);
+  font-size: 10px;
+}
+
 .welcome-controls i {
   padding: 2px 4px;
   border-radius: 4px;
@@ -1194,6 +1215,82 @@ body.phaser-runtime #phaserCanvas { display: block; }
   color: rgba(247, 238, 217, 0.56);
   font-size: 9px;
   letter-spacing: 0.04em;
+}
+
+.runtime-error {
+  position: fixed;
+  z-index: 500;
+  right: 18px;
+  bottom: calc(18px + env(safe-area-inset-bottom));
+  left: 18px;
+  max-width: 620px;
+  margin-inline: auto;
+  padding: 13px 15px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  color: #fff8e6;
+  border: 1px solid rgba(255, 235, 184, 0.38);
+  border-radius: 14px;
+  background: rgba(93, 43, 39, 0.96);
+  box-shadow: 0 18px 44px rgba(45, 18, 17, 0.32);
+  backdrop-filter: blur(12px);
+}
+
+.runtime-error[hidden] {
+  display: none;
+}
+
+.runtime-error strong,
+.runtime-error span {
+  display: block;
+}
+
+.runtime-error strong {
+  margin-bottom: 3px;
+  color: #ffe5a9;
+  font-size: 12px;
+}
+
+.runtime-error span {
+  color: rgba(255, 247, 227, 0.82);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.runtime-error .button {
+  flex: 0 0 auto;
+  min-height: 38px;
+  padding-inline: 13px;
+  color: #4d2822;
+  font-size: 11px;
+}
+
+.noscript-card {
+  position: fixed;
+  z-index: 600;
+  inset: 18px;
+  display: grid;
+  place-content: center;
+  gap: 8px;
+  padding: 24px;
+  color: #fff8e6;
+  text-align: center;
+  border-radius: 18px;
+  background: #183c34;
+  box-shadow: 0 20px 60px rgba(9, 30, 24, 0.35);
+}
+
+.noscript-card strong {
+  color: #f7e6b6;
+  font-family: var(--font-serif);
+  font-size: 22px;
+}
+
+.noscript-card span {
+  color: rgba(255, 248, 230, 0.78);
+  font-size: 12px;
 }
 
 /* Modals */
@@ -2826,6 +2923,11 @@ body.phaser-runtime #phaserCanvas { display: block; }
     margin-top: 20px;
   }
 
+  .welcome-status {
+    margin-top: 12px;
+    font-size: 9px;
+  }
+
   .welcome-footnote {
     display: none;
   }
@@ -2840,6 +2942,17 @@ body.phaser-runtime #phaserCanvas { display: block; }
     width: 100%;
     max-height: 90svh;
     border-radius: 19px;
+  }
+
+  .runtime-error {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 10px;
+    bottom: calc(12px + env(safe-area-inset-bottom));
+  }
+
+  .runtime-error .button {
+    width: 100%;
   }
 
   .modal-heading {

@@ -138,6 +138,7 @@ const dom = {
   continueButton: document.getElementById("continueButton"),
   continueMeta: document.getElementById("continueMeta"),
   newGameButton: document.getElementById("newGameButton"),
+  bootStatus: document.getElementById("bootStatus"),
   dayNumber: document.getElementById("dayNumber"),
   clock: document.getElementById("clock"),
   weatherLabel: document.getElementById("weatherLabel"),
@@ -174,10 +175,14 @@ const dom = {
   liveRegion: document.getElementById("liveRegion"),
   touchControls: document.getElementById("touchControls"),
   touchAction: document.getElementById("touchAction"),
+  touchActionLabel: document.getElementById("touchActionLabel"),
   minigameLayer: document.getElementById("minigameLayer"),
   minigameCanvas: document.getElementById("minigameCanvas"),
   minigameClose: document.getElementById("minigameClose"),
   minigameAnnouncement: document.getElementById("minigameAnnouncement"),
+  runtimeError: document.getElementById("runtimeError"),
+  runtimeErrorText: document.getElementById("runtimeErrorText"),
+  runtimeErrorReload: document.getElementById("runtimeErrorReload"),
 };
 
 const weatherPresentation = {
@@ -200,6 +205,7 @@ let inputLocked = false;
 let autosaveClock = 0;
 let stageRect = null;
 let mobileCamera = { x: 0, y: 0, initialized: false };
+let runtimeErrorShown = false;
 // A background tab may receive throttled animation frames. Keep those frames
 // from advancing the in-game clock or consuming stamina while the player is
 // away, then restart the frame delta cleanly when the tab becomes visible.
@@ -337,6 +343,16 @@ function showToast(message, options = {}) {
   dom.liveRegion.textContent = `${options.strong || ""} ${message}`.trim();
 }
 
+function showRuntimeError(error) {
+  if (runtimeErrorShown || !dom.runtimeError) return;
+  runtimeErrorShown = true;
+  if (active) saveGame(state);
+  dom.runtimeErrorText.textContent = "进度已保存。请刷新页面继续。";
+  dom.runtimeError.hidden = false;
+  dom.liveRegion.textContent = "游戏暂时停住了，进度已保存，请刷新页面继续。";
+  console.error("Ranch Life runtime error", error);
+}
+
 function showFeedbackToast(event, strong = "牧场反馈", duration = 3200) {
   if (!event) return false;
   showToast(event.message, { strong, duration, feedbackId: event.id });
@@ -403,10 +419,15 @@ function refreshWelcome() {
   const saved = loadGame();
   if (saved) {
     dom.continueButton.hidden = false;
+    const region = REGIONS[SCENE_REGION_MAP[saved.world?.scene] || saved.world?.activeRegion || "farm"];
+    const objective = STORY_OBJECTIVES[saved.story?.step] || STORY_OBJECTIVES.meetSister;
+    const objectiveText = saved.story?.step === "freeplay"
+      ? "继续经营今天的牧场"
+      : objective.text;
     const place =
       saved.story.endingSeen && saved.story.ending
         ? `结局 · ${ENDINGS[saved.story.ending]?.title || "共同生活"}`
-        : `第 ${saved.day} 天 · ${formatClock(saved.minutes)}`;
+        : `${saved.season || "春"} · 第 ${saved.day} 天 · ${formatClock(saved.minutes)} · ${region?.shortName || "牧场"} · ${objectiveText}`;
     dom.continueMeta.textContent = place;
   } else {
     dom.continueButton.hidden = true;
@@ -727,16 +748,26 @@ function updateInteractionHint() {
   if (!active || modalOpen || minigameLayer.active) {
     dom.interactionHint.classList.remove("is-visible");
     runtime.nearInteraction = null;
+    if (dom.touchActionLabel) dom.touchActionLabel.textContent = "行动";
+    dom.touchAction?.setAttribute("aria-label", "行动");
+    if (dom.touchAction) dom.touchAction.disabled = true;
     return;
   }
   const interaction = findNearestInteraction();
   if (!interaction) {
     dom.interactionHint.classList.remove("is-visible");
     runtime.nearInteraction = null;
+    if (dom.touchActionLabel) dom.touchActionLabel.textContent = "靠近目标";
+    dom.touchAction?.setAttribute("aria-label", "靠近目标");
+    if (dom.touchAction) dom.touchAction.disabled = true;
     return;
   }
   runtime.nearInteraction = interaction.id;
-  dom.interactionText.textContent = getInteractionLabel(interaction);
+  const label = getInteractionLabel(interaction);
+  dom.interactionText.textContent = label;
+  if (dom.touchActionLabel) dom.touchActionLabel.textContent = label;
+  dom.touchAction?.setAttribute("aria-label", label);
+  if (dom.touchAction) dom.touchAction.disabled = false;
   dom.interactionKey.textContent = interaction.id === "ai" ? "E / H" : "E";
   dom.interactionHint.classList.add("is-visible");
 }
@@ -3982,6 +4013,7 @@ function handleKeyDown(event) {
     return;
   }
   if (!active) {
+    if (dom.newGameButton.disabled) return;
     if ((key === "enter" || key === " ") && !dom.welcome.classList.contains("is-hidden")) {
       event.preventDefault();
       if (!dom.continueButton.hidden) {
@@ -4108,6 +4140,13 @@ function endTouchControl(event) {
 function bindEvents() {
   window.addEventListener("keydown", handleKeyDown);
   window.addEventListener("keyup", handleKeyUp);
+  window.addEventListener("error", (event) => {
+    if (event.target && event.target !== window) return;
+    showRuntimeError(event.error || event.message);
+  });
+  window.addEventListener("unhandledrejection", (event) => {
+    showRuntimeError(event.reason);
+  });
   window.addEventListener("resize", () => {
     resizeViewport();
     refreshTouchEnvironment();
@@ -4182,6 +4221,7 @@ function bindEvents() {
   dom.soundButton.addEventListener("click", () => {
     toggleSound(false);
   });
+  dom.runtimeErrorReload?.addEventListener("click", () => window.location.reload());
   dom.modalClose.addEventListener("click", () => closeModal());
   dom.modalCard.addEventListener("click", (event) => {
     if (event.target.closest("[data-close-modal]")) closeModal();
@@ -4218,6 +4258,37 @@ function startContinue() {
   }
   closeModal();
   beginPlay({ loadedState: loaded });
+}
+
+function waitForWelcomeImage() {
+  const image = document.querySelector(".welcome-hero-image");
+  if (!image || image.complete) return Promise.resolve();
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      resolve();
+    };
+    image.addEventListener("load", finish, { once: true });
+    image.addEventListener("error", finish, { once: true });
+    window.setTimeout(finish, 700);
+  });
+}
+
+async function finishBoot() {
+  if (dom.bootStatus) dom.bootStatus.textContent = "正在准备牧场界面…";
+  const fontReady = document.fonts?.ready?.catch(() => undefined) || Promise.resolve();
+  await Promise.race([
+    Promise.all([waitForWelcomeImage(), fontReady]),
+    new Promise((resolve) => window.setTimeout(resolve, 900)),
+  ]);
+  window.requestAnimationFrame(() => {
+    dom.newGameButton.disabled = false;
+    dom.continueButton.disabled = false;
+    if (dom.bootStatus) dom.bootStatus.textContent = "已准备好 · 进度会自动保存在本机";
+    refreshWelcome();
+  });
 }
 
 function loop(timestamp) {
@@ -4272,6 +4343,7 @@ bindEvents();
 resizeViewport();
 updateHUD(true);
 window.requestAnimationFrame(loop);
+finishBoot();
 
 if (new URLSearchParams(window.location.search).get("phaser") === "1") {
   import("./phaser-bridge.js").then(({ startPhaserBridge }) => startPhaserBridge()).catch((error) => {

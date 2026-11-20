@@ -24,6 +24,8 @@ jobs:
         run: npm run check
       - name: Validate asset manifest
         run: npm run check:assets
+      - name: Validate browser release surface
+        run: npm run release-check
       - name: Gameplay tests
         run: npm test
       - name: Enumerate narrative paths

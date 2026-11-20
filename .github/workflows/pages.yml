@@ -29,6 +29,8 @@ jobs:
           node-version: 20
       - name: Compile and smoke-test
         run: npm run build
+      - name: Validate browser release surface
+        run: npm run release-check
       - name: Check whether Pages is enabled
         id: pages_status
         env:

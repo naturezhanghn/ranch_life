@@ -59,6 +59,7 @@ npm run serve
 ```bash
 npm run check        # JavaScript 语法检查
 npm run build        # 部署前编译等价检查与核心玩法回归
+npm run release-check # 4399 风格网页发布门禁
 npm test             # 核心玩法、区域系统与结局状态测试
 npm run story-paths  # 枚举 27 条决策路径，验证五个结局均可达
 npm run balance      # 28 天确定性数值模拟，输出 Markdown/JSON 报告
@@ -70,6 +71,8 @@ npm run balance      # 28 天确定性数值模拟，输出 Markdown/JSON 报告
 - `tools/results/balance_report.json`
 - `tools/results/story_paths.md`
 - `tools/results/story_paths.json`
+
+发布前产品验收项见 [docs/4399-product-audit.md](./docs/4399-product-audit.md)。首屏加载、触屏操作、运行时恢复、manifest、资源清单和运行时代码语法会由 `npm run release-check` 自动检查。
 
 ## GitHub Pages 部署
 
