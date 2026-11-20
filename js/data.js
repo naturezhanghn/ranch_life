@@ -1967,7 +1967,7 @@ export const INTERACTIONS = [
 export const STORY_OBJECTIVES = {
   meetSister: {
     kicker: "第一章 · 牧场",
-    text: "去技术棚找妹妹林澈",
+    text: "去技术棚找妹妹彤彤",
     progress: () => "",
   },
   feedAnimals: {

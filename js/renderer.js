@@ -2233,7 +2233,7 @@ export class WorldRenderer {
     ctx.fillStyle = "#4a3c31";
     ctx.font = "700 9px 'PingFang SC', sans-serif";
     ctx.textAlign = "center";
-    ctx.fillText("林澈", 0, -76);
+    ctx.fillText("彤彤", 0, -76);
     ctx.restore();
   }
 

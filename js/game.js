@@ -456,7 +456,7 @@ function showIntroLetter() {
         <cite>—— 外公</cite>
       </div>
       <p class="story-lead">
-        技术棚里亮着一盏不该亮着的灯。妹妹林澈留下的便签说，她把一套早期农业智能
+        技术棚里亮着一盏不该亮着的灯。妹妹彤彤留下的便签说，她把一套早期农业智能
         “牧心”接进了牧场的旧传感器。它正在学习你。
       </p>
       <p class="story-goal">这块地欠着旧债，也藏着一段还没有被讲完的历史。</p>
@@ -1470,11 +1470,11 @@ function recordNpcTalk(npcId, npcName) {
 function openSisterDialogue() {
   openModal({
     kicker: "第一章 · 牧场与人的心智",
-    title: "林澈的技术棚",
+    title: "彤彤的技术棚",
     wide: false,
     body: `
       ${speakerBlock({
-        name: "林澈",
+        name: "彤彤",
         role: "你的妹妹 · 认知科学研究员",
         text: `“你终于回来了。”她把手里的传感器放进工具箱，屏幕上正滚动着一行行细小的记录，
         “牧心不是普通的农场软件。它在把天气、动物、你的作息，还有村里人的来去，放到同一个长期记忆里。”`,
@@ -1488,7 +1488,7 @@ function openSisterDialogue() {
         我无法判断你回来是因为土地，还是因为债务。我会记住接下来的选择。”`,
       })}
       <p class="story-lead" style="margin-top:18px;">
-        林澈说，牧心目前只被允许“观察和建议”。但如果它开始形成长期判断，问题就不再只是模型准不准，
+        彤彤说，牧心目前只被允许“观察和建议”。但如果它开始形成长期判断，问题就不再只是模型准不准，
         而是谁有权解释它的结论、纠正它的错误。
       </p>
       <div class="weather-note">
@@ -2637,7 +2637,7 @@ function openAiAudit() {
     body: `
       <p class="story-lead">
         技术棚里只剩服务器风扇的声音。牧心把三套治理方案投在墙上。
-        林澈坐在门边，没有替你选。她说：“模型能预测后果，但后果由谁来承担，是另一件事。”
+        彤彤坐在门边，没有替你选。她说：“模型能预测后果，但后果由谁来承担，是另一件事。”
       </p>
       <div class="ai-terminal" style="min-height:0;padding:17px;margin-bottom:15px;">
         <p class="ai-status" style="margin:0 0 10px">AUDIT / RANCH VERSION 0.9 / WORKFORCE: ${workforce}</p>
@@ -3378,7 +3378,7 @@ function handleModalClick(event) {
       closeModal();
       updateHUD(true);
       saveGame(state);
-      showToast("按住 WASD 或方向键走动。先去找技术棚里的林澈。", {
+      showToast("按住 WASD 或方向键走动。先去找技术棚里的彤彤。", {
         strong: "第一天",
         duration: 4300,
       });
