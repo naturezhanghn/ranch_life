@@ -1110,8 +1110,10 @@ function handleInteraction(id) {
   }
   switch (id) {
     case "sleep":
-      if (currentSceneId() === "farm") travelToScene("house", "road");
-      else openSleepDialog();
+      openSleepDialog();
+      break;
+    case "house":
+      travelToScene("house", "road");
       break;
     case "house_kitchen":
       openHouseKitchen();

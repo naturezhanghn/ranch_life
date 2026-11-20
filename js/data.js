@@ -2031,7 +2031,15 @@ export const INTERACTIONS = [
   { id: "forage", x: 610, y: 180, radius: 58, label: "寻找雨后足迹", keycap: "E", forageNode: true },
   {
     id: "sleep",
-    x: 216,
+    x: 145,
+    y: 252,
+    radius: 58,
+    label: "睡觉，结束今天",
+    keycap: "E",
+  },
+  {
+    id: "house",
+    x: 285,
     y: 252,
     radius: 58,
     label: "进入家里",
