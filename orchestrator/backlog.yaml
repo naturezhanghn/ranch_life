@@ -60,10 +60,11 @@ tasks:
     checks: [syntax, assets, tests, diff]
   - id: chapter-pack-01
     agent: script-writer
-    status: queued
+    status: in_progress
     depends_on: [narrative-bible]
     deliverables: [story/chapters/ch01.json, story/reports/ch01.md]
     checks: [story-ids, story-word-count, story-fallbacks]
+    note: "已交付 12 个结构完整节点，正文扩写至 6,000 字仍在门禁前。"
   - id: chapter-pack-02
     agent: script-writer
     status: queued
