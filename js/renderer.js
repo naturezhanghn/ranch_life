@@ -74,6 +74,7 @@ export class WorldRenderer {
     this.drawShippingBin(ctx, time);
     this.drawCanalGate(ctx, state, time);
     this.drawStaticProps(ctx, time);
+    this.drawFarmSignature(ctx, state, time);
     this.drawSeasonalBlockers(ctx, state, farmSeasonVariant, time);
     this.drawScenePortals(ctx, SCENE_DEFS.farm, time);
     this.drawForageNode(ctx, state, time);
@@ -151,6 +152,7 @@ export class WorldRenderer {
     this.drawSceneGround(ctx, sceneId, time);
     this.drawSeasonalRoute(ctx, state, sceneId, seasonVariant, time);
     this.drawSceneStructures(ctx, sceneId, time);
+    this.drawSceneSignature(ctx, state, sceneId, time);
     this.drawSeasonalBlockers(ctx, state, seasonVariant, time);
     this.drawScenePortals(ctx, scene, time);
     this.drawSceneLandmarks(ctx, state, sceneId, time);
@@ -585,6 +587,235 @@ export class WorldRenderer {
       ctx.beginPath();
       ctx.arc(x, y, 1.8 + (index % 2), 0, TAU);
       ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  drawFarmSignature(ctx, state, time) {
+    ctx.save();
+    // The pond catches a different rhythm from the canal, with fish rings
+    // and reeds moving gently even when the player is standing still.
+    const pond = WORLD.pond || { x: 1035, y: 620, rx: 170, ry: 70 };
+    ctx.strokeStyle = "rgba(214, 239, 211, 0.34)";
+    ctx.lineWidth = 1.5;
+    for (let ring = 0; ring < 4; ring += 1) {
+      const phase = (time * 0.22 + ring * 0.26) % 1;
+      ctx.globalAlpha = (1 - phase) * 0.45;
+      ctx.beginPath();
+      ctx.ellipse(pond.x - 52 + ring * 31, pond.y + 3 + (ring % 2) * 18, 5 + phase * 27, 2 + phase * 9, 0, 0, TAU);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 0.46;
+    ctx.strokeStyle = "#b1c987";
+    ctx.lineWidth = 2;
+    for (let blade = 0; blade < 12; blade += 1) {
+      const x = pond.x - 130 + blade * 24;
+      const y = pond.y + 48 + (blade % 3) * 7;
+      ctx.beginPath();
+      ctx.moveTo(x, y + 20);
+      ctx.quadraticCurveTo(x - 3 + Math.sin(time * 1.2 + blade) * 4, y - 3, x + 3, y - 16);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 0.22;
+    ctx.strokeStyle = "#f3dfac";
+    for (let gust = 0; gust < 7; gust += 1) {
+      const x = 350 + ((time * 26 + gust * 153) % 680);
+      const y = 410 + (gust % 4) * 42;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.quadraticCurveTo(x + 18, y - 4, x + 38, y + 1);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  drawSceneSignature(ctx, state, sceneId, time) {
+    if (sceneId === "city") this.drawCitySignature(ctx, time);
+    if (sceneId === "port") this.drawPortSignature(ctx, time);
+    if (sceneId === "council") this.drawCouncilSignature(ctx, time);
+    if (sceneId === "workshop") this.drawWorkshopSignature(ctx, time);
+    if (sceneId === "island") this.drawIslandSignature(ctx, time);
+    if (sceneId === "quarry") this.drawQuarrySignature(ctx, time);
+  }
+
+  drawCitySignature(ctx, time) {
+    ctx.save();
+    // Animated street reflections and a slow ribbon of leaves make the city
+    // feel inhabited without adding extra collision objects.
+    ctx.globalAlpha = 0.18;
+    for (let lane = 0; lane < 5; lane += 1) {
+      const offset = (time * (22 + lane * 3)) % 180;
+      ctx.strokeStyle = lane % 2 ? "#f2d28d" : "#9cc6b3";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(48 + offset, 286 + lane * 44);
+      ctx.lineTo(150 + offset, 286 + lane * 44);
+      ctx.stroke();
+    }
+    for (let leaf = 0; leaf < 11; leaf += 1) {
+      const x = ((leaf * 131 + time * 18) % 1240) - 20;
+      const y = 250 + (leaf * 37) % 330 + Math.sin(time * 0.8 + leaf) * 8;
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(time * 0.7 + leaf);
+      ctx.fillStyle = leaf % 2 ? "#d8b56e" : "#99b47b";
+      ctx.fillRect(-4, -1, 8, 2);
+      ctx.restore();
+    }
+    ctx.restore();
+  }
+
+  drawPortSignature(ctx, time) {
+    ctx.save();
+    ctx.globalAlpha = 0.27;
+    ctx.strokeStyle = "#b8e1d0";
+    ctx.lineWidth = 2;
+    for (let row = 0; row < 8; row += 1) {
+      const y = 456 + row * 34;
+      const drift = Math.sin(time * 0.7 + row) * 9;
+      ctx.beginPath();
+      ctx.moveTo(-20, y + drift);
+      ctx.bezierCurveTo(240, y - 11 + drift, 480, y + 14, 760, y + drift);
+      ctx.bezierCurveTo(980, y - 14, 1120, y + 12, 1320, y - 2 + drift);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 0.72;
+    for (let gull = 0; gull < 4; gull += 1) {
+      const x = ((time * 30 + gull * 300) % 1380) - 40;
+      const y = 180 + gull * 28 + Math.sin(time * 1.4 + gull) * 10;
+      ctx.strokeStyle = "#f4e5ba";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(x, y, 8, Math.PI + 0.25, TAU - 0.25);
+      ctx.arc(x + 13, y, 8, Math.PI + 0.25, TAU - 0.25);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  drawCouncilSignature(ctx, time) {
+    ctx.save();
+    const centerX = 876;
+    const centerY = 202;
+    const rotation = time * 0.18;
+    ctx.translate(centerX, centerY);
+    ctx.rotate(rotation);
+    ctx.globalAlpha = 0.18;
+    ctx.strokeStyle = "#f2d79b";
+    ctx.lineWidth = 2;
+    for (let ring = 0; ring < 3; ring += 1) {
+      ctx.beginPath();
+      ctx.arc(0, 0, 42 + ring * 14, 0, TAU);
+      ctx.stroke();
+    }
+    for (let ray = 0; ray < 8; ray += 1) {
+      ctx.rotate(Math.PI / 4);
+      ctx.beginPath();
+      ctx.moveTo(32, 0);
+      ctx.lineTo(76, 0);
+      ctx.stroke();
+    }
+    ctx.restore();
+    ctx.save();
+    ctx.globalAlpha = 0.17;
+    ctx.fillStyle = "#fff0bd";
+    for (let mote = 0; mote < 13; mote += 1) {
+      const x = 110 + ((mote * 163 + time * 9) % 1040);
+      const y = 360 + Math.sin(time * 0.6 + mote) * 42 + (mote % 4) * 50;
+      ctx.beginPath();
+      ctx.arc(x, y, 1.5 + mote % 2, 0, TAU);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  drawWorkshopSignature(ctx, time) {
+    ctx.save();
+    const centerX = 650;
+    const centerY = 352;
+    for (let orbit = 0; orbit < 3; orbit += 1) {
+      const angle = time * (0.55 + orbit * 0.12) + orbit * 2.1;
+      const radius = 38 + orbit * 17;
+      const x = centerX + Math.cos(angle) * radius;
+      const y = centerY + Math.sin(angle) * radius * 0.56;
+      ctx.globalAlpha = 0.42 - orbit * 0.08;
+      ctx.fillStyle = orbit === 1 ? "#f5d987" : "#b9e5bc";
+      ctx.shadowColor = ctx.fillStyle;
+      ctx.shadowBlur = 10;
+      ctx.beginPath();
+      ctx.arc(x, y, 3 + orbit, 0, TAU);
+      ctx.fill();
+    }
+    ctx.shadowBlur = 0;
+    ctx.globalAlpha = 0.25;
+    ctx.strokeStyle = "#f4d994";
+    ctx.lineWidth = 2;
+    for (let spark = 0; spark < 6; spark += 1) {
+      const x = 480 + spark * 83;
+      const y = 300 + Math.sin(time * 1.5 + spark) * 18;
+      ctx.beginPath();
+      ctx.moveTo(x, y - 4);
+      ctx.lineTo(x, y + 4);
+      ctx.moveTo(x - 4, y);
+      ctx.lineTo(x + 4, y);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  drawIslandSignature(ctx, time) {
+    ctx.save();
+    ctx.globalAlpha = 0.35;
+    ctx.strokeStyle = "#d9edc0";
+    ctx.lineWidth = 1.5;
+    const pools = [[372, 342], [760, 342], [1100, 350], [590, 590]];
+    pools.forEach(([x, y], index) => {
+      const pulse = (time * 0.34 + index * 0.22) % 1;
+      ctx.beginPath();
+      ctx.ellipse(x, y + 4, 18 + pulse * 42, 7 + pulse * 13, 0, 0, TAU);
+      ctx.stroke();
+    });
+    ctx.globalAlpha = 0.72;
+    ctx.fillStyle = "#e6e4a0";
+    for (let firefly = 0; firefly < 12; firefly += 1) {
+      const x = 90 + ((firefly * 157 + time * 11) % 1120);
+      const y = 280 + (firefly * 41) % 330 + Math.sin(time * 1.1 + firefly) * 14;
+      ctx.globalAlpha = 0.15 + Math.max(0, Math.sin(time * 2 + firefly)) * 0.55;
+      ctx.beginPath();
+      ctx.arc(x, y, 2, 0, TAU);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  drawQuarrySignature(ctx, time) {
+    ctx.save();
+    const lanternX = 300;
+    const lanternY = 560;
+    const glow = ctx.createRadialGradient(lanternX, lanternY - 26, 2, lanternX, lanternY - 26, 110);
+    glow.addColorStop(0, "rgba(244, 201, 108, 0.22)");
+    glow.addColorStop(1, "rgba(244, 201, 108, 0)");
+    ctx.fillStyle = glow;
+    ctx.fillRect(lanternX - 120, lanternY - 140, 240, 240);
+    ctx.fillStyle = "#e9c77b";
+    for (let dust = 0; dust < 18; dust += 1) {
+      const x = 110 + ((dust * 181 + time * 8) % 1040);
+      const y = 260 + (dust * 47) % 330 + Math.sin(time * 0.7 + dust) * 8;
+      ctx.globalAlpha = 0.1 + (dust % 3) * 0.04;
+      ctx.beginPath();
+      ctx.arc(x, y, 1 + dust % 2, 0, TAU);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 0.28;
+    ctx.strokeStyle = "#cba46a";
+    ctx.lineWidth = 2;
+    for (let pebble = 0; pebble < 5; pebble += 1) {
+      const x = 500 + ((time * 28 + pebble * 150) % 620);
+      const y = 288 + Math.abs(Math.sin(time * 1.3 + pebble)) * 160;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + 5, y + 7);
+      ctx.stroke();
     }
     ctx.restore();
   }
