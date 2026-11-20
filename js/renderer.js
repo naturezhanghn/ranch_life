@@ -575,6 +575,87 @@ export class WorldRenderer {
       this.drawPlaceTag(ctx, x + w / 2, y - 12, label, "rgba(255, 247, 216, 0.85)", "#36594a");
       ctx.restore();
     }
+    if (sceneId === "house") {
+      ctx.save();
+      ctx.fillStyle = "rgba(255, 248, 223, 0.68)";
+      ctx.fillRect(54, 52, WORLD.width - 108, WORLD.height - 92);
+      ctx.strokeStyle = "rgba(116, 78, 52, 0.22)";
+      ctx.lineWidth = 2;
+      for (let x = 70; x < 1210; x += 42) {
+        ctx.beginPath();
+        ctx.moveTo(x, 58);
+        ctx.lineTo(x, 670);
+        ctx.stroke();
+      }
+      for (let y = 74; y < 670; y += 42) {
+        ctx.beginPath();
+        ctx.moveTo(60, y);
+        ctx.lineTo(1220, y);
+        ctx.stroke();
+      }
+      ctx.fillStyle = "rgba(171, 125, 82, 0.25)";
+      roundedRect(ctx, 380, 270, 520, 238, 20);
+      ctx.fill();
+      ctx.fillStyle = "#c88f5d";
+      roundedRect(ctx, 92, 116, 260, 178, 12);
+      ctx.fill();
+      ctx.fillStyle = "#f1dca9";
+      roundedRect(ctx, 108, 132, 228, 146, 9);
+      ctx.fill();
+      ctx.fillStyle = "#8d5f42";
+      ctx.fillRect(124, 190, 110, 44);
+      ctx.fillStyle = "#e9c67a";
+      ctx.fillRect(250, 172, 46, 64);
+      ctx.fillStyle = "#fff0b6";
+      ctx.fillRect(256, 178, 34, 25);
+      this.drawPlaceTag(ctx, 220, 104, "厨房", "rgba(255, 247, 216, 0.9)", "#5e4936");
+
+      ctx.fillStyle = "#5b4a45";
+      roundedRect(ctx, 542, 154, 198, 106, 10);
+      ctx.fill();
+      ctx.fillStyle = "#273d42";
+      ctx.fillRect(560, 170, 162, 72);
+      ctx.fillStyle = `rgba(137, 215, 194, ${0.55 + Math.sin(time * 1.4) * 0.12})`;
+      ctx.fillRect(572, 182, 138, 48);
+      ctx.fillStyle = "#d7ab6e";
+      ctx.fillRect(620, 260, 42, 12);
+      this.drawPlaceTag(ctx, 640, 142, "电视", "rgba(255, 247, 216, 0.9)", "#5e4936");
+
+      ctx.fillStyle = "#9b684d";
+      roundedRect(ctx, 954, 150, 178, 116, 14);
+      ctx.fill();
+      ctx.fillStyle = "#d3a067";
+      ctx.fillRect(972, 168, 140, 70);
+      ctx.fillStyle = "#4b4b4a";
+      ctx.fillRect(1012, 248, 60, 12);
+      ctx.fillStyle = "#9ad0a2";
+      ctx.fillRect(1016, 186, 24, 20);
+      ctx.fillStyle = "#e3b46e";
+      ctx.fillRect(1050, 186, 24, 20);
+      this.drawPlaceTag(ctx, 1040, 138, "掌机角", "rgba(255, 247, 216, 0.9)", "#5e4936");
+
+      ctx.fillStyle = "#806247";
+      roundedRect(ctx, 934, 424, 236, 132, 14);
+      ctx.fill();
+      ctx.fillStyle = "#e5c89e";
+      roundedRect(ctx, 950, 440, 204, 100, 10);
+      ctx.fill();
+      ctx.fillStyle = "#72513e";
+      ctx.fillRect(978, 460, 150, 14);
+      ctx.fillRect(978, 506, 150, 14);
+      this.drawPlaceTag(ctx, 1052, 412, "卧室", "rgba(255, 247, 216, 0.9)", "#5e4936");
+
+      ctx.fillStyle = "rgba(120, 84, 59, 0.32)";
+      ctx.fillRect(544, 574, 192, 18);
+      ctx.fillStyle = "#e5bd70";
+      ctx.beginPath();
+      ctx.arc(640, 582, 46, 0, TAU);
+      ctx.fill();
+      ctx.fillStyle = "#6d543e";
+      ctx.fillRect(635, 610, 10, 34);
+      this.drawPlaceTag(ctx, 640, 548, "餐桌", "rgba(255, 247, 216, 0.9)", "#5e4936");
+      ctx.restore();
+    }
     if (sceneId === "island") {
       for (let index = 0; index < 18; index += 1) {
         this.drawTree(ctx, 30 + hash01(index * 8.7) * 1200, 300 + hash01(index * 11.1) * 330, 0.45 + hash01(index * 4.3) * 0.3, time);

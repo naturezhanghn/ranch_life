@@ -43,6 +43,46 @@ export const HOUSE_UPGRADES = [
   { level: 1, cost: 260, title: "增筑小屋", features: ["冰箱", "储物柜"], description: "解锁冰箱与额外储物空间。" },
   { level: 2, cost: 520, title: "厨房扩建", features: ["厨房", "料理台"], description: "解锁厨房料理，料理可恢复体力并提高关系。" },
 ];
+
+export const HOME_RECIPES = [
+  {
+    id: "farm_stew",
+    name: "田园炖菜",
+    icon: "🍲",
+    ingredients: { turnip: 1, potato: 1 },
+    energy: 22,
+    relation: 1,
+    description: "萝卜和土豆慢炖，恢复 22 点体力。",
+    requiresKitchen: false,
+  },
+  {
+    id: "milk_pancake",
+    name: "牛奶煎饼",
+    icon: "🥞",
+    ingredients: { milk: 1, egg: 1 },
+    energy: 28,
+    relation: 2,
+    description: "牛奶、鸡蛋和一点甜味，恢复 28 点体力。",
+    requiresKitchen: true,
+  },
+  {
+    id: "tide_fish_soup",
+    name: "潮鱼汤",
+    icon: "🍜",
+    ingredients: { tidefish: 1, seaweed: 1 },
+    energy: 34,
+    relation: 2,
+    description: "鱼塘与海岛的鲜味，恢复 34 点体力。",
+    requiresKitchen: true,
+  },
+];
+
+export const HOME_TV_PROGRAMS = [
+  "《界河天气》提醒你，明天的雨会先落在上游。",
+  "《老手艺》播到一半，主持人正在教人修补旧水桶。",
+  "《潮汐观察》记录了一群鱼如何绕开浅滩。",
+  "《村口访谈》邀请罗婶谈明年要分出去的种子。",
+];
 export const TOWN_EVENTS = [
   { id: "spring_market", season: "春", day: 7, title: "春芽集市", reward: 80, description: "城镇广场收购春季作物，价格提高。" },
   { id: "summer_festival", season: "夏", day: 14, title: "潮灯节", reward: 120, description: "贸易港与海岛声誉获得额外提升。", festivalId: "tide_lantern" },
@@ -66,6 +106,7 @@ export const SCENE_REGION_MAP = {
     Object.entries(REGION_SCENE_MAP).map(([regionId, sceneId]) => [sceneId, regionId]),
   ),
   quarry: "city",
+  house: "farm",
 };
 
 export const REGIONS = {
@@ -151,6 +192,23 @@ export const SCENE_DEFS = {
     portals: [
       { id: "portal_city", x: 652, y: 458, radius: 42, target: "city", label: "沿路去村庄" },
       { id: "portal_port", x: 824, y: 555, radius: 42, target: "port", label: "去码头" },
+    ],
+  },
+  house: {
+    id: "house",
+    name: "月溪牧场·家",
+    subtitle: "厨房、客厅与属于自己的夜晚",
+    palette: ["#d9c8a5", "#8b705d"],
+    spawn: { x: 640, y: 620, facing: "up" },
+    blockers: [
+      { x: 72, y: 72, w: 330, h: 150 },
+      { x: 458, y: 72, w: 364, h: 150 },
+      { x: 880, y: 72, w: 330, h: 150 },
+      { x: 72, y: 380, w: 260, h: 124 },
+      { x: 948, y: 380, w: 260, h: 124 },
+    ],
+    portals: [
+      { id: "portal_farm", x: 640, y: 680, radius: 42, target: "farm", label: "回到牧场" },
     ],
   },
   city: {
@@ -698,6 +756,12 @@ export const SCENE_SEASON_VARIANTS = {
 };
 
 export const SCENE_INTERACTIONS = {
+  house: [
+    { id: "house_kitchen", x: 200, y: 310, radius: 64, label: "在厨房做饭", keycap: "E" },
+    { id: "house_tv", x: 640, y: 300, radius: 58, label: "打开电视", keycap: "E" },
+    { id: "house_game", x: 1030, y: 300, radius: 58, label: "玩掌机游戏", keycap: "E" },
+    { id: "house_bed", x: 1030, y: 570, radius: 62, label: "上床休息", keycap: "E" },
+  ],
   city: [
     { id: "city_market", x: 430, y: 275, radius: 62, label: "进入城市建设处", keycap: "E" },
     { id: "city_mayor", x: 474, y: 526, radius: 58, label: "和市政官聊聊", keycap: "E" },
@@ -1962,7 +2026,7 @@ export const INTERACTIONS = [
     x: 216,
     y: 252,
     radius: 58,
-    label: "回屋休息",
+    label: "进入家里",
     keycap: "E",
   },
   {

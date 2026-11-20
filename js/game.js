@@ -13,6 +13,8 @@ import {
   GOVERNMENT_POLICIES,
   GIFT_PREFERENCES,
   GIFT_TAGS,
+  HOME_RECIPES,
+  HOME_TV_PROGRAMS,
   HOUSE_UPGRADES,
   ISLAND_DAILY_LIMIT,
   ISLAND_SPOTS,
@@ -57,6 +59,7 @@ import {
   animalQuality,
   buyFeed,
   buySeed,
+  cookRecipe,
   beginMinigame,
   checkDailyTasks,
   choosePostGameModifier,
@@ -111,6 +114,8 @@ import {
   resolveNpcTopic,
   startBridgeQuest,
   saveGame,
+  playHomeGame,
+  watchHomeTv,
   sellAtMarket,
   selectShippingRoute,
   shipProduce,
@@ -581,7 +586,7 @@ function getInteractionLabel(interaction) {
   if (interaction.id === "ai" && state.story.step === "aiAudit") return "进行牧心审计";
   if (interaction.id === "ai" && state.story.step === "endingReady") return "查看这段生活的结局";
   if (interaction.id === "canal" && state.story.step === "waterMeeting") return "在渠首召集村会";
-  if (interaction.id === "sleep" && state.story.step === "firstNight") return "回屋休息，结束今天";
+  if (interaction.id === "house_bed" && state.story.step === "firstNight") return "回屋休息，结束今天";
   return interaction.label;
 }
 
@@ -1105,6 +1110,19 @@ function handleInteraction(id) {
   }
   switch (id) {
     case "sleep":
+      if (currentSceneId() === "farm") travelToScene("house", "road");
+      else openSleepDialog();
+      break;
+    case "house_kitchen":
+      openHouseKitchen();
+      break;
+    case "house_tv":
+      openHouseTelevision();
+      break;
+    case "house_game":
+      openHouseGame();
+      break;
+    case "house_bed":
       openSleepDialog();
       break;
     case "forage":
@@ -2822,6 +2840,58 @@ function showEnding() {
   });
 }
 
+function homeIngredientCount(itemId) {
+  const source = state.inventory.produce[itemId] !== undefined
+    ? state.inventory.produce
+    : state.inventory.resources;
+  return source[itemId] || 0;
+}
+
+function openHouseKitchen() {
+  if (!state.house.kitchen) {
+    openModal({
+      kicker: "家里的厨房",
+      title: "料理台还没有点火",
+      body: `<p class="story-lead">厨房扩建后，旧屋的一角会变成真正的料理台。先在城市的房屋与生活面板完成厨房扩建。</p><div class="weather-note">厨房升级需要 520 金。房屋升级不会消耗背包里的食材。</div>`,
+      footer: `<button type="button" class="button button--primary" data-action="close">先回客厅</button>`,
+    });
+    return;
+  }
+  const recipes = HOME_RECIPES.map((recipe) => {
+    const ingredientText = Object.entries(recipe.ingredients)
+      .map(([itemId, amount]) => `${itemId} ${homeIngredientCount(itemId)} / ${amount}`)
+      .join(" · ");
+    const canCook = Object.entries(recipe.ingredients).every(([itemId, amount]) => homeIngredientCount(itemId) >= amount);
+    return `<article class="home-recipe-card"><span class="home-recipe-icon">${recipe.icon}</span><div><strong>${recipe.name}</strong><small>${recipe.description}</small><small>${ingredientText}</small></div><button type="button" class="shop-buy" data-action="homeCook" data-value="${recipe.id}" ${canCook ? "" : "disabled"}>烹饪</button></article>`;
+  }).join("");
+  openModal({
+    kicker: `家里 · 厨房 · ${formatClock(state.minutes)}`,
+    title: "把牧场的收成煮成一顿饭",
+    wide: true,
+    body: `<p class="story-lead">锅里的香气会留在屋里。料理消耗农场产出，恢复体力，也让社区关系记住你愿意把收成放上餐桌。</p><div class="home-recipe-grid">${recipes}</div>`,
+    footer: `<button type="button" class="button button--ghost" data-action="close">离开厨房</button>`,
+  });
+}
+
+function openHouseTelevision() {
+  const program = HOME_TV_PROGRAMS[(state.day - 1) % HOME_TV_PROGRAMS.length];
+  openModal({
+    kicker: `家里 · 电视 · ${formatClock(state.minutes)}`,
+    title: "晚间节目",
+    body: `<div class="tv-screen-card"><div class="tv-screen-glow">ON AIR</div><p>${program}</p></div><div class="weather-note">看完节目会经过十分钟。你可以记下消息，也可以马上回到牧场。</div>`,
+    footer: `<button type="button" class="button button--ghost" data-action="close">关掉电视</button><button type="button" class="button button--primary" data-action="watchHomeTv">看完这一集</button>`,
+  });
+}
+
+function openHouseGame() {
+  openModal({
+    kicker: `家里 · 掌机 · ${formatClock(state.minutes)}`,
+    title: "牧场掌机",
+    body: `<div class="home-game-card"><div class="home-game-screen">✦ 今日挑战<br><strong>把三块田排成一条彩虹</strong></div><p>这是一局不消耗农场物资的小游戏。玩完会经过十五分钟，并恢复一点精神。</p></div>`,
+    footer: `<button type="button" class="button button--ghost" data-action="close">放回掌机</button><button type="button" class="button button--primary" data-action="playHomeGame">开始游戏</button>`,
+  });
+}
+
 function openSleepDialog(auto = false) {
   const matured = state.plots.filter((plot) => {
     if (!plot.crop) return false;
@@ -3469,6 +3539,38 @@ function handleModalClick(event) {
         audio.play("error");
         showToast(result.message);
       }
+      break;
+    }
+    case "homeCook": {
+      const result = cookRecipe(state, value);
+      if (result.ok) {
+        audio.play("success");
+        saveGame(state);
+        updateHUD(true);
+        openHouseKitchen();
+        showToast(result.message, { strong: "厨房" });
+      } else {
+        audio.play("error");
+        showToast(result.message, { strong: "厨房" });
+      }
+      break;
+    }
+    case "watchHomeTv": {
+      const result = watchHomeTv(state);
+      audio.play("memory");
+      saveGame(state);
+      updateHUD(true);
+      closeModal();
+      showToast(result.message, { strong: "电视" });
+      break;
+    }
+    case "playHomeGame": {
+      const result = playHomeGame(state);
+      audio.play("success");
+      saveGame(state);
+      updateHUD(true);
+      closeModal();
+      showToast(result.message, { strong: "掌机" });
       break;
     }
     case "buyFeed": {

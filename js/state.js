@@ -15,6 +15,7 @@ import {
   FORAGE_NODE_DEFS,
   NIGHT_MINUTES,
   HOUSE_UPGRADES,
+  HOME_RECIPES,
   GOVERNMENT_POLICIES,
   ISLAND_DAILY_LIMIT,
   ISLAND_SPOTS,
@@ -322,6 +323,7 @@ export function createInitialState() {
         tidefish: 0,
         ore: 0,
       },
+      cooked: {},
     },
     bag: {
       level: 0,
@@ -345,6 +347,7 @@ export function createInitialState() {
       tripHistory: [],
     },
     house: { level: 0, upgrades: {}, fridge: {}, storageSlots: 0, kitchen: false },
+    home: { mealsCooked: 0, tvMinutes: 0, gamesPlayed: 0 },
     forage: {
       available: [],
       collected: {},
@@ -2774,6 +2777,49 @@ export function upgradeHouse(state) {
   return { ok: true, message: `${next.title}完成，${next.features.join("、")}已经可用。` };
 }
 
+export function cookRecipe(state, recipeId) {
+  const recipe = HOME_RECIPES.find((entry) => entry.id === recipeId);
+  if (!recipe) return { ok: false, message: "这道菜还没有写进食谱。" };
+  if (!state.house?.kitchen && recipe.requiresKitchen !== false) {
+    return { ok: false, message: "先完成厨房扩建，料理台才有火。" };
+  }
+  const missing = Object.entries(recipe.ingredients).find(([itemId, amount]) => {
+    const bag = state.inventory.produce[itemId] !== undefined
+      ? state.inventory.produce
+      : state.inventory.resources;
+    return (bag[itemId] || 0) < amount;
+  });
+  if (missing) return { ok: false, message: `还缺少 ${missing[1]} 份${missing[0]}。` };
+  for (const [itemId, amount] of Object.entries(recipe.ingredients)) {
+    const bag = state.inventory.produce[itemId] !== undefined
+      ? state.inventory.produce
+      : state.inventory.resources;
+    bag[itemId] -= amount;
+  }
+  state.inventory.cooked[recipe.id] = (state.inventory.cooked[recipe.id] || 0) + 1;
+  state.home.mealsCooked += 1;
+  state.energy = bounded(state.energy + recipe.energy, 0, state.maxEnergy);
+  state.relations.community = bounded(state.relations.community + recipe.relation, 0, 100);
+  state.minutes = Math.min(24 * 60, state.minutes + 12);
+  addMemory(state, `你在家里做了${recipe.name}，恢复 ${recipe.energy} 点体力。`, "routine", 2);
+  return { ok: true, recipe, message: `${recipe.name}做好了，体力恢复 ${recipe.energy} 点。` };
+}
+
+export function watchHomeTv(state) {
+  state.home.tvMinutes += 30;
+  state.minutes = Math.min(24 * 60, state.minutes + 10);
+  addMemory(state, "你在家里看了一会儿电视，记下节目里关于界河的天气和人的消息。", "routine", 1);
+  return { ok: true, message: "节目结束了。你记住了一条明天可以用上的消息。" };
+}
+
+export function playHomeGame(state) {
+  state.home.gamesPlayed += 1;
+  state.minutes = Math.min(24 * 60, state.minutes + 15);
+  state.energy = bounded(state.energy + 3, 0, state.maxEnergy);
+  addMemory(state, "你在家里玩了一局牧场掌机，短暂地把收成和账本放到一边。", "routine", 1);
+  return { ok: true, message: "这一局通关了，心情和体力都轻松了一点。" };
+}
+
 const FORAGE_WINDOW_MINUTES = DAY_START_MINUTES + 180;
 
 function forageItemForSeason(state, itemId) {
@@ -3501,6 +3547,7 @@ export function loadGame() {
         produce: { ...base.inventory.produce, ...(parsed.inventory?.produce || {}) },
         qualityProduce: { ...base.inventory.qualityProduce, ...(parsed.inventory?.qualityProduce || {}) },
         resources: { ...base.inventory.resources, ...(parsed.inventory?.resources || {}) },
+        cooked: { ...base.inventory.cooked, ...(parsed.inventory?.cooked || {}) },
       },
       bag: { ...base.bag, ...(parsed.bag || {}) },
       toolLevels: { ...base.toolLevels, ...(parsed.toolLevels || {}) },
@@ -3518,6 +3565,7 @@ export function loadGame() {
           : base.shipping.selectedRoute,
       },
       house: { ...base.house, ...(parsed.house || {}), upgrades: { ...base.house.upgrades, ...(parsed.house?.upgrades || {}) }, fridge: { ...base.house.fridge, ...(parsed.house?.fridge || {}) } },
+      home: { ...base.home, ...(parsed.home || {}) },
       forage: {
         ...base.forage,
         ...(parsed.forage || {}),
