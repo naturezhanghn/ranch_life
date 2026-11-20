@@ -1758,6 +1758,38 @@ export const WORKER_DEFS = {
     hireCost: 160,
     talent: "熟悉潮汐和鱼群，会钓鱼也会维护鱼塘。",
   },
+  irrigator: {
+    id: "irrigator",
+    name: "沈露",
+    role: "watering",
+    wage: 13,
+    hireCost: 105,
+    talent: "每天检查水罐和田垄，为作物补上关键的水分。",
+  },
+  pondkeeper: {
+    id: "pondkeeper",
+    name: "许波",
+    role: "fishery",
+    wage: 15,
+    hireCost: 125,
+    talent: "会配鱼食、修鱼网，让鱼塘保持清洁。",
+  },
+  trader: {
+    id: "trader",
+    name: "唐枝",
+    role: "trade",
+    wage: 17,
+    hireCost: 135,
+    talent: "整理订单和出货箱，减少贸易日结的遗漏。",
+  },
+  ranger: {
+    id: "ranger",
+    name: "叶青",
+    role: "island",
+    wage: 16,
+    hireCost: 150,
+    talent: "熟悉海岛路线，替你照看潮汐资源。",
+  },
 };
 
 export const ISLAND_SPOTS = {

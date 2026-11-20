@@ -7,6 +7,7 @@ import {
   SCENE_FINDS,
   SCENE_INTERACTIONS,
   SCENE_SEASON_VARIANTS,
+  WORKER_DEFS,
   scheduledNpcPositions,
   TOOLS,
   WORLD,
@@ -94,6 +95,39 @@ export class WorldRenderer {
     drawables.push({
       y: workerY,
       draw: () => this.drawWorker(ctx, 705, workerY, time),
+    });
+
+    const workerSpots = {
+      watering: { x: 590, y: 478 },
+      planting: { x: 510, y: 505 },
+      animals: { x: 1060, y: 448 },
+      trade: { x: 240, y: 650 },
+      island: { x: 198, y: 546 },
+      fishing: { x: 1090, y: 610 },
+      fishery: { x: 980, y: 690 },
+    };
+    const assignedWorkers = new Set();
+    for (const [role, workerId] of Object.entries(state.workers?.assignments || {})) {
+      const worker = WORKER_DEFS[workerId];
+      const spot = workerSpots[role];
+      if (!worker || !spot || assignedWorkers.has(workerId)) continue;
+      assignedWorkers.add(workerId);
+      drawables.push({
+        y: spot.y,
+        draw: () => this.drawFarmEmployee(ctx, spot.x, spot.y, worker, role, time),
+      });
+    }
+    const unassignedWorkers = (state.workers?.hired || [])
+      .filter((workerId) => !assignedWorkers.has(workerId))
+      .map((workerId) => WORKER_DEFS[workerId])
+      .filter(Boolean);
+    unassignedWorkers.forEach((worker, index) => {
+      const x = 760 + (index % 3) * 42;
+      const y = 650 + Math.floor(index / 3) * 22;
+      drawables.push({
+        y,
+        draw: () => this.drawFarmEmployee(ctx, x, y, worker, "休息", time),
+      });
     });
 
     if (this.shouldShowInvestor(state)) {
@@ -2189,6 +2223,67 @@ export class WorldRenderer {
     ctx.font = "700 9px 'PingFang SC', sans-serif";
     ctx.textAlign = "center";
     ctx.fillText("老周", 0, -73);
+    ctx.restore();
+  }
+
+  drawFarmEmployee(ctx, x, y, worker, role, time) {
+    this.drawShadow(ctx, x, y + 4, 18, 6);
+    const bob = Math.sin(time * 1.6 + x * 0.02) * 0.8;
+    const colors = {
+      planting: "#b97855",
+      watering: "#5d8d9a",
+      animals: "#8c7655",
+      fishing: "#4c8692",
+      fishery: "#65a58d",
+      trade: "#a27b52",
+      island: "#6f9464",
+      休息: "#89705f",
+    };
+    ctx.save();
+    ctx.translate(x, y + bob);
+    ctx.fillStyle = colors[role] || "#7c6d5c";
+    ctx.fillRect(-13, -38, 26, 30);
+    ctx.fillStyle = "#d8ad86";
+    ctx.beginPath();
+    ctx.arc(0, -49, 10, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = role === "fishing" || role === "fishery" ? "#315e6b" : "#4f443c";
+    ctx.beginPath();
+    ctx.arc(0, -54, 12, Math.PI, 0);
+    ctx.fill();
+    ctx.fillRect(-14, -55, 28, 4);
+    ctx.fillStyle = "#3f493f";
+    ctx.fillRect(-10, -8, 7, 9);
+    ctx.fillRect(3, -8, 7, 9);
+    ctx.strokeStyle = role === "watering" ? "#afd2d0" : role === "planting" ? "#dfbd72" : "#c8a36e";
+    ctx.lineWidth = 2;
+    if (role === "planting") {
+      ctx.beginPath();
+      ctx.moveTo(14, -10);
+      ctx.lineTo(22, 5);
+      ctx.stroke();
+    } else if (role === "watering") {
+      ctx.beginPath();
+      ctx.moveTo(14, -19);
+      ctx.lineTo(24, -8);
+      ctx.stroke();
+    } else if (role === "fishing" || role === "fishery") {
+      ctx.beginPath();
+      ctx.moveTo(14, -22);
+      ctx.lineTo(25, -34);
+      ctx.stroke();
+    } else if (role === "animals") {
+      ctx.beginPath();
+      ctx.arc(18, -6, 5, 0, TAU);
+      ctx.stroke();
+    }
+    ctx.fillStyle = "rgba(255, 247, 218, 0.94)";
+    ctx.font = "700 8px 'PingFang SC', sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(worker.name, 0, -69);
+    ctx.globalAlpha = 0.72;
+    ctx.font = "600 7px 'PingFang SC', sans-serif";
+    ctx.fillText(role, 0, -59);
     ctx.restore();
   }
 
