@@ -398,6 +398,12 @@ export function createInitialState() {
     town: { eventsSeen: [], birthdayGifts: {}, festivalBonus: 0 },
     plots: createPlots(),
     animals: createAnimals(),
+    fishPond: {
+      stock: 2,
+      capacity: 8,
+      health: 72,
+      lastHarvestDay: 0,
+    },
     player: {
       x: PLAYER_START.x,
       y: PLAYER_START.y,
@@ -523,19 +529,25 @@ export function createInitialState() {
       lastSessionDay: 0,
     },
     sprites: {
-      available: ["seedling"],
+      available: ["seedling", "sprout"],
       unlocked: ["seedling"],
       assignments: {
         watering: "seedling",
+        planting: null,
         animals: null,
         trade: null,
         island: null,
+        fishing: null,
+        fishery: null,
       },
       assignmentEfficiency: {
         watering: 1,
+        planting: 1,
         animals: 1,
         trade: 1,
         island: 1,
+        fishing: 1,
+        fishery: 1,
       },
       friendship: {
         seedling: 20,
@@ -1782,6 +1794,9 @@ export function investInCity(state, projectId) {
   if (projectId === "ferry") {
     if (!state.world.unlockedRegions.includes("island")) state.world.unlockedRegions.push("island");
     if (!state.sprites.available.includes("tide")) state.sprites.available.push("tide");
+    for (const spriteId of ["angler", "pondling"]) {
+      if (!state.sprites.available.includes(spriteId)) state.sprites.available.push(spriteId);
+    }
     addMemory(state, "蓝潮渡轮重新响起汽笛。海岛不再只是地图边缘的一个名字。", "travel", 3);
   } else if (projectId === "clinic") {
     state.maxEnergy += 10;
@@ -1874,7 +1889,16 @@ export function recruitSprite(state, spriteId) {
 
 export function assignSprite(state, spriteId, role) {
   const sprite = SPRITE_DEFS[spriteId];
-  const roles = ["watering", "animals", "trade", "island"];
+  const roles = ["watering", "planting", "animals", "trade", "island", "fishing", "fishery"];
+  const roleLabels = {
+    watering: "浇水",
+    planting: "播种",
+    animals: "牲畜",
+    trade: "贸易",
+    island: "海岛探索",
+    fishing: "钓鱼",
+    fishery: "养鱼",
+  };
   if (!sprite || !roles.includes(role)) return { ok: false, message: "这个分工还没有准备好。" };
   if (!state.sprites.unlocked.includes(spriteId)) return { ok: false, message: "先邀请这只小精灵。" };
   for (const key of roles) {
@@ -1887,7 +1911,7 @@ export function assignSprite(state, spriteId, role) {
   state.sprites.dispatches += 1;
   return {
     ok: true,
-    message: `${sprite.name}现在负责${role === "watering" ? "田地" : role === "animals" ? "牲畜" : role === "trade" ? "贸易" : "海岛探索"}。${efficiency < 1 ? "这是跨岗分工，效率约为主职的一半。" : "它正在做最擅长的工作。"}`,
+    message: `${sprite.name}现在负责${roleLabels[role]}。${efficiency < 1 ? "这是跨岗分工，效率约为主职的一半。" : "它正在做最擅长的工作。"}`,
   };
 }
 
@@ -2325,6 +2349,39 @@ function applySpriteAssignments(state, report) {
     return;
   }
   const assignments = state.sprites?.assignments || {};
+  if (assignments.planting) {
+    const spriteId = assignments.planting;
+    const efficiency = state.sprites.assignmentEfficiency?.planting || 1;
+    const cropId = state.selectedSeed;
+    const crop = CROPS[cropId];
+    const calendar = SEASONAL_CROP_CALENDAR[cropId];
+    const canPlant = crop && (!calendar || calendar.seasons.includes(state.season));
+    let planted = 0;
+    const limit = efficiency >= 1 ? 2 : 1;
+    if (canPlant && (state.inventory.seeds[cropId] || 0) > 0) {
+      for (const plot of state.plots) {
+        if (planted >= limit || (state.inventory.seeds[cropId] || 0) <= 0) break;
+        if (plot.crop) continue;
+        if (plot.state !== "tilled") {
+          plot.state = "tilled";
+          bumpCounter(state, "tilled");
+        }
+        plot.crop = cropId;
+        plot.growth = 0;
+        plot.watered = false;
+        plot.wateredDays = 0;
+        state.inventory.seeds[cropId] -= 1;
+        planted += 1;
+        bumpCounter(state, "planted");
+        if (state.story.step === "plantSeeds") {
+          state.story.plantedForStory += 1;
+          if (state.story.plantedForStory >= 3) state.story.step = "firstNight";
+        }
+      }
+    }
+    if (planted) report.helperActions.push(`${SPRITE_DEFS[spriteId]?.name || "员工"}替你开垦并播下了 ${planted} 颗${crop.name}${efficiency < 1 ? "（跨岗效率较低）" : ""}`);
+  }
+
   if (assignments.watering && state.water > 0) {
     let watered = 0;
     const efficiency = state.sprites.assignmentEfficiency?.watering || 1;
@@ -2344,16 +2401,50 @@ function applySpriteAssignments(state, report) {
 
   if (assignments.animals && state.feed > 0) {
     const efficiency = state.sprites.assignmentEfficiency?.animals || 1;
-    const animal = state.animals
+    const limit = efficiency >= 1 ? state.animals.length : 1;
+    const animals = state.animals
       .filter((entry) => !entry.fed)
-      .sort((a, b) => a.mood - b.mood)[0];
-    if (animal) {
+      .sort((a, b) => a.mood - b.mood)
+      .slice(0, limit);
+    let cared = 0;
+    for (const animal of animals) {
+      if (state.feed <= 0) break;
       animal.fed = true;
       state.feed -= 1;
       animal.mood = Math.min(100, animal.mood + (efficiency >= 1 ? 4 : 2));
       animal.affection = Math.min(100, animal.affection + (efficiency >= 1 ? 2 : 1));
       bumpCounter(state, "fed");
-      report.helperActions.push(`烬烬照顾了心情最低的牲畜${efficiency < 1 ? "（跨岗效率较低）" : ""}`);
+      cared += 1;
+    }
+    if (cared) report.helperActions.push(`${SPRITE_DEFS[assignments.animals]?.name || "员工"}照顾了 ${cared} 只牲畜${efficiency < 1 ? "（跨岗效率较低）" : ""}`);
+  }
+
+  if (assignments.fishing && state.world.unlockedRegions.includes("island")) {
+    const efficiency = state.sprites.assignmentEfficiency?.fishing || 1;
+    if (efficiency >= 1) {
+      state.inventory.resources.tidefish = (state.inventory.resources.tidefish || 0) + 1;
+      state.stats.fishCaught += 1;
+      bumpCounter(state, "explored");
+      report.helperActions.push(`${SPRITE_DEFS[assignments.fishing]?.name || "员工"}沿潮汐路线钓回了 1 条鱼`);
+    } else {
+      report.helperActions.push("跨岗钓鱼今天没有找到合适的潮位");
+    }
+  }
+
+  if (assignments.fishery && state.fishPond) {
+    const efficiency = state.sprites.assignmentEfficiency?.fishery || 1;
+    const pond = state.fishPond;
+    const growth = efficiency >= 1 ? 2 : 1;
+    pond.stock = Math.min(pond.capacity, pond.stock + growth);
+    pond.health = Math.min(100, pond.health + 4);
+    if (pond.stock >= 3) {
+      pond.stock -= 1;
+      pond.lastHarvestDay = state.day;
+      state.inventory.resources.tidefish = (state.inventory.resources.tidefish || 0) + 1;
+      state.stats.fishCaught += 1;
+      report.helperActions.push(`${SPRITE_DEFS[assignments.fishery]?.name || "员工"}照看鱼塘并收获了 1 条鲜鱼`);
+    } else {
+      report.helperActions.push(`${SPRITE_DEFS[assignments.fishery]?.name || "员工"}给鱼塘添了鱼食，鱼群正在长大`);
     }
   }
 
@@ -3297,6 +3388,7 @@ export function loadGame() {
         rewardClaimed: parsed.festival?.rewardClaimed === true,
       },
       town: { ...base.town, ...(parsed.town || {}), eventsSeen: Array.isArray(parsed.town?.eventsSeen) ? parsed.town.eventsSeen : base.town.eventsSeen, birthdayGifts: { ...base.town.birthdayGifts, ...(parsed.town?.birthdayGifts || {}) } },
+      fishPond: { ...base.fishPond, ...(parsed.fishPond || {}) },
       stats: { ...base.stats, ...(parsed.stats || {}) },
       ai: {
         ...base.ai,
@@ -3418,6 +3510,15 @@ export function loadGame() {
     merged.energy = Number.isFinite(Number(merged.energy))
       ? Math.max(0, Math.min(merged.maxEnergy, Number(merged.energy)))
       : base.energy;
+    merged.fishPond.stock = Number.isFinite(Number(merged.fishPond.stock))
+      ? Math.max(0, Math.min(merged.fishPond.capacity, Math.floor(Number(merged.fishPond.stock))))
+      : base.fishPond.stock;
+    merged.fishPond.capacity = Number.isFinite(Number(merged.fishPond.capacity))
+      ? Math.max(1, Math.floor(Number(merged.fishPond.capacity)))
+      : base.fishPond.capacity;
+    merged.fishPond.health = Number.isFinite(Number(merged.fishPond.health))
+      ? Math.max(0, Math.min(100, Number(merged.fishPond.health)))
+      : base.fishPond.health;
     merged.maxWater = Number.isFinite(Number(merged.maxWater)) ? Math.max(1, Math.floor(Number(merged.maxWater))) : base.maxWater;
     merged.water = Number.isFinite(Number(merged.water))
       ? Math.max(0, Math.min(merged.maxWater, Number(merged.water)))

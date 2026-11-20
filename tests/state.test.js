@@ -743,6 +743,27 @@ test("government policies and sprite assignments create daily automation", () =>
   assert.equal(state.plots[0].growth, 1);
 });
 
+test("workforce can plant crops, care for livestock, fish, and raise fish", () => {
+  const state = freshState();
+  state.coins = 600;
+  assert.equal(recruitSprite(state, "sprout").ok, true);
+  assert.equal(assignSprite(state, "sprout", "planting").ok, true);
+  state.sprites.unlocked.push("ember");
+  state.sprites.friendship.ember = 18;
+  assert.equal(assignSprite(state, "ember", "animals").ok, true);
+  assert.equal(investInCity(state, "ferry").ok, true);
+  assert.equal(recruitSprite(state, "angler").ok, true);
+  assert.equal(assignSprite(state, "angler", "fishing").ok, true);
+  assert.equal(recruitSprite(state, "pondling").ok, true);
+  assert.equal(assignSprite(state, "pondling", "fishery").ok, true);
+  const report = advanceDay(state);
+  assert.ok(report.helperActions.some((entry) => entry.includes("播下")));
+  assert.equal(state.plots.filter((plot) => plot.crop).length, 2);
+  assert.equal(report.animalsUnfed.length, 0);
+  assert.equal(state.stats.fishCaught, 2);
+  assert.ok(state.inventory.resources.tidefish >= 2);
+});
+
 test("sleep returns the player to the farm scene and spawn", () => {
   const state = freshState();
   switchScene(state, "city", "road");

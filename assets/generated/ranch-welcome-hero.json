@@ -1,0 +1,37 @@
+{
+  "model": "flux2-klein-4b",
+  "provider": "local",
+  "model_id": "flux2-klein-4b",
+  "path": "/inspire/ssd/project/sais-bio/public/zhangziran/checkpoints/image_editing/FLUX.2-klein-4B",
+  "steps": 4,
+  "seed": 20261120,
+  "device": "cuda",
+  "dtype": "bf16",
+  "cpu_offload": false,
+  "guidance": 1.0,
+  "size": [
+    1536,
+    1024
+  ],
+  "task": "t2i",
+  "prompt": "A warm hand-painted editorial illustration for an original cozy narrative farming game, a small border ranch at sunrise beside an old canal, vegetable plots, a red barn, three friendly animals, a tiny water pond with reeds, two helpful whimsical farm workers in the distance, muted forest green, terracotta, cream and golden light, textured gouache and screenprint feel, clear open space in the upper left for interface text, no words, no letters, no logos, no watermark",
+  "requested_seed": 20261120,
+  "script_sha256": "ff57baa31b2a2f654c9b3b6f03f1fbcf3ee3149220341ffc924924a2bc611b9c",
+  "effective_seed": 20261120,
+  "negative_prompt": "text, letters, logo, watermark, photorealistic, 3d render, horror, oversaturated neon",
+  "quality": "high",
+  "requested_size": [
+    1536,
+    1024
+  ],
+  "num_images": 1,
+  "output_sizes": [
+    [
+      1536,
+      1024
+    ]
+  ],
+  "timestamp_utc": "2026-11-20T03:36:46Z",
+  "output": "/inspire/ssd/project/sais-bio/public/zhangziran/game/assets/generated/ranch-welcome-hero.png",
+  "output_sha256": "1cc604e46904e25f032d2043d34ee34b203af0d2662f3b9fe5cacfb4640432cf"
+}

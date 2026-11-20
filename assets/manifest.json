@@ -31,6 +31,21 @@
       "maxBytes": 3145728,
       "runtime": false,
       "fallback": "programmatic-gameplay-props"
+    },
+    {
+      "id": "ranch-welcome-hero",
+      "path": "assets/generated/ranch-welcome-hero.png",
+      "scene": "welcome",
+      "kind": "hero-illustration",
+      "source": "generated",
+      "license": "original-project-asset",
+      "width": 1536,
+      "height": 1024,
+      "size": 3175364,
+      "version": 1,
+      "maxBytes": 4194304,
+      "runtime": true,
+      "fallback": "programmatic-welcome-landscape"
     }
   ]
 }

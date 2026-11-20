@@ -2061,7 +2061,15 @@ function renderGovernmentPanel() {
 }
 
 function renderSpritesPanel() {
-  const roleLabels = { watering: "田地", animals: "牲畜", trade: "贸易", island: "海岛" };
+  const roleLabels = {
+    watering: "浇水",
+    planting: "播种",
+    animals: "牲畜",
+    trade: "贸易",
+    island: "海岛探索",
+    fishing: "钓鱼",
+    fishery: "养鱼",
+  };
   const assignments = state.sprites.assignments || {};
   const roleButtons = (spriteId) => Object.entries(roleLabels)
     .map(([role, label]) => {
@@ -2088,6 +2096,7 @@ function renderSpritesPanel() {
       regionMetric("伙伴数量", state.sprites.unlocked.length),
       regionMetric("派遣次数", state.sprites.dispatches),
       regionMetric("自动劳动", Object.values(assignments).filter(Boolean).length, "is-gold"),
+      regionMetric("鱼塘存鱼", `${state.fishPond?.stock || 0}/${state.fishPond?.capacity || 0}`, "is-blue"),
     ].join(""))}
     <div class="sprite-workboard">
       <span>当前分工</span>
@@ -2095,7 +2104,7 @@ function renderSpritesPanel() {
     </div>
     <div class="region-section-heading"><span>工坊名册</span><small>点击分工按钮即可重新安排</small></div>
     <div class="sprite-roster">${roster}</div>
-    <div class="region-note">芽芽负责田地，烬烬照料牲畜，金穗整理贸易，潮潮探索海岛。每只精灵每天都会因为与你一起生活而成长。</div>
+    <div class="region-note">员工可以分别负责浇水、播种、牲畜、钓鱼和鱼塘。播种员工会自动开垦空地并使用当前选中的种子，养鱼员工会让鱼塘逐渐产出鲜鱼。</div>
   `;
 }
 
@@ -2802,6 +2811,12 @@ function openSleepDialog(auto = false) {
   const helperNote = state.sprites.assignments?.watering
     ? `小精灵${SPRITE_DEFS[state.sprites.assignments.watering]?.name || "伙伴"}今晚会负责${state.sprites.assignmentEfficiency?.watering < 1 ? "一块" : "两块"}田的露水。它不会替你完成所有照料，日结里会记录它实际做了什么。`
     : "";
+  const workforceNote = [
+    state.sprites.assignments?.planting ? `播种员工会使用${CROPS[state.selectedSeed]?.name || "当前种子"}补种空地` : "",
+    state.sprites.assignments?.animals ? "牲畜员工会照料未进食的动物" : "",
+    state.sprites.assignments?.fishing ? "钓鱼员工会沿潮汐路线工作" : "",
+    state.sprites.assignments?.fishery ? `养鱼员工会照看鱼塘（${state.fishPond?.stock || 0}/${state.fishPond?.capacity || 0}）` : "",
+  ].filter(Boolean).join("；");
 
   if (auto) {
     sleepAndAdvance(true);
@@ -2826,6 +2841,7 @@ function openSleepDialog(auto = false) {
       }
       ${special ? `<div class="clue-verification">${special}</div>` : ""}
       ${helperNote ? `<div class="weather-note">${helperNote}</div>` : ""}
+      ${workforceNote ? `<div class="weather-note">${workforceNote}。</div>` : ""}
       <p class="story-lead" style="margin-top:15px;">
         睡觉后，浇水过的作物会生长，喂食过的动物会在清晨留下产品。
         明天的时间会从 06:00 重新开始。
