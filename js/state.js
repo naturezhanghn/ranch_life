@@ -2635,6 +2635,58 @@ function applyWorkerAssignments(state, report) {
     if (actions.length) report.helperActions.push(`${worker.name}：${actions.join("、")}`);
   }
 
+  const animalWorkerId = workforce.assignments?.animals;
+  if (animalWorkerId && assigned.has(animalWorkerId)) {
+    const animalWorker = WORKER_DEFS[animalWorkerId];
+    let talked = 0;
+    let brushed = 0;
+    let grazed = 0;
+    const missingFeed = state.animals.filter((animal) => !animal.fed).length;
+    const feedPrice = PRODUCTS.feed.buyPrice;
+    const feedToBuy = Math.max(0, Math.min(missingFeed - state.feed, Math.floor(state.coins / feedPrice)));
+    if (feedToBuy > 0) {
+      state.coins -= feedToBuy * feedPrice;
+      state.feed += feedToBuy;
+      report.helperActions.push(`${animalWorker?.name || "牲畜员工"}采购了 ${feedToBuy} 袋饲料`);
+    }
+    for (const animal of state.animals) {
+      if (!animal.fed && state.feed > 0) {
+        animal.fed = true;
+        state.feed -= 1;
+        animal.mood = Math.min(100, animal.mood + 4);
+        animal.affection = Math.min(100, animal.affection + 2);
+        animal.health = bounded(animal.health + 3);
+        animal.unhappy = false;
+        bumpCounter(state, "fed");
+      }
+      if (!animal.talked) {
+        animal.talked = true;
+        animal.affection = bounded(animal.affection + 2);
+        animal.mood = bounded(animal.mood + 2);
+        state.stats.talkedAnimals += 1;
+        talked += 1;
+      }
+      if (!animal.brushed) {
+        animal.brushed = true;
+        animal.affection = bounded(animal.affection + 2);
+        animal.health = bounded(animal.health + 2);
+        animal.mood = bounded(animal.mood + 2);
+        state.stats.brushedAnimals += 1;
+        brushed += 1;
+      }
+      animal.outside = true;
+      animal.outdoorMinutes = Math.min(511, animal.outdoorMinutes + 60);
+      animal.totalOutdoorMinutes = Math.min(65535, animal.totalOutdoorMinutes + 60);
+      animal.careDays += 1;
+      grazed += 1;
+    }
+    if (talked || brushed || grazed) {
+      report.helperActions.push(
+        `${animalWorker?.name || "牲畜员工"}完成全套牲畜照料：陪伴 ${talked} 只、刷毛 ${brushed} 只、放牧 ${grazed} 只`,
+      );
+    }
+  }
+
   const nameForRole = (role) => WORKER_DEFS[workforce.assignments?.[role]]?.name || "员工";
 
   if (workforce.assignments?.fishing && assigned.has(workforce.assignments.fishing) && state.world.unlockedRegions.includes("island")) {

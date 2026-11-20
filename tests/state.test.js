@@ -117,7 +117,7 @@ test("longform story offers one daily choice and records it once", () => {
 
 test("home scene activities cook, watch, and play", () => {
   const state = freshState();
-  state.house.kitchen = true;
+  state.house.kitchen = false;
   state.inventory.produce.turnip = 1;
   state.inventory.produce.potato = 1;
   const cooked = cookRecipe(state, "farm_stew");
@@ -809,6 +809,36 @@ test("human employees can be hired, assigned, and paid from daily work", () => {
   assert.equal(state.coins, before - 14);
   assert.ok(report.helperActions.some((entry) => entry.includes("周禾")));
   assert.equal(state.plots.filter((plot) => plot.crop).length, 2);
+});
+
+test("animal employee completes feeding, companionship, grooming, and grazing", () => {
+  const state = freshState();
+  state.coins = 500;
+  state.feed = 0;
+  assert.equal(hireWorker(state, "herder").ok, true);
+  assert.equal(assignWorker(state, "herder", "animals").ok, true);
+  const report = advanceDay(state);
+  assert.equal(report.animalsUnfed.length, 0);
+  assert.ok(state.animals.every((animal) => animal.fed === false));
+  assert.ok(state.animals.every((animal) => animal.talked === false));
+  assert.ok(state.animals.every((animal) => animal.brushed === false));
+  assert.ok(state.animals.every((animal) => animal.outdoorMinutes === 0));
+  assert.equal(state.stats.talkedAnimals, state.animals.length);
+  assert.equal(state.stats.brushedAnimals, state.animals.length);
+  assert.ok(state.animals.every((animal) => animal.careDays > 0));
+  assert.ok(report.helperActions.some((entry) => entry.includes("全套牲畜照料")));
+});
+
+test("fishing employee returns a daily catch automatically", () => {
+  const state = freshState();
+  state.coins = 500;
+  state.world.unlockedRegions.push("island");
+  assert.equal(hireWorker(state, "fisher").ok, true);
+  assert.equal(assignWorker(state, "fisher", "fishing").ok, true);
+  const report = advanceDay(state);
+  assert.equal(state.stats.fishCaught, 1);
+  assert.equal(state.inventory.resources.tidefish, 1);
+  assert.ok(report.helperActions.some((entry) => entry.includes("江岚") && entry.includes("钓回")));
 });
 
 test("sleep returns the player to the farm scene and spawn", () => {

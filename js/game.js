@@ -2848,27 +2848,20 @@ function homeIngredientCount(itemId) {
 }
 
 function openHouseKitchen() {
-  if (!state.house.kitchen) {
-    openModal({
-      kicker: "家里的厨房",
-      title: "料理台还没有点火",
-      body: `<p class="story-lead">厨房扩建后，旧屋的一角会变成真正的料理台。先在城市的房屋与生活面板完成厨房扩建。</p><div class="weather-note">厨房升级需要 520 金。房屋升级不会消耗背包里的食材。</div>`,
-      footer: `<button type="button" class="button button--primary" data-action="close">先回客厅</button>`,
-    });
-    return;
-  }
   const recipes = HOME_RECIPES.map((recipe) => {
     const ingredientText = Object.entries(recipe.ingredients)
       .map(([itemId, amount]) => `${itemId} ${homeIngredientCount(itemId)} / ${amount}`)
       .join(" · ");
-    const canCook = Object.entries(recipe.ingredients).every(([itemId, amount]) => homeIngredientCount(itemId) >= amount);
-    return `<article class="home-recipe-card"><span class="home-recipe-icon">${recipe.icon}</span><div><strong>${recipe.name}</strong><small>${recipe.description}</small><small>${ingredientText}</small></div><button type="button" class="shop-buy" data-action="homeCook" data-value="${recipe.id}" ${canCook ? "" : "disabled"}>烹饪</button></article>`;
+    const hasIngredients = Object.entries(recipe.ingredients).every(([itemId, amount]) => homeIngredientCount(itemId) >= amount);
+    const unlocked = recipe.requiresKitchen !== true || state.house.kitchen;
+    const buttonLabel = unlocked ? "烹饪" : "需厨房";
+    return `<article class="home-recipe-card"><span class="home-recipe-icon">${recipe.icon}</span><div><strong>${recipe.name}</strong><small>${recipe.description}</small><small>${ingredientText}</small></div><button type="button" class="shop-buy" data-action="homeCook" data-value="${recipe.id}" ${hasIngredients && unlocked ? "" : "disabled"}>${buttonLabel}</button></article>`;
   }).join("");
   openModal({
     kicker: `家里 · 厨房 · ${formatClock(state.minutes)}`,
     title: "把牧场的收成煮成一顿饭",
     wide: true,
-    body: `<p class="story-lead">锅里的香气会留在屋里。料理消耗农场产出，恢复体力，也让社区关系记住你愿意把收成放上餐桌。</p><div class="home-recipe-grid">${recipes}</div>`,
+    body: `<p class="story-lead">基础灶台可以煮田园炖菜。厨房扩建后，牛奶煎饼和潮鱼汤也会加入菜单。料理消耗农场产出，恢复体力，也让社区关系记住你愿意把收成放上餐桌。</p><div class="home-recipe-grid">${recipes}</div>`,
     footer: `<button type="button" class="button button--ghost" data-action="close">离开厨房</button>`,
   });
 }
