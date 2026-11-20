@@ -13,6 +13,7 @@ import {
   brushAnimal,
   choosePostGameModifier,
   createInitialState,
+  cookRecipe,
   collectForage,
   deliverWeeklyRequest,
   emitFeedback,
@@ -36,6 +37,7 @@ import {
   resolveDailyRecap,
   resolveLongformChoice,
   resolveEnding,
+  playHomeGame,
   saveGame,
   startBridgeQuest,
   sellAtMarket,
@@ -51,6 +53,7 @@ import {
   upgradeTool,
   upgradeHouse,
   useToolOnPlot,
+  watchHomeTv,
 } from "../js/state.js";
 import { getLongformStoryBeat } from "../js/longform-story.js";
 
@@ -110,6 +113,23 @@ test("longform story offers one daily choice and records it once", () => {
   assert.equal(result.ok, true);
   assert.equal(state.story.longform.choices["3:return_listen"], "return_listen");
   assert.equal(resolveLongformChoice(state, beat.choice.id).ok, false);
+});
+
+test("home scene activities cook, watch, and play", () => {
+  const state = freshState();
+  state.house.kitchen = true;
+  state.inventory.produce.turnip = 1;
+  state.inventory.produce.potato = 1;
+  const cooked = cookRecipe(state, "farm_stew");
+  assert.equal(cooked.ok, true);
+  assert.equal(state.inventory.cooked.farm_stew, 1);
+  assert.equal(state.home.mealsCooked, 1);
+  const beforeMinutes = state.minutes;
+  watchHomeTv(state);
+  playHomeGame(state);
+  assert.equal(state.home.tvMinutes, 30);
+  assert.equal(state.home.gamesPlayed, 1);
+  assert.equal(state.minutes, beforeMinutes + 25);
 });
 
 test("target plot follows the player's facing direction", () => {
