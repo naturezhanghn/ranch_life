@@ -44,6 +44,7 @@ import {
   SHIPPING_ROUTES,
   WEEKLY_REQUEST_TEMPLATES,
   SPRITE_DEFS,
+  WORKER_DEFS,
   TOOL_UPGRADE_LEVELS,
   TRADE_CONTRACTS,
   WORLD,
@@ -403,6 +404,13 @@ export function createInitialState() {
       capacity: 8,
       health: 72,
       lastHarvestDay: 0,
+    },
+    workers: {
+      available: Object.keys(WORKER_DEFS),
+      hired: [],
+      assignments: {},
+      lastPayrollDay: 0,
+      dispatches: 0,
     },
     player: {
       x: PLAYER_START.x,
@@ -1887,6 +1895,35 @@ export function recruitSprite(state, spriteId) {
   return { ok: true, message: `${sprite.name}加入了牧场。` };
 }
 
+export function hireWorker(state, workerId) {
+  const worker = WORKER_DEFS[workerId];
+  if (!worker) return { ok: false, message: "没有找到这位求职者。" };
+  if (state.workers.hired.includes(workerId)) return { ok: false, message: `${worker.name}已经在牧场工作了。` };
+  if (workerId === "fisher" && !state.world.unlockedRegions.includes("island")) {
+    return { ok: false, message: "先修好蓝潮渡轮，江岚才有海路可走。" };
+  }
+  if (state.coins < worker.hireCost) return { ok: false, message: `还差 ${worker.hireCost - state.coins} 金才能雇用${worker.name}。` };
+  state.coins -= worker.hireCost;
+  state.workers.hired.push(workerId);
+  state.relations.workers = bounded(state.relations.workers + 2);
+  addMemory(state, `你雇用了${worker.name}。${worker.talent}从明天开始按日结领取工资。`, "social", 3);
+  return { ok: true, message: `${worker.name}加入牧场，日薪 ${worker.wage} 金。` };
+}
+
+export function assignWorker(state, workerId, role) {
+  const worker = WORKER_DEFS[workerId];
+  const roles = ["watering", "planting", "animals", "trade", "island", "fishing", "fishery"];
+  if (!worker || !roles.includes(role)) return { ok: false, message: "这个岗位还没有准备好。" };
+  if (!state.workers.hired.includes(workerId)) return { ok: false, message: "先雇用这位员工。" };
+  for (const key of roles) {
+    if (state.workers.assignments[key] === workerId) state.workers.assignments[key] = null;
+  }
+  state.workers.assignments[role] = workerId;
+  state.workers.dispatches = (state.workers.dispatches || 0) + 1;
+  addMemory(state, `${worker.name}现在负责${role === "planting" ? "播种" : role === "animals" ? "牲畜" : role === "fishing" ? "钓鱼" : role === "fishery" ? "养鱼" : role === "watering" ? "浇水" : role === "trade" ? "贸易" : "海岛探索"}。`, "social", 1);
+  return { ok: true, message: `${worker.name}已安排到${role === "planting" ? "播种" : role === "animals" ? "牲畜" : role === "fishing" ? "钓鱼" : role === "fishery" ? "养鱼" : role === "watering" ? "浇水" : role === "trade" ? "贸易" : "海岛探索"}岗位。` };
+}
+
 export function assignSprite(state, spriteId, role) {
   const sprite = SPRITE_DEFS[spriteId];
   const roles = ["watering", "planting", "animals", "trade", "island", "fishing", "fishery"];
@@ -2475,6 +2512,97 @@ function applySpriteAssignments(state, report) {
   }
 }
 
+function applyWorkerAssignments(state, report) {
+  const workforce = state.workers;
+  if (!workforce?.hired?.length) return;
+  const payroll = workforce.hired.reduce((sum, workerId) => sum + (WORKER_DEFS[workerId]?.wage || 0), 0);
+  if (state.coins < payroll) {
+    report.helperActions.push(`员工工资需要 ${payroll} 金，当前余额不足，今天暂停工作`);
+    return;
+  }
+  state.coins -= payroll;
+  workforce.lastPayrollDay = state.day;
+  report.helperActions.push(`已支付 ${payroll} 金员工工资`);
+  const nameForRole = (role) => WORKER_DEFS[workforce.assignments?.[role]]?.name || "员工";
+
+  const plantingWorker = workforce.assignments?.planting;
+  const cropId = state.selectedSeed;
+  const crop = CROPS[cropId];
+  const calendar = SEASONAL_CROP_CALENDAR[cropId];
+  let planted = 0;
+  if (plantingWorker && crop && (!calendar || calendar.seasons.includes(state.season))) {
+    for (const plot of state.plots) {
+      if (planted >= 2 || (state.inventory.seeds[cropId] || 0) <= 0) break;
+      if (plot.crop) continue;
+      plot.state = "tilled";
+      plot.crop = cropId;
+      plot.growth = 0;
+      plot.watered = false;
+      plot.wateredDays = 0;
+      state.inventory.seeds[cropId] -= 1;
+      planted += 1;
+      bumpCounter(state, "tilled");
+      bumpCounter(state, "planted");
+    }
+  }
+  if (planted) report.helperActions.push(`${nameForRole("planting")}播下了 ${planted} 颗${crop.name}`);
+
+  const wateringWorker = workforce.assignments?.watering;
+  if (wateringWorker && state.water > 0) {
+    let watered = 0;
+    for (const plot of state.plots) {
+      if (watered >= 2 || state.water <= 0) break;
+      if (!plot.crop || plot.watered) continue;
+      plot.watered = true;
+      plot.wateredDays += 1;
+      state.water -= 1;
+      watered += 1;
+      bumpCounter(state, "watered");
+    }
+    if (watered) report.helperActions.push(`${nameForRole("watering")}浇了 ${watered} 格田地`);
+  }
+
+  const animalWorker = workforce.assignments?.animals;
+  if (animalWorker && state.feed > 0) {
+    let cared = 0;
+    for (const animal of state.animals) {
+      if (state.feed <= 0) break;
+      if (animal.fed) continue;
+      animal.fed = true;
+      state.feed -= 1;
+      animal.mood = Math.min(100, animal.mood + 4);
+      animal.affection = Math.min(100, animal.affection + 2);
+      bumpCounter(state, "fed");
+      cared += 1;
+    }
+    if (cared) report.helperActions.push(`${nameForRole("animals")}照料了 ${cared} 只牲畜`);
+  }
+
+  if (workforce.assignments?.fishing && state.world.unlockedRegions.includes("island")) {
+    state.inventory.resources.tidefish = (state.inventory.resources.tidefish || 0) + 1;
+    state.stats.fishCaught += 1;
+    bumpCounter(state, "explored");
+    report.helperActions.push(`${nameForRole("fishing")}钓回了 1 条鱼`);
+  }
+  if (workforce.assignments?.fishery && state.fishPond) {
+    state.fishPond.stock = Math.min(state.fishPond.capacity, state.fishPond.stock + 2);
+    state.fishPond.health = Math.min(100, state.fishPond.health + 5);
+    if (state.fishPond.stock >= 3) {
+      state.fishPond.stock -= 1;
+      state.fishPond.lastHarvestDay = state.day;
+      state.inventory.resources.tidefish = (state.inventory.resources.tidefish || 0) + 1;
+      state.stats.fishCaught += 1;
+      report.helperActions.push(`${nameForRole("fishery")}养大并收获了 1 条鲜鱼`);
+    } else {
+      report.helperActions.push(`${nameForRole("fishery")}给鱼塘投喂了鱼苗`);
+    }
+  }
+  if (workforce.assignments?.trade) {
+    state.market.reputation += 1;
+    report.helperActions.push(`${nameForRole("trade")}整理了贸易账本`);
+  }
+}
+
 function refreshMarket(state, report = null) {
   const previousPrices = state.market.prices || createMarketPrices();
   let trendTotal = 0;
@@ -2985,6 +3113,7 @@ export function advanceDay(state) {
   settleShipping(state, report);
 
   applySpriteAssignments(state, report);
+  applyWorkerAssignments(state, report);
 
   for (const animal of state.animals) {
     animal.age += 1;
@@ -3389,6 +3518,13 @@ export function loadGame() {
       },
       town: { ...base.town, ...(parsed.town || {}), eventsSeen: Array.isArray(parsed.town?.eventsSeen) ? parsed.town.eventsSeen : base.town.eventsSeen, birthdayGifts: { ...base.town.birthdayGifts, ...(parsed.town?.birthdayGifts || {}) } },
       fishPond: { ...base.fishPond, ...(parsed.fishPond || {}) },
+      workers: {
+        ...base.workers,
+        ...(parsed.workers || {}),
+        available: Array.isArray(parsed.workers?.available) ? Array.from(new Set(parsed.workers.available)) : base.workers.available,
+        hired: Array.isArray(parsed.workers?.hired) ? Array.from(new Set(parsed.workers.hired)) : base.workers.hired,
+        assignments: { ...base.workers.assignments, ...(parsed.workers?.assignments || {}) },
+      },
       stats: { ...base.stats, ...(parsed.stats || {}) },
       ai: {
         ...base.ai,
@@ -3550,6 +3686,11 @@ export function loadGame() {
     if (!SCENE_DEFS[merged.world.scene]) merged.world.scene = "farm";
     if (!merged.world.visitedScenes.includes("farm")) merged.world.visitedScenes.unshift("farm");
     merged.sprites.available = Array.from(new Set([...(merged.sprites.available || []), ...(merged.sprites.unlocked || [])]));
+    merged.workers.available = Array.from(new Set((merged.workers.available || []).filter((id) => WORKER_DEFS[id])));
+    merged.workers.hired = Array.from(new Set((merged.workers.hired || []).filter((id) => WORKER_DEFS[id])));
+    for (const [role, workerId] of Object.entries(merged.workers.assignments || {})) {
+      if (!merged.workers.hired.includes(workerId)) merged.workers.assignments[role] = null;
+    }
     if (usingBackup) localStorage.setItem(SAVE_KEY, raw);
     return merged;
   } catch (error) {

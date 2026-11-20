@@ -1733,6 +1733,33 @@ export const SPRITE_DEFS = {
   },
 };
 
+export const WORKER_DEFS = {
+  farmer: {
+    id: "farmer",
+    name: "周禾",
+    role: "planting",
+    wage: 14,
+    hireCost: 120,
+    talent: "熟悉轮作和节气，负责播种与田垄整理。",
+  },
+  herder: {
+    id: "herder",
+    name: "林牧",
+    role: "animals",
+    wage: 16,
+    hireCost: 140,
+    talent: "懂得照看牛羊鸡，会在清晨检查饲料和健康。",
+  },
+  fisher: {
+    id: "fisher",
+    name: "江岚",
+    role: "fishing",
+    wage: 18,
+    hireCost: 160,
+    talent: "熟悉潮汐和鱼群，会钓鱼也会维护鱼塘。",
+  },
+};
+
 export const ISLAND_SPOTS = {
   tidePool: {
     id: "tidePool",

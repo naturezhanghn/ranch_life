@@ -9,6 +9,7 @@ import {
   acceptTradeContract,
   acceptWeeklyRequest,
   assignSprite,
+  assignWorker,
   brushAnimal,
   choosePostGameModifier,
   createInitialState,
@@ -25,6 +26,7 @@ import {
   getBridgeQuestStep,
   getPostGameModifier,
   getTargetPlot,
+  hireWorker,
   getBagUsage,
   loadGame,
   investInCity,
@@ -762,6 +764,18 @@ test("workforce can plant crops, care for livestock, fish, and raise fish", () =
   assert.equal(report.animalsUnfed.length, 0);
   assert.equal(state.stats.fishCaught, 2);
   assert.ok(state.inventory.resources.tidefish >= 2);
+});
+
+test("human employees can be hired, assigned, and paid from daily work", () => {
+  const state = freshState();
+  state.coins = 300;
+  assert.equal(hireWorker(state, "farmer").ok, true);
+  assert.equal(assignWorker(state, "farmer", "planting").ok, true);
+  const before = state.coins;
+  const report = advanceDay(state);
+  assert.equal(state.coins, before - 14);
+  assert.ok(report.helperActions.some((entry) => entry.includes("周禾")));
+  assert.equal(state.plots.filter((plot) => plot.crop).length, 2);
 });
 
 test("sleep returns the player to the farm scene and spawn", () => {

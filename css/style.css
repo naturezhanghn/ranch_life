@@ -3665,10 +3665,13 @@ body.region-switching .app-shell {
 .sprite-workboard b { padding: 4px 7px; border-radius: 999px; color: #765a37; background: rgba(255, 251, 234, 0.6); font-size: 8px; font-weight: 700; }
 
 .sprite-roster { display: grid; gap: 8px; }
+.worker-roster { margin-bottom: 16px; }
 .sprite-card { min-height: 75px; padding: 10px; border: 1px solid rgba(31, 67, 56, 0.1); border-radius: 11px; display: grid; grid-template-columns: 37px minmax(0, 1fr) auto; gap: 10px; align-items: center; background: rgba(255, 252, 240, 0.46); }
 .sprite-card.is-locked { opacity: 0.62; }
 .sprite-card.is-unlocked { border-color: color-mix(in srgb, var(--sprite-color) 34%, transparent); }
 .sprite-avatar { width: 37px; height: 37px; display: grid; place-items: center; border-radius: 13px; color: var(--sprite-color); background: color-mix(in srgb, var(--sprite-color) 22%, white); box-shadow: 0 0 15px color-mix(in srgb, var(--sprite-color) 22%, transparent); font-size: 19px; }
+.worker-card { --sprite-color: #b67a55; }
+.worker-avatar { color: #f6e4b2; background: linear-gradient(145deg, #9e664c, #5c453d); }
 .sprite-copy { min-width: 0; }
 .sprite-copy strong, .sprite-copy span, .sprite-copy small { display: block; }
 .sprite-copy strong { color: #385949; font-size: 10px; }

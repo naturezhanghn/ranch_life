@@ -39,6 +39,7 @@ import {
   TIPS,
   TOOLS,
   TOOL_UPGRADE_LEVELS,
+  WORKER_DEFS,
   WORLD,
 } from "./data.js";
 import {
@@ -85,6 +86,8 @@ import {
   joinFestivalActivity,
   loadGame,
   recruitSprite,
+  hireWorker,
+  assignWorker,
   brushAnimal,
   talkAnimal,
   toggleAnimalOutdoor,
@@ -2091,17 +2094,33 @@ function renderSpritesPanel() {
       `;
     })
     .join("");
+  const workerRoster = Object.values(WORKER_DEFS).map((worker) => {
+    const hired = state.workers?.hired?.includes(worker.id);
+    const assignedRole = Object.entries(state.workers?.assignments || {}).find(([, workerId]) => workerId === worker.id)?.[0];
+    const roleButtons = Object.entries(roleLabels).map(([role, label]) => `
+      <button type="button" class="sprite-role ${assignedRole === role ? "is-active" : ""}" data-action="workerAssign" data-value="${worker.id}|${role}">${label}</button>
+    `).join("");
+    const blockedByFerry = worker.id === "fisher" && !state.world.unlockedRegions.includes("island");
+    return `<article class="sprite-card worker-card ${hired ? "is-unlocked" : "is-available"}">
+      <div class="sprite-avatar worker-avatar" aria-hidden="true">♙</div>
+      <div class="sprite-copy"><strong>${worker.name}</strong><span>${worker.talent}</span><small>${hired ? `已雇用 · 日薪 ${worker.wage} 金` : `雇用费 ${worker.hireCost} 金 · 日薪 ${worker.wage} 金`}</small></div>
+      ${hired ? `<div class="sprite-roles">${roleButtons}</div>` : `<button type="button" class="shop-buy" data-action="workerHire" data-value="${worker.id}" ${blockedByFerry || state.coins < worker.hireCost ? "disabled" : ""}>${blockedByFerry ? "需渡轮" : `雇用 ✦ ${worker.hireCost}`}</button>`}
+    </article>`;
+  }).join("");
   return `
     ${regionHero("sprites", "小精灵的工作不是替你完成游戏，而是让每天的选择有更多组合。", [
       regionMetric("伙伴数量", state.sprites.unlocked.length),
+      regionMetric("居民员工", state.workers?.hired?.length || 0),
       regionMetric("派遣次数", state.sprites.dispatches),
       regionMetric("自动劳动", Object.values(assignments).filter(Boolean).length, "is-gold"),
       regionMetric("鱼塘存鱼", `${state.fishPond?.stock || 0}/${state.fishPond?.capacity || 0}`, "is-blue"),
     ].join(""))}
     <div class="sprite-workboard">
       <span>当前分工</span>
-      <div>${Object.entries(roleLabels).map(([role, label]) => `<b>${label} · ${assignments[role] ? SPRITE_DEFS[assignments[role]].name : "空缺"}</b>`).join("")}</div>
+      <div>${Object.entries(roleLabels).map(([role, label]) => `<b>${label} · ${assignments[role] ? SPRITE_DEFS[assignments[role]].name : state.workers?.assignments?.[role] ? WORKER_DEFS[state.workers.assignments[role]]?.name : "空缺"}</b>`).join("")}</div>
     </div>
+    <div class="region-section-heading"><span>居民员工</span><small>工资在每天结算时支付</small></div>
+    <div class="sprite-roster worker-roster">${workerRoster}</div>
     <div class="region-section-heading"><span>工坊名册</span><small>点击分工按钮即可重新安排</small></div>
     <div class="sprite-roster">${roster}</div>
     <div class="region-note">员工可以分别负责浇水、播种、牲畜、钓鱼和鱼塘。播种员工会自动开垦空地并使用当前选中的种子，养鱼员工会让鱼塘逐渐产出鲜鱼。</div>
@@ -3678,6 +3697,30 @@ function handleModalClick(event) {
     case "spriteAssign": {
       const [spriteId, role] = value.split("|");
       const result = assignSprite(state, spriteId, role);
+      if (result.ok) {
+        audio.play("ui");
+        refreshRegionPanel(result.message);
+      } else {
+        audio.play("error");
+        showToast(result.message);
+      }
+      break;
+    }
+    case "workerHire": {
+      const result = hireWorker(state, value);
+      if (result.ok) {
+        audio.play("success");
+        triggerEffect("sprite", state.player.x, state.player.y);
+        refreshRegionPanel(result.message);
+      } else {
+        audio.play("error");
+        showToast(result.message);
+      }
+      break;
+    }
+    case "workerAssign": {
+      const [workerId, role] = value.split("|");
+      const result = assignWorker(state, workerId, role);
       if (result.ok) {
         audio.play("ui");
         refreshRegionPanel(result.message);
