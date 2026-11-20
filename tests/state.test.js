@@ -815,8 +815,8 @@ test("animal employee completes feeding, companionship, grooming, and grazing", 
   const state = freshState();
   state.coins = 500;
   state.feed = 0;
-  assert.equal(hireWorker(state, "herder").ok, true);
-  assert.equal(assignWorker(state, "herder", "animals").ok, true);
+  assert.equal(hireWorker(state, "animalCaretaker").ok, true);
+  assert.equal(assignWorker(state, "animalCaretaker", "animals").ok, true);
   const report = advanceDay(state);
   assert.equal(report.animalsUnfed.length, 0);
   assert.ok(state.animals.every((animal) => animal.fed === false));

@@ -1889,6 +1889,14 @@ export const WORKER_DEFS = {
     hireCost: 140,
     talent: "懂得照看牛羊鸡，会在清晨检查饲料和健康。",
   },
+  animalCaretaker: {
+    id: "animalCaretaker",
+    name: "顾安",
+    role: "animals",
+    wage: 15,
+    hireCost: 130,
+    talent: "专门负责动物的喂养、陪伴、刷毛、放牧和健康记录。",
+  },
   fisher: {
     id: "fisher",
     name: "江岚",
