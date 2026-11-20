@@ -998,6 +998,64 @@ export const NPC_TOPICS = {
       },
     ],
   },
+  farmerLuo: {
+    prompt: "罗婶把一篮刚收的菜放在台阶上：如果水只够保住一块田，你会先保哪一块？",
+    choices: [
+      {
+        id: "shared",
+        label: "先保住能供大家吃饭的地，再按缺口轮换。",
+        delta: 3,
+        community: 2,
+        ecology: 1,
+        reply: "“轮换很麻烦，可至少没人会被一块地的界线挡在饭桌外。”",
+      },
+      {
+        id: "best",
+        label: "先保产量最高的地，尽快把损失补回来。",
+        delta: -1,
+        community: -1,
+        reply: "“账面会好看些，可下一场雨来之前，大家未必还愿意一起种。”",
+      },
+    ],
+  },
+  archivist: {
+    prompt: "顾遥找到一页没有归档的旧记录：历史资料应该先保护原样，还是先让更多人看懂？",
+    choices: [
+      {
+        id: "open",
+        label: "保留原件，也把释读过程公开给村民。",
+        delta: 3,
+        community: 1,
+        reply: "“档案不是锁起来才算保存。有人能追问，它才真的活着。”",
+      },
+      {
+        id: "curate",
+        label: "先由专家整理成统一版本，避免误读。",
+        delta: 0,
+        community: -1,
+        reply: "“统一很整齐，可被删掉的那行字，往往正是后来的人要找的。”",
+      },
+    ],
+  },
+  cook: {
+    prompt: "阿澜在厨房清点食材：今天的公共餐桌应该优先保证品种，还是优先保证每个人都吃饱？",
+    choices: [
+      {
+        id: "enough",
+        label: "先保证每个人有足够的一份，再谈菜单。",
+        delta: 3,
+        community: 2,
+        reply: "“好吃当然重要，可有人空着肚子时，菜单只是另一种浪费。”",
+      },
+      {
+        id: "variety",
+        label: "保留多样菜单，让更多生产者有展示机会。",
+        delta: 1,
+        community: 0,
+        reply: "“那就把每一份都写清来源，别让漂亮的菜遮住谁没有分到。”",
+      },
+    ],
+  },
 };
 
 export const SCENE_FINDS = {
@@ -1143,6 +1201,9 @@ export const GIFT_PREFERENCES = {
   spriteKeeper: { likes: ["herb", "seasonal", "sweet"], dislikes: ["mineral"] },
   islandChild: { likes: ["sea", "fruit", "sweet"], dislikes: ["mineral"] },
   quarryForeman: { likes: ["mineral", "protein", "farm"], dislikes: ["luxury"] },
+  farmerLuo: { likes: ["vegetable", "fruit", "seasonal"], dislikes: ["luxury"] },
+  archivist: { likes: ["herb", "craft", "seasonal"], dislikes: ["protein"] },
+  cook: { likes: ["protein", "vegetable", "fruit"], dislikes: ["mineral"] },
 };
 
 export const PLAYER_START = { x: 286, y: 282, facing: "down" };
@@ -2306,6 +2367,9 @@ export const BIRTHDAYS = {
   spriteKeeper: { season: "秋", day: 3 },
   islandChild: { season: "夏", day: 20 },
   quarryForeman: { season: "冬", day: 5 },
+  farmerLuo: { season: "春", day: 24 },
+  archivist: { season: "秋", day: 16 },
+  cook: { season: "冬", day: 18 },
 };
 
 export const TIPS = [
