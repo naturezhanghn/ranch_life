@@ -20,6 +20,7 @@ import {
   MINIGAME_DEFS,
   MARKET_TIERS,
   NPC_TOPICS,
+  NPC_STORY_ARCS,
   POST_GAME_MODIFIERS,
   SCENE_FINDS,
   INTERACTIONS,
@@ -1366,11 +1367,17 @@ function openSceneNpcDialogue(npcId) {
   recordNpcTalk(npc.id, npc.name);
   const birthday = isNpcBirthday(state, npcId);
   const topic = getNpcTopic(state, npcId);
+  const storyArc = NPC_STORY_ARCS[npcId];
+  const storyBeat = storyArc?.beats?.[(Math.max(1, state.day) - 1) % storyArc.beats.length];
+  const storyMarkup = storyArc
+    ? `<div class="npc-story-card"><div class="npc-story-kicker">${escapeHtml(storyArc.role)} · 第 ${state.day} 天</div><strong>${escapeHtml(storyArc.title)}</strong><p>${escapeHtml(storyBeat)}</p></div>`
+    : "";
   if (topic) {
     openModal({
       kicker: `${npc.role} · 第 ${state.day} 天 · 每日话题`,
       title: `${npc.name}问你`,
       body: `
+        ${storyMarkup}
         ${speakerBlock({ name: npc.name, role: npc.role, text: `“${topic.prompt}”` })}
         <div class="choice-grid" style="margin-top:16px;">
           ${topic.choices
@@ -1403,7 +1410,7 @@ function openSceneNpcDialogue(npcId) {
   openModal({
     kicker: `${npc.role} · 第 ${formatClock(state.minutes)}`,
     title: npc.name,
-    body: `${speakerBlock({ name: npc.name, role: npc.role, text: copy })}<div class="weather-note">日程：${state.minutes < 11 * 60 ? "上午" : state.minutes < 16 * 60 ? "午后" : "傍晚"}。再过一段时间，${npc.name}会去另一个场景。</div>${birthday ? `<div class="day-report-card"><strong>今天是${npc.name}的生日</strong><span>${BIRTHDAYS[npcId].season}季第 ${BIRTHDAYS[npcId].day} 天 · 礼物关系加成翻倍。</span></div>` : ""}`,
+    body: `${storyMarkup}${speakerBlock({ name: npc.name, role: npc.role, text: copy })}<div class="weather-note">日程：${state.minutes < 11 * 60 ? "上午" : state.minutes < 16 * 60 ? "午后" : "傍晚"}。再过一段时间，${npc.name}会去另一个场景。</div>${birthday ? `<div class="day-report-card"><strong>今天是${npc.name}的生日</strong><span>${BIRTHDAYS[npcId].season}季第 ${BIRTHDAYS[npcId].day} 天 · 礼物关系加成翻倍。</span></div>` : ""}`,
     footer: `
       <button type="button" class="button button--ghost" data-action="close">记下这句话</button>
       <button type="button" class="button button--primary" data-action="openGiftPanel" data-value="${npc.id}" ${
