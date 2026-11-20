@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { BRIDGE_QUEST, CROPS, DAY_START_MINUTES, POST_GAME_MODIFIERS, SAVE_BACKUP_KEY, SAVE_KEY, TRADE_CONTRACTS, WORLD } from "../js/data.js";
+import { BRIDGE_QUEST, CROPS, DAY_START_MINUTES, POST_GAME_MODIFIERS, SAVE_BACKUP_KEY, SAVE_KEY, SEASONAL_CROP_CALENDAR, SHOP_SEEDS, TRADE_CONTRACTS, WORLD } from "../js/data.js";
 import {
   advanceDay,
   advanceBridgeQuest,
@@ -11,6 +11,7 @@ import {
   assignSprite,
   assignWorker,
   brushAnimal,
+  buySeed,
   choosePostGameModifier,
   createInitialState,
   cookRecipe,
@@ -717,6 +718,57 @@ test("crop data keeps a meaningful high-investment option", () => {
   assert.equal(sorted[0].id, "turnip");
   assert.equal(sorted.at(-1).id, "strawberry");
   assert.ok(sorted.at(-1).value > sorted[0].value * 1.5);
+});
+
+test("seed shop rotates by season and rejects out-of-season purchases", () => {
+  const state = freshState();
+  state.coins = 1000;
+  assert.ok(SHOP_SEEDS.length >= 14);
+  for (const season of ["春", "夏", "秋", "冬"]) {
+    const seasonalSeeds = SHOP_SEEDS.filter((seed) => seed.seasons.includes(season));
+    assert.ok(seasonalSeeds.length >= 3);
+    assert.ok(seasonalSeeds.every((seed) => SEASONAL_CROP_CALENDAR[seed.id].seasons.includes(season)));
+  }
+
+  const springCoins = state.coins;
+  assert.equal(buySeed(state, "pea").ok, true);
+  assert.equal(buySeed(state, "tomato").ok, false);
+  assert.equal(state.coins, springCoins - CROPS.pea.seedPrice);
+
+  state.season = "夏";
+  assert.equal(buySeed(state, "tomato").ok, true);
+  assert.equal(buySeed(state, "pea").ok, false);
+});
+
+test("seasonal planting protects plots and keeps old saves compatible", () => {
+  const state = freshState();
+  state.season = "夏";
+  state.selectedSeed = "pea";
+  state.inventory.seeds.pea = 1;
+  state.plots[0].state = "tilled";
+  standAtPlot(state, 0, 0);
+  const blocked = useToolOnPlot(state, "seed");
+  assert.equal(blocked.ok, false);
+  assert.equal(state.inventory.seeds.pea, 1);
+
+  state.selectedSeed = "tomato";
+  state.inventory.seeds.tomato = 1;
+  const planted = useToolOnPlot(state, "seed");
+  assert.equal(planted.ok, true);
+  assert.equal(state.plots[0].crop, "tomato");
+  assert.equal(state.inventory.seeds.tomato, 0);
+
+  const workerState = freshState();
+  workerState.season = "夏";
+  workerState.selectedSeed = "pea";
+  workerState.inventory.seeds.pea = 0;
+  workerState.inventory.seeds.tomato = 1;
+  workerState.plots[0].state = "tilled";
+  workerState.workers.hired = ["farmer"];
+  workerState.coins = 1000;
+  const report = advanceDay(workerState);
+  assert.ok(report.helperActions.some((entry) => entry.includes("番茄")));
+  assert.equal(workerState.plots[0].crop, "tomato");
 });
 
 test("city ferry unlocks a repeatable island exploration route", () => {

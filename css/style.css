@@ -1713,6 +1713,25 @@ body.phaser-runtime #phaserCanvas { display: block; }
   gap: 9px;
 }
 
+.shop-section-heading {
+  grid-column: 1 / -1;
+  padding: 4px 2px 0;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  color: #315d4d;
+}
+
+.shop-section-heading strong {
+  font-size: 11px;
+}
+
+.shop-section-heading small {
+  color: #8b7857;
+  font-size: 8px;
+}
+
 .shipping-route-panel {
   margin-top: 14px;
   padding: 12px;

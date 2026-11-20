@@ -295,11 +295,33 @@ export function createInitialState() {
         turnip: 5,
         potato: 2,
         strawberry: 0,
+        pea: 0,
+        tomato: 0,
+        corn: 0,
+        watermelon: 0,
+        chili: 0,
+        pumpkin: 0,
+        carrot: 0,
+        sweetpotato: 0,
+        spinach: 0,
+        cabbage: 0,
+        leek: 0,
       },
       produce: {
         turnip: 0,
         potato: 0,
         strawberry: 0,
+        pea: 0,
+        tomato: 0,
+        corn: 0,
+        watermelon: 0,
+        chili: 0,
+        pumpkin: 0,
+        carrot: 0,
+        sweetpotato: 0,
+        spinach: 0,
+        cabbage: 0,
+        leek: 0,
         egg: 0,
         milk: 0,
         wool: 0,
@@ -1648,11 +1670,15 @@ export function shipProduce(state, routeId = state.shipping.selectedRoute) {
 export function buySeed(state, cropId) {
   const crop = CROPS[cropId];
   if (!crop) return { ok: false, message: "没有这种种子。" };
+  const calendar = SEASONAL_CROP_CALENDAR[cropId];
+  if (calendar && !calendar.seasons.includes(state.season)) {
+    return { ok: false, message: `${crop.seedName}只在${calendar.seasons.join("、")}季供应，当前是${state.season}季。` };
+  }
   if (state.coins < crop.seedPrice) {
     return { ok: false, message: "金币不够。" };
   }
   state.coins -= crop.seedPrice;
-  state.inventory.seeds[cropId] += 1;
+  state.inventory.seeds[cropId] = (state.inventory.seeds[cropId] || 0) + 1;
   return { ok: true, message: `买了一份${crop.seedName}。` };
 }
 
@@ -2426,6 +2452,20 @@ export function resolveEnding(state) {
   return ending;
 }
 
+function plantingSeedForSeason(state) {
+  const seasonal = Object.values(CROPS).filter((crop) => {
+    const seasons = SEASONAL_CROP_CALENDAR[crop.id]?.seasons || [];
+    return !seasons.length || seasons.includes(state.season);
+  });
+  return (
+    seasonal.find((crop) => crop.id === state.selectedSeed && (state.inventory.seeds[crop.id] || 0) > 0)?.id
+    || seasonal.find((crop) => (state.inventory.seeds[crop.id] || 0) > 0)?.id
+    || seasonal.find((crop) => crop.id === state.selectedSeed)?.id
+    || seasonal[0]?.id
+    || state.selectedSeed
+  );
+}
+
 function applySpriteAssignments(state, report) {
   if (getPostGameModifier(state)?.id === "handCare") {
     report.helperActions.push("修正牌「手工周」：小精灵暂停自动工作，照料必须由你亲自完成。");
@@ -2435,7 +2475,7 @@ function applySpriteAssignments(state, report) {
   if (assignments.planting) {
     const spriteId = assignments.planting;
     const efficiency = state.sprites.assignmentEfficiency?.planting || 1;
-    const cropId = state.selectedSeed;
+    const cropId = plantingSeedForSeason(state);
     const crop = CROPS[cropId];
     const calendar = SEASONAL_CROP_CALENDAR[cropId];
     const canPlant = crop && (!calendar || calendar.seasons.includes(state.season));
@@ -2569,7 +2609,7 @@ function applyWorkerAssignments(state, report) {
   state.coins -= payroll;
   workforce.lastPayrollDay = state.day;
   report.helperActions.push(`已支付 ${payroll} 金员工工资`);
-  const cropId = state.selectedSeed;
+  const cropId = plantingSeedForSeason(state);
   const crop = CROPS[cropId];
   const calendar = SEASONAL_CROP_CALENDAR[cropId];
   const assigned = new Set(Object.values(workforce.assignments || {}));
@@ -3821,6 +3861,7 @@ export function loadGame() {
     };
 
     merged.season = SEASONS.includes(merged.season) ? merged.season : base.season;
+    merged.selectedSeed = CROPS[merged.selectedSeed] ? merged.selectedSeed : base.selectedSeed;
     merged.day = Number.isFinite(Number(merged.day)) ? Math.max(1, Math.floor(Number(merged.day))) : base.day;
     merged.seasonDay = Number.isFinite(Number(merged.seasonDay))
       ? Math.max(1, Math.min(SEASON_DAYS, Math.floor(Number(merged.seasonDay))))

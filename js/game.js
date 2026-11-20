@@ -1814,21 +1814,34 @@ function openShop(notice = "") {
 
   let content = "";
   if (shopTab === "seeds") {
-    const seedRows = SHOP_SEEDS.map(
-      (seed) => `
+    const renderSeedRows = (seeds, heading, note) => {
+      if (!seeds.length) return "";
+      const rows = seeds.map((seed) => {
+        const inSeason = seed.seasons.includes(state.season);
+        const affordable = state.coins >= seed.price;
+        const status = inSeason
+          ? `本季可播 · 已有 ${state.inventory.seeds[seed.id] || 0}`
+          : `${seed.seasons.join("、")}季开放 · 已有 ${state.inventory.seeds[seed.id] || 0}`;
+        return `
         <div class="shop-row">
           <span class="item-swatch" aria-hidden="true">${seed.icon}</span>
           <span class="shop-row-copy">
             <strong>${seed.name}</strong>
-            <small>${seed.description} · 已有 ${state.inventory.seeds[seed.id]}</small>
+            <small>${seed.description} · ${status}</small>
           </span>
           <button type="button" class="shop-buy" data-action="buySeed" data-value="${seed.id}" ${
-            state.coins < seed.price ? "disabled" : ""
-          }>✦ ${seed.price}</button>
+            !inSeason || !affordable ? "disabled" : ""
+          } title="${inSeason ? (affordable ? `购买${seed.name}` : "金币不够") : `${seed.seasons.join("、")}季才能播种`}">${inSeason ? `✦ ${seed.price}` : "非本季"}</button>
         </div>
-      `,
-    ).join("");
+      `;
+      }).join("");
+      return `<div class="shop-section-heading"><strong>${heading}</strong><small>${note}</small></div>${rows}`;
+    };
+    const currentSeeds = SHOP_SEEDS.filter((seed) => seed.seasons.includes(state.season));
+    const otherSeeds = SHOP_SEEDS.filter((seed) => !seed.seasons.includes(state.season));
+    const seedRows = `${renderSeedRows(currentSeeds, `${state.season}季精选`, "现在买下就能播种")}${renderSeedRows(otherSeeds, "其他季节种子", "季节轮换后再播种")}`;
     const feedRow = `
+      <div class="shop-section-heading"><strong>农场物资</strong><small>动物每天需要饲料</small></div>
       <div class="shop-row">
         <span class="item-swatch" aria-hidden="true">≋</span>
         <span class="shop-row-copy">
@@ -1888,17 +1901,19 @@ function openShop(notice = "") {
 function openSeedPouch() {
   const rows = Object.values(CROPS)
     .map((crop) => {
-      const count = state.inventory.seeds[crop.id];
+      const seed = SHOP_SEEDS.find((entry) => entry.id === crop.id);
+      const count = state.inventory.seeds[crop.id] || 0;
+      const inSeason = seed?.seasons.includes(state.season);
       return `
         <button type="button" class="seed-option-row ${
           state.selectedSeed === crop.id ? "is-selected" : ""
-        }" data-action="selectSeed" data-value="${crop.id}" ${count <= 0 ? "disabled" : ""}>
+        }" data-action="selectSeed" data-value="${crop.id}" ${count <= 0 || !inSeason ? "disabled" : ""}>
           <span class="item-swatch" aria-hidden="true">${crop.icon}</span>
           <span>
             <strong>${crop.seedName}</strong>
-            <small>${crop.days} 天成熟 · 售价 ${crop.sellPrice} 金</small>
+            <small>${crop.days} 天成熟 · 售价 ${crop.sellPrice} 金 · ${inSeason ? `${state.season}季可播` : `${seed?.seasons.join("、")}季可播`}</small>
           </span>
-          <span class="seed-count">× ${count}</span>
+          <span class="seed-count">${inSeason ? `× ${count}` : "非本季"}</span>
         </button>
       `;
     })
@@ -1909,8 +1924,8 @@ function openSeedPouch() {
     body: `
       <div class="task-list">${rows}</div>
       <div class="weather-note">
-        白萝卜回本快，土豆更耐储存，草莓投入高但售价最好。
-        作物的价值不只在金币，也会改变牧心对“你在追求什么”的判断。
+        当前是${state.season}季。商店只出售本季可以播种的种子，其他季节的种子会保留在货架上等待轮换。
+        选择应季作物能让员工自动补种，也能避免跨季停长。
       </div>
     `,
     footer: `<button type="button" class="button button--ghost" data-action="close">收起种子袋</button>`,

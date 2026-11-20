@@ -1905,15 +1905,60 @@ export class WorldRenderer {
             ctx.ellipse(-8 + spud * 8, 4 + (spud % 2) * 4, 5, 3.5, 0, 0, TAU);
             ctx.fill();
           }
-        } else {
-          ctx.fillStyle = "#c65f57";
-          for (let berry = 0; berry < 3; berry += 1) {
+        } else if (plot.crop === "strawberry" || plot.crop === "tomato") {
+          ctx.fillStyle = crop.color;
+          for (let fruit = 0; fruit < 3; fruit += 1) {
             ctx.beginPath();
-            ctx.arc(-8 + berry * 8, -1 + (berry % 2) * 7, 4.2, 0, TAU);
+            ctx.arc(-8 + fruit * 8, -1 + (fruit % 2) * 7, 4.2, 0, TAU);
             ctx.fill();
-            ctx.fillStyle = "#f0dca9";
-            ctx.fillRect(-8 + berry * 8 - 1, -1 + (berry % 2) * 7 - 1, 1.3, 1.3);
-            ctx.fillStyle = "#c65f57";
+          }
+        } else if (plot.crop === "corn") {
+          ctx.fillStyle = crop.color;
+          for (let ear = 0; ear < 3; ear += 1) {
+            ctx.beginPath();
+            ctx.ellipse(-8 + ear * 8, 2, 3.5, 8, 0, 0, TAU);
+            ctx.fill();
+          }
+        } else if (plot.crop === "watermelon") {
+          ctx.fillStyle = crop.color;
+          ctx.beginPath();
+          ctx.ellipse(0, 2, 15, 9, -0.12, 0, TAU);
+          ctx.fill();
+          ctx.strokeStyle = "rgba(236, 216, 164, 0.55)";
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(-8, -4);
+          ctx.lineTo(-5, 8);
+          ctx.moveTo(0, -6);
+          ctx.lineTo(2, 8);
+          ctx.moveTo(8, -4);
+          ctx.lineTo(7, 6);
+          ctx.stroke();
+        } else if (plot.crop === "pumpkin") {
+          ctx.fillStyle = crop.color;
+          for (let lobe = 0; lobe < 3; lobe += 1) {
+            ctx.beginPath();
+            ctx.ellipse(-8 + lobe * 8, 2, 7, 9, 0, 0, TAU);
+            ctx.fill();
+          }
+        } else if (["carrot", "sweetpotato"].includes(plot.crop)) {
+          ctx.fillStyle = crop.color;
+          for (let root = 0; root < 3; root += 1) {
+            ctx.beginPath();
+            ctx.ellipse(-8 + root * 8, 4, 4.5, 8, 0.2, 0, TAU);
+            ctx.fill();
+          }
+        } else if (plot.crop === "leek") {
+          ctx.fillStyle = crop.color;
+          for (let stalk = 0; stalk < 3; stalk += 1) {
+            ctx.fillRect(-9 + stalk * 8, -8, 4, 17);
+          }
+        } else {
+          ctx.fillStyle = crop.color;
+          for (let produce = 0; produce < 3; produce += 1) {
+            ctx.beginPath();
+            ctx.arc(-8 + produce * 8, 2 + (produce % 2) * 5, 5, 0, TAU);
+            ctx.fill();
           }
         }
         ctx.globalAlpha = 0.35 + Math.sin(time * 3 + plot.index) * 0.14;
