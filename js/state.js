@@ -1944,8 +1944,15 @@ export function hireWorker(state, workerId) {
   if (state.coins < worker.hireCost) return { ok: false, message: `还差 ${worker.hireCost - state.coins} 金才能雇用${worker.name}。` };
   state.coins -= worker.hireCost;
   state.workers.hired.push(workerId);
+  if (workerId === "animalCaretaker" && !state.workers.assignments?.animals) {
+    state.workers.assignments.animals = workerId;
+    state.workers.dispatches = (state.workers.dispatches || 0) + 1;
+  }
   state.relations.workers = bounded(state.relations.workers + 2);
-  addMemory(state, `你雇用了${worker.name}。${worker.talent}从明天开始按日结领取工资。`, "social", 3);
+  const assignmentNote = workerId === "animalCaretaker" && state.workers.assignments.animals === workerId
+    ? "他今天就会在牛羊区开始工作。"
+    : "从明天开始按日结领取工资。";
+  addMemory(state, `你雇用了${worker.name}。${worker.talent}${assignmentNote}`, "social", 3);
   return { ok: true, message: `${worker.name}加入牧场，日薪 ${worker.wage} 金。` };
 }
 
