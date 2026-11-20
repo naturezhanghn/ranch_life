@@ -102,6 +102,7 @@ test("mining deposits ore into the shared inventory", () => {
 
 test("delivery uses an accepted, fully stocked contract and pays its reward", () => {
   const state = createInitialState();
+  state.daily.tasks = [];
   state.market.contracts = [
     {
       id: "harbor-breakfast",

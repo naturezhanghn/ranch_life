@@ -79,11 +79,11 @@ test("npc daily topic changes relationship once and can resume next day", () => 
 
 test("gift preferences consume inventory once and return a themed thank-you", () => {
   const state = createInitialState();
-  state.inventory.produce.turnip = 1;
+  state.shipping.bin.turnip = 1;
   const result = giveGift(state, "mayor", "turnip");
   assert.equal(result.ok, true);
   assert.equal(result.favorite, true);
-  assert.equal(state.inventory.produce.turnip, 0);
+  assert.equal(state.shipping.bin.turnip, 0);
   assert.equal(state.social.giftDay.mayor, 1);
   assert.ok(state.relations.npc.mayor > 8);
   assert.equal(giveGift(state, "mayor", "turnip").ok, false);

@@ -889,11 +889,11 @@ export function joinFestivalActivity(state, activityId) {
   if (activity.cost?.coins && state.coins < activity.cost.coins) {
     return { ok: false, message: `还差 ${activity.cost.coins - state.coins} 金才能参加。` };
   }
-  if (activity.cost?.turnip && (state.inventory.produce.turnip || 0) < activity.cost.turnip) {
-    return { ok: false, message: "背包里没有足够的白萝卜来折潮灯。" };
+  if (activity.cost?.turnip && inventoryQuantity(state, "turnip") < activity.cost.turnip) {
+    return { ok: false, message: "没有足够的白萝卜来折潮灯。" };
   }
   if (activity.cost?.coins) state.coins -= activity.cost.coins;
-  if (activity.cost?.turnip) state.inventory.produce.turnip -= activity.cost.turnip;
+  if (activity.cost?.turnip) consumeInventoryItem(state, "turnip", activity.cost.turnip);
   state.festival.activityFlags[activityId] = true;
   state.relations.community = bounded(state.relations.community + (activity.community || 0));
   state.market.reputation += activity.reputation || 0;
@@ -1316,9 +1316,13 @@ export function talkAnimal(state, animalId) {
   animal.affection = bounded(animal.affection + 3);
   animal.mood = bounded(animal.mood + 3);
   animal.unhappy = false;
-  state.stats.talkedAnimals += 1;
+  bumpCounter(state, "talkedAnimals");
   addMemory(state, `你和${definition.name}说了几句话。它的耳朵朝你转过来，牧心把这段陪伴记下了。`, "social", 2);
-  return { ok: true, message: `${definition.name}安静地听完了你的话。` };
+  return {
+    ok: true,
+    message: `${definition.name}安静地听完了你的话。`,
+    tasks: checkDailyTasks(state),
+  };
 }
 
 export function brushAnimal(state, animalId) {
@@ -1702,21 +1706,35 @@ export function buyFeed(state) {
   return { ok: true, message: "买了一袋干草饲料。" };
 }
 
-function inventoryQuantity(state, itemId) {
-  const qualityCount = Object.entries(state.inventory.qualityProduce || {})
+function qualityInventoryCount(state, itemId) {
+  return Object.entries(state.inventory.qualityProduce || {})
     .filter(([key]) => key.startsWith(`${itemId}_`))
     .reduce((total, [, count]) => total + (Number(count) || 0), 0);
-  return (state.inventory.produce[itemId] || 0)
+}
+
+function inventoryProduceCount(state, itemId) {
+  const produceCount = Number(state.inventory.produce?.[itemId]) || 0;
+  // Animal products are recorded in both buckets so the quality grade can be
+  // preserved. Count one physical item once while tolerating legacy saves that
+  // only retained the quality bucket.
+  return Math.max(produceCount, qualityInventoryCount(state, itemId));
+}
+
+function inventoryQuantity(state, itemId) {
+  return inventoryProduceCount(state, itemId)
     + (state.inventory.resources[itemId] || 0)
-    + (state.shipping?.bin?.[itemId] || 0)
-    + qualityCount;
+    + (state.shipping?.bin?.[itemId] || 0);
 }
 
 function consumeInventoryItem(state, itemId, amount) {
   let remaining = amount;
-  const produceCount = Math.min(state.inventory.produce[itemId] || 0, remaining);
-  state.inventory.produce[itemId] -= produceCount;
-  let qualityToRemove = produceCount;
+  const storedProduce = Number(state.inventory.produce?.[itemId]) || 0;
+  const qualityCount = qualityInventoryCount(state, itemId);
+  const produceCount = Math.min(Math.max(storedProduce, qualityCount), remaining);
+  if (state.inventory.produce?.[itemId] !== undefined) {
+    state.inventory.produce[itemId] = Math.max(0, storedProduce - Math.min(storedProduce, produceCount));
+  }
+  let qualityToRemove = Math.min(qualityCount, produceCount);
   for (const quality of ["S", "M", "L"]) {
     const qualityId = `${itemId}_${quality}`;
     const removed = Math.min(state.inventory.qualityProduce?.[qualityId] || 0, qualityToRemove);
@@ -1761,6 +1779,7 @@ export function sellAtMarket(state, itemId, quantity = 1) {
   state.market.reputation += Math.max(1, Math.ceil(amount / 2));
   state.market.shipments += amount;
   if (state.government.policies.fairTrade) state.government.civicPoints += 1;
+  bumpCounter(state, "sold");
   addMemory(state, `你把 ${amount} 份${good.name}交给远方商队，按 ${price} 金的市价结算。`, "economy", 2);
   return {
     ok: true,
@@ -1768,6 +1787,7 @@ export function sellAtMarket(state, itemId, quantity = 1) {
     income,
     itemId,
     amount,
+    tasks: checkDailyTasks(state),
   };
 }
 
@@ -1810,6 +1830,7 @@ export function fulfillTradeContract(state, contractId) {
   state.market.contractStreak = (state.market.contractStreak || 0) + 1;
   state.market.contractChainId = contract.id;
   state.government.civicPoints += 1;
+  bumpCounter(state, "contracts");
   let tierMessage = "";
   if (state.market.contractStreak >= 3 && (state.market.tier || 0) < MARKET_TIERS.length - 1) {
     state.market.tier = (state.market.tier || 0) + 1;
@@ -1828,6 +1849,7 @@ export function fulfillTradeContract(state, contractId) {
     contract,
     payout,
     tierMessage,
+    tasks: checkDailyTasks(state),
   };
 }
 
@@ -1914,8 +1936,13 @@ export function holdTownHall(state) {
   const bonus = state.city.projects.civicCenter ? 4 : 2;
   state.government.civicPoints += bonus;
   state.relations.community = bounded(state.relations.community + 3);
+  bumpCounter(state, "townHall");
   addMemory(state, `你在市民议事厅听完了不同意见，获得 ${bonus} 点公民点。`, "government", 2);
-  return { ok: true, message: `议事结束，获得 ${bonus} 点公民点。` };
+  return {
+    ok: true,
+    message: `议事结束，获得 ${bonus} 点公民点。`,
+    tasks: checkDailyTasks(state),
+  };
 }
 
 export function enactGovernmentPolicy(state, policyId) {
@@ -2006,6 +2033,9 @@ export function assignWorker(state, workerId, role) {
   const roles = ["watering", "planting", "animals", "trade", "island", "fishing", "fishery"];
   if (!worker || !roles.includes(role)) return { ok: false, message: "这个岗位还没有准备好。" };
   if (!state.workers.hired.includes(workerId)) return { ok: false, message: "先雇用这位员工。" };
+  if ((role === "island" || role === "fishing") && !state.world.unlockedRegions.includes("island")) {
+    return { ok: false, message: "先修好蓝潮渡轮，才能安排海岛和钓鱼岗位。" };
+  }
   for (const key of roles) {
     if (state.workers.assignments[key] === workerId) state.workers.assignments[key] = null;
   }
@@ -2029,6 +2059,9 @@ export function assignSprite(state, spriteId, role) {
   };
   if (!sprite || !roles.includes(role)) return { ok: false, message: "这个分工还没有准备好。" };
   if (!state.sprites.unlocked.includes(spriteId)) return { ok: false, message: "先邀请这只小精灵。" };
+  if ((role === "island" || role === "fishing") && !state.world.unlockedRegions.includes("island")) {
+    return { ok: false, message: "先修好蓝潮渡轮，才能安排海岛和钓鱼岗位。" };
+  }
   for (const key of roles) {
     if (state.sprites.assignments[key] === spriteId) state.sprites.assignments[key] = null;
   }
@@ -2242,9 +2275,14 @@ export function resolveMinigame(state, type, result = {}) {
       state.stats.earned += tip;
       state.stats.deliveryRuns += 1;
       state.market.reputation += 2;
-      bumpCounter(state, "contracts");
       addMemory(state, `限时运货成功，按时送达「${fulfilled.contract.title}」，额外获得 ${tip} 金小费。`, "economy", 3);
-      return { ok: true, type, coins: fulfilled.contract.reward + tip, message: `运货成功，订单完成并获得 ${fulfilled.contract.reward + tip} 金。` };
+      return {
+        ok: true,
+        type,
+        coins: fulfilled.contract.reward + tip,
+        tasks: fulfilled.tasks || [],
+        message: `运货成功，订单完成并获得 ${fulfilled.contract.reward + tip} 金。`,
+      };
     }
     state.market.reputation = Math.max(0, state.market.reputation - 1);
     addMemory(state, "限时运货失败：车辆被路障耽误，港口声誉下降。订单仍在等待下一次交付。", "economy", 2);
@@ -2728,7 +2766,7 @@ function applyWorkerAssignments(state, report) {
         animal.talked = true;
         animal.affection = bounded(animal.affection + 2);
         animal.mood = bounded(animal.mood + 2);
-        state.stats.talkedAnimals += 1;
+        bumpCounter(state, "talkedAnimals");
         talked += 1;
       }
       if (!animal.brushed) {
@@ -3247,7 +3285,7 @@ export function giveGift(state, npcId, itemId) {
     return { ok: false, message: "今天已经给这个人送过礼物了。关系需要一点时间才能继续生长。" };
   }
   if (inventoryQuantity(state, itemId) < 1) {
-    return { ok: false, message: "背包里没有这份物品。" };
+    return { ok: false, message: "手头没有这份物品。" };
   }
   const preference = GIFT_PREFERENCES[npcId] || { likes: [], dislikes: [] };
   const tags = GIFT_TAGS[itemId] || [];
@@ -3343,6 +3381,7 @@ export function advanceDay(state) {
   restoreOvernightWeeds(state, report);
   applySpriteAssignments(state, report);
   applyWorkerAssignments(state, report);
+  checkDailyTasks(state);
 
   for (const animal of state.animals) {
     animal.age += 1;
@@ -3873,6 +3912,31 @@ export function loadGame() {
       daily: parsed.daily || base.daily,
     };
 
+    const normalizeKnownCounts = (value, fallback) => {
+      const source = value && typeof value === "object" ? value : {};
+      return Object.fromEntries(Object.keys(fallback).map((id) => {
+        const raw = source[id];
+        const count = Number(raw);
+        return [id, Number.isFinite(count) ? Math.max(0, Math.floor(count)) : fallback[id]];
+      }));
+    };
+    const normalizeDynamicCounts = (value) => Object.fromEntries(
+      Object.entries(value && typeof value === "object" ? value : {})
+        .filter(([, raw]) => Number.isFinite(Number(raw)) && Number(raw) > 0)
+        .map(([id, raw]) => [id, Math.floor(Number(raw))]),
+    );
+    merged.inventory.seeds = normalizeKnownCounts(merged.inventory.seeds, base.inventory.seeds);
+    merged.inventory.produce = normalizeKnownCounts(merged.inventory.produce, base.inventory.produce);
+    merged.inventory.qualityProduce = normalizeKnownCounts(merged.inventory.qualityProduce, base.inventory.qualityProduce);
+    const forageResourceDefaults = Object.fromEntries(
+      Object.values(FORAGE_TABLE).flat().map((item) => [item.id, 0]),
+    );
+    merged.inventory.resources = normalizeKnownCounts(
+      merged.inventory.resources,
+      { ...forageResourceDefaults, ...base.inventory.resources },
+    );
+    merged.inventory.cooked = normalizeDynamicCounts(merged.inventory.cooked);
+
     merged.season = SEASONS.includes(merged.season) ? merged.season : base.season;
     merged.selectedSeed = CROPS[merged.selectedSeed] ? merged.selectedSeed : base.selectedSeed;
     merged.shipping.bin = Object.fromEntries(
@@ -3880,6 +3944,46 @@ export function loadGame() {
         .filter(([itemId, count]) => CROPS[itemId] && Number.isFinite(Number(count)) && Number(count) > 0)
         .map(([itemId, count]) => [itemId, Math.floor(Number(count))]),
     );
+    const normalizeShipment = (item) => {
+      if (!item || typeof item !== "object") return null;
+      const itemId = typeof item.itemId === "string" ? item.itemId : "";
+      const product = PRODUCTS[itemId] || MARKET_GOODS[itemId];
+      const amount = Number(item.amount);
+      if (!product || !Number.isFinite(amount) || amount <= 0) return null;
+      const normalizedAmount = Math.floor(amount);
+      if (normalizedAmount < 1) return null;
+      const fallbackPrice = PRODUCTS[itemId]?.sellPrice || MARKET_GOODS[itemId]?.basePrice || 0;
+      const rawPrice = Number(item.unitPrice);
+      return {
+        itemId,
+        quality: ["S", "M", "L"].includes(item.quality) ? item.quality : null,
+        amount: normalizedAmount,
+        unitPrice: Number.isFinite(rawPrice) ? Math.max(0, Math.round(rawPrice)) : fallbackPrice,
+      };
+    };
+    merged.shipping.pending = (Array.isArray(merged.shipping.pending) ? merged.shipping.pending : [])
+      .map(normalizeShipment)
+      .filter(Boolean);
+    if (merged.shipping.trip && typeof merged.shipping.trip === "object") {
+      const trip = merged.shipping.trip;
+      const routeId = SHIPPING_ROUTES[trip.routeId] ? trip.routeId : base.shipping.selectedRoute;
+      const departDay = Number(trip.departDay);
+      const departMinute = Number(trip.departMinute);
+      const arrivalDay = Number(trip.arrivalDay);
+      if (Number.isFinite(departDay) && Number.isFinite(departMinute) && Number.isFinite(arrivalDay)) {
+        merged.shipping.trip = {
+          routeId,
+          departDay: Math.max(1, Math.floor(departDay)),
+          departMinute: Math.max(DAY_START_MINUTES, Math.min(24 * 60, Math.floor(departMinute))),
+          arrivalDay: Math.max(1, Math.floor(arrivalDay)),
+          manifest: (Array.isArray(trip.manifest) ? trip.manifest : []).map(normalizeShipment).filter(Boolean),
+        };
+      } else {
+        merged.shipping.trip = null;
+      }
+    } else {
+      merged.shipping.trip = null;
+    }
     merged.day = Number.isFinite(Number(merged.day)) ? Math.max(1, Math.floor(Number(merged.day))) : base.day;
     merged.seasonDay = Number.isFinite(Number(merged.seasonDay))
       ? Math.max(1, Math.min(SEASON_DAYS, Math.floor(Number(merged.seasonDay))))
@@ -3892,12 +3996,12 @@ export function loadGame() {
     merged.energy = Number.isFinite(Number(merged.energy))
       ? Math.max(0, Math.min(merged.maxEnergy, Number(merged.energy)))
       : base.energy;
-    merged.fishPond.stock = Number.isFinite(Number(merged.fishPond.stock))
-      ? Math.max(0, Math.min(merged.fishPond.capacity, Math.floor(Number(merged.fishPond.stock))))
-      : base.fishPond.stock;
     merged.fishPond.capacity = Number.isFinite(Number(merged.fishPond.capacity))
       ? Math.max(1, Math.floor(Number(merged.fishPond.capacity)))
       : base.fishPond.capacity;
+    merged.fishPond.stock = Number.isFinite(Number(merged.fishPond.stock))
+      ? Math.max(0, Math.min(merged.fishPond.capacity, Math.floor(Number(merged.fishPond.stock))))
+      : base.fishPond.stock;
     merged.fishPond.health = Number.isFinite(Number(merged.fishPond.health))
       ? Math.max(0, Math.min(100, Number(merged.fishPond.health)))
       : base.fishPond.health;
@@ -3911,18 +4015,55 @@ export function loadGame() {
       x: Number.isFinite(Number(merged.player?.x)) ? Number(merged.player.x) : base.player.x,
       y: Number.isFinite(Number(merged.player?.y)) ? Number(merged.player.y) : base.player.y,
     };
-    if (!Array.isArray(merged.plots) || merged.plots.length !== WORLD.field.cols * WORLD.field.rows) {
-      const legacyPlots = Array.isArray(merged.plots) ? merged.plots : [];
-      merged.plots = base.plots.map((plot, index) => ({ ...plot, ...(legacyPlots[index] || {}) }));
-    }
-    if (!Array.isArray(merged.animals) || merged.animals.length !== ANIMAL_DEFS.length) {
-      merged.animals = base.animals;
-    } else {
-      merged.animals = merged.animals.map((animal, index) => ({
-        ...base.animals[index],
+    const legacyPlots = Array.isArray(merged.plots) ? merged.plots : [];
+    merged.plots = base.plots.map((plot, index) => {
+      const source = legacyPlots[index] && typeof legacyPlots[index] === "object" ? legacyPlots[index] : {};
+      const crop = typeof source.crop === "string" && CROPS[source.crop] ? source.crop : null;
+      const plotState = source.state === "tilled" || source.state === "wild"
+        ? source.state
+        : plot.state;
+      const rawGrowth = Number(source.growth);
+      const growth = crop && Number.isFinite(rawGrowth)
+        ? Math.max(0, Math.min(CROPS[crop].days, Math.floor(rawGrowth)))
+        : 0;
+      const rawWateredDays = Number(source.wateredDays);
+      return {
+        ...plot,
+        state: crop ? "tilled" : plotState,
+        crop,
+        growth,
+        watered: crop && source.watered === true,
+        wateredDays: crop && Number.isFinite(rawWateredDays) ? Math.max(0, Math.floor(rawWateredDays)) : 0,
+      };
+    });
+    const legacyAnimals = Array.isArray(merged.animals) ? merged.animals : [];
+    merged.animals = base.animals.map((animal, index) => {
+      const source = legacyAnimals[index] && typeof legacyAnimals[index] === "object" ? legacyAnimals[index] : {};
+      const finite = (key, min, max) => {
+        const value = Number(source[key]);
+        return Number.isFinite(value) ? Math.max(min, Math.min(max, Math.floor(value))) : animal[key];
+      };
+      return {
         ...animal,
-      }));
-    }
+        fed: source.fed === true,
+        talked: source.talked === true,
+        brushed: source.brushed === true,
+        outside: source.outside === true,
+        age: finite("age", 1, 999),
+        daysFed: finite("daysFed", 0, 999),
+        mood: finite("mood", 0, 100),
+        affection: finite("affection", 0, 100),
+        health: finite("health", 0, 100),
+        unhappy: source.unhappy === true,
+        sick: source.sick === true,
+        daysUnhappy: finite("daysUnhappy", 0, 7),
+        daysSick: finite("daysSick", 0, 7),
+        careDays: finite("careDays", 0, 9999),
+        productCounter: finite("productCounter", 0, 999),
+        outdoorMinutes: finite("outdoorMinutes", 0, 511),
+        totalOutdoorMinutes: finite("totalOutdoorMinutes", 0, 65535),
+      };
+    });
     merged.forage = normalizeForageState(merged.forage, merged);
     merged.daily = normalizeDailyState(merged.daily, merged);
     ensureWeeklyBoard(merged);
@@ -3949,6 +4090,8 @@ export function loadGame() {
 export function clearSave() {
   try {
     localStorage.removeItem(SAVE_KEY);
+    localStorage.removeItem(SAVE_BACKUP_KEY);
+    localStorage.removeItem(`${SAVE_BACKUP_KEY}-checksum`);
   } catch (error) {
     console.warn("Unable to clear save", error);
   }

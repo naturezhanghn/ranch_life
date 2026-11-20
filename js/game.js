@@ -1485,11 +1485,11 @@ function openGiftPanel(npcId) {
     .map((good) => {
       const qualityCount = Object.entries(state.inventory.qualityProduce || {})
         .filter(([key]) => key.startsWith(`${good.id}_`))
-        .reduce((total, [, count]) => total + count, 0);
+        .reduce((total, [, count]) => total + (Number(count) || 0), 0);
       const count =
-        (state.inventory.produce[good.id] || 0) +
+        Math.max(Number(state.inventory.produce[good.id]) || 0, qualityCount) +
         (state.inventory.resources[good.id] || 0) +
-        qualityCount;
+        (state.shipping.bin?.[good.id] || 0);
       return { good, count };
     })
     .filter((entry) => entry.count > 0);
@@ -1933,7 +1933,12 @@ function openSeedPouch() {
 }
 
 function inventoryQuantity(itemId) {
-  return (state.inventory.produce[itemId] || 0) + (state.inventory.resources[itemId] || 0);
+  const qualityCount = Object.entries(state.inventory.qualityProduce || {})
+    .filter(([key]) => key.startsWith(`${itemId}_`))
+    .reduce((total, [, count]) => total + (Number(count) || 0), 0);
+  return Math.max(Number(state.inventory.produce[itemId]) || 0, qualityCount)
+    + (state.inventory.resources[itemId] || 0)
+    + (state.shipping.bin?.[itemId] || 0);
 }
 
 function animalQualityLabel(animal) {

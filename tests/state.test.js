@@ -13,6 +13,7 @@ import {
   brushAnimal,
   buySeed,
   choosePostGameModifier,
+  clearSave,
   createInitialState,
   cookRecipe,
   collectForage,
@@ -29,6 +30,7 @@ import {
   getPostGameModifier,
   getTargetPlot,
   hireWorker,
+  holdTownHall,
   getBagUsage,
   loadGame,
   investInCity,
@@ -288,6 +290,86 @@ test("daily task settlement is shown in the day report and牧心 memory", () => 
   assert.ok(state.ai.memories.some((memory) => memory.text.includes("今日清单结算")));
 });
 
+test("social, market, civic, and contract actions advance their daily counters once", () => {
+  const addTask = (state, counter) => {
+    state.daily.tasks = [{
+      id: `test-${counter}`,
+      text: counter,
+      counter,
+      target: 1,
+      reward: 7,
+      done: false,
+      rewarded: false,
+    }];
+  };
+
+  const social = freshState();
+  addTask(social, "talkedAnimals");
+  const talk = talkAnimal(social, "chicken");
+  assert.equal(talk.ok, true);
+  assert.equal(social.daily.counters.talkedAnimals, 1);
+  assert.equal(talk.tasks.length, 1);
+  assert.equal(talkAnimal(social, "chicken").ok, false);
+  assert.equal(social.daily.counters.talkedAnimals, 1);
+
+  const market = freshState();
+  addTask(market, "sold");
+  market.inventory.resources.seaweed = 1;
+  const sale = sellAtMarket(market, "seaweed");
+  assert.equal(sale.ok, true);
+  assert.equal(market.daily.counters.sold, 1);
+  assert.equal(sale.tasks.length, 1);
+  assert.equal(sellAtMarket(market, "seaweed").ok, false);
+  assert.equal(market.daily.counters.sold, 1);
+
+  const civic = freshState();
+  addTask(civic, "townHall");
+  const session = holdTownHall(civic);
+  assert.equal(session.ok, true);
+  assert.equal(civic.daily.counters.townHall, 1);
+  assert.equal(session.tasks.length, 1);
+  assert.equal(holdTownHall(civic).ok, false);
+  assert.equal(civic.daily.counters.townHall, 1);
+
+  const trade = freshState();
+  addTask(trade, "contracts");
+  const contract = {
+    ...TRADE_CONTRACTS[0],
+    accepted: true,
+    completed: false,
+    requirements: { egg: 1 },
+  };
+  trade.market.contracts = [contract];
+  trade.inventory.produce.egg = 1;
+  const fulfilled = fulfillTradeContract(trade, contract.id);
+  assert.equal(fulfilled.ok, true);
+  assert.equal(trade.daily.counters.contracts, 1);
+  assert.equal(fulfilled.tasks.length, 1);
+  assert.equal(fulfillTradeContract(trade, contract.id).ok, false);
+  assert.equal(trade.daily.counters.contracts, 1);
+});
+
+test("automatic employee work settles daily task rewards before the day report", () => {
+  const state = freshState();
+  state.daily.tasks = [{
+    id: "auto-feed",
+    text: "自动喂养牲畜",
+    counter: "fed",
+    target: 1,
+    reward: 19,
+    done: false,
+    rewarded: false,
+  }];
+  state.sprites.assignments.animals = "seedling";
+  state.feed = 1;
+  const startingCoins = state.coins;
+  const report = advanceDay(state);
+  assert.equal(report.dailyTasks.completed.length, 1);
+  assert.equal(report.dailyTasks.completed[0].id, "auto-feed");
+  assert.equal(report.dailyTasks.reward, 19);
+  assert.equal(state.coins, startingCoins + 19);
+});
+
 test("daily recap offers one interpretation once and applies only its choice", () => {
   const state = freshState();
   state.relations.community = 60;
@@ -463,7 +545,7 @@ test("festival activities require two completions and pay once", () => {
   state.seasonDay = 14;
   state.day = 14;
   state.coins = 20;
-  state.inventory.produce.turnip = 1;
+  state.shipping.bin.turnip = 1;
   state.relations.community = 50;
   const festival = getActiveFestival(state);
   assert.equal(festival.id, "tide_lantern");
@@ -474,7 +556,7 @@ test("festival activities require two completions and pay once", () => {
   assert.equal(soup.reward, null);
   const lantern = joinFestivalActivity(state, "lantern");
   assert.equal(lantern.ok, true);
-  assert.equal(state.inventory.produce.turnip, 0);
+  assert.equal(state.shipping.bin.turnip, 0);
   assert.equal(state.festival.rewardClaimed, true);
   assert.equal(state.coins, 90);
   assert.equal(state.government.civicPoints, 4);
@@ -869,6 +951,16 @@ test("workforce can plant crops, care for livestock, fish, and raise fish", () =
   assert.ok(state.inventory.resources.tidefish >= 2);
 });
 
+test("island and fishing assignments require the ferry to be unlocked", () => {
+  const state = freshState();
+  state.coins = 300;
+  assert.equal(hireWorker(state, "farmer").ok, true);
+  assert.equal(assignWorker(state, "farmer", "fishing").ok, false);
+  assert.equal(state.workers.assignments.fishing, undefined);
+  assert.equal(assignSprite(state, "seedling", "fishing").ok, false);
+  assert.equal(state.sprites.assignments.fishing, null);
+});
+
 test("human employees can be hired, assigned, and paid from daily work", () => {
   const state = freshState();
   state.coins = 300;
@@ -961,6 +1053,28 @@ test("livestock care tracks age, affection, health, grazing, and quality", () =>
   assert.equal(state.inventory.qualityProduce[`egg_${report.products[0].quality}`], 1);
 });
 
+test("quality livestock products count as one physical item in delivery checks", () => {
+  const state = freshState();
+  state.inventory.produce.egg = 1;
+  state.inventory.qualityProduce.egg_M = 1;
+  const contract = {
+    id: "quality-count",
+    title: "品质鸡蛋",
+    reward: 50,
+    reputation: 1,
+    requirements: { egg: 2 },
+    accepted: true,
+    completed: false,
+    expiresDay: state.day + 1,
+  };
+  state.market.contracts = [contract];
+  assert.equal(fulfillTradeContract(state, contract.id).ok, false);
+  contract.requirements.egg = 1;
+  assert.equal(fulfillTradeContract(state, contract.id).ok, true);
+  assert.equal(state.inventory.produce.egg, 0);
+  assert.equal(state.inventory.qualityProduce.egg_M, 0);
+});
+
 test("shipping waits overnight and records cumulative settlement", () => {
   const state = freshState();
   state.inventory.produce.turnip = 2;
@@ -992,6 +1106,7 @@ test("shipping route delays arrival, charges a fee, and rejects a missed boat", 
   assert.equal(missed.ok, false);
   assert.equal(state.inventory.produce.turnip, 1);
   const secondReport = advanceDay(state);
+  assert.equal(state.day, 3);
   assert.ok(secondReport.shipping.fee > 0);
   assert.equal(state.shipping.pending.length, 0);
   assert.equal(state.shipping.tripHistory[0].route, "ocean");
@@ -1069,6 +1184,65 @@ test("illegal save numbers are clamped and missing fields get defaults", () => {
     assert.equal(sparse.season, "夏");
     assert.equal(sparse.player.x, createInitialState().player.x);
     assert.ok(sparse.quests && sparse.festival && sparse.weekly);
+
+    store[SAVE_KEY] = JSON.stringify({ fishPond: { stock: 3 } });
+    const pondDefaults = loadGame();
+    assert.equal(pondDefaults.fishPond.capacity, createInitialState().fishPond.capacity);
+    assert.equal(pondDefaults.fishPond.stock, 3);
+
+    store[SAVE_KEY] = JSON.stringify({ inventory: {
+      produce: { egg: "4", unknown_crop: 99, turnip: "NaN" },
+      resources: { ore: "2.8", unknown_resource: 100 },
+    } });
+    const normalizedInventory = loadGame();
+    assert.equal(normalizedInventory.inventory.produce.egg, 4);
+    assert.equal(normalizedInventory.inventory.produce.turnip, 0);
+    assert.equal(normalizedInventory.inventory.produce.unknown_crop, undefined);
+    assert.equal(normalizedInventory.inventory.resources.ore, 2);
+    assert.equal(normalizedInventory.inventory.resources.unknown_resource, undefined);
+
+    const corruptWorld = createInitialState();
+    corruptWorld.plots[0].crop = "unknown_crop";
+    corruptWorld.plots[0].growth = "NaN";
+    corruptWorld.animals[0].id = "unknown_animal";
+    corruptWorld.animals[0].health = "NaN";
+    store[SAVE_KEY] = JSON.stringify(corruptWorld);
+    const normalizedWorld = loadGame();
+    assert.equal(normalizedWorld.plots[0].crop, null);
+    assert.equal(normalizedWorld.animals[0].id, createInitialState().animals[0].id);
+    assert.equal(normalizedWorld.animals[0].health, createInitialState().animals[0].health);
+    assert.doesNotThrow(() => advanceDay(normalizedWorld));
+
+    store[SAVE_KEY] = JSON.stringify({ shipping: {
+      pending: [null, { itemId: "turnip", amount: "2", unitPrice: "bad" }, { itemId: "unknown", amount: 9 }],
+      trip: { routeId: "unknown", departDay: "bad", manifest: [null] },
+    } });
+    const normalizedShipping = loadGame();
+    assert.equal(normalizedShipping.shipping.pending.length, 1);
+    assert.equal(normalizedShipping.shipping.pending[0].itemId, "turnip");
+    assert.equal(normalizedShipping.shipping.pending[0].amount, 2);
+    assert.equal(normalizedShipping.shipping.pending[0].unitPrice, CROPS.turnip.sellPrice);
+    assert.equal(normalizedShipping.shipping.trip, null);
+  } finally {
+    globalThis.localStorage = previousStorage;
+  }
+});
+
+test("resetting a save also removes the automatic backup", () => {
+  const previousStorage = globalThis.localStorage;
+  const store = {
+    [SAVE_KEY]: "primary",
+    [SAVE_BACKUP_KEY]: "backup",
+    [`${SAVE_BACKUP_KEY}-checksum`]: "checksum",
+  };
+  globalThis.localStorage = {
+    getItem: (key) => store[key] || null,
+    setItem: (key, value) => { store[key] = String(value); },
+    removeItem: (key) => { delete store[key]; },
+  };
+  try {
+    clearSave();
+    assert.deepEqual(store, {});
   } finally {
     globalThis.localStorage = previousStorage;
   }
