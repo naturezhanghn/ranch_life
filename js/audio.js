@@ -13,8 +13,12 @@ export class FarmAudio {
       council: [246.94, 293.66, 369.99, 440.0, 369.99, 329.63, 293.66, 246.94],
       workshop: [329.63, 392.0, 493.88, 587.33, 493.88, 392.0, 349.23, 329.63],
       island: [261.63, 311.13, 369.99, 466.16, 369.99, 311.13, 261.63, 233.08],
+      quarry: [196.0, 233.08, 261.63, 293.66, 261.63, 233.08, 196.0, 174.61],
     };
     this.melody = this.melodies.farm;
+    this.weather = "sunny";
+    this.timeOfDay = "day";
+    this.ambientTempo = 4200;
   }
 
   async unlock() {
@@ -50,6 +54,25 @@ export class FarmAudio {
     this.sceneId = nextScene;
     this.melody = this.melodies[nextScene];
     this.ambientStep = 0;
+  }
+
+  setMood({ weather = "sunny", minutes = 12 * 60 } = {}) {
+    const nextWeather = weather === "rain" || weather === "drought" ? weather : "sunny";
+    const nextTimeOfDay = minutes < 7 * 60 || minutes >= 19 * 60 ? "night" : "day";
+    const nextTempo = nextTimeOfDay === "night" ? 5200 : nextWeather === "rain" ? 3600 : 4200;
+    const changed = nextWeather !== this.weather
+      || nextTimeOfDay !== this.timeOfDay
+      || nextTempo !== this.ambientTempo;
+    this.weather = nextWeather;
+    this.timeOfDay = nextTimeOfDay;
+    if (nextTempo !== this.ambientTempo) {
+      this.ambientTempo = nextTempo;
+      if (this.ambientTimer) {
+        this.stopAmbient();
+        this.startAmbient();
+      }
+    }
+    if (changed) this.ambientStep = 0;
   }
 
   tone(frequency, duration, options = {}) {
@@ -105,16 +128,23 @@ export class FarmAudio {
     this.ambientTimer = window.setInterval(() => {
       if (!this.enabled || !this.context) return;
       const note = this.melody[this.ambientStep % this.melody.length];
-      const harmony = this.ambientStep % 4 === 0 ? note / 2 : note * 1.25;
-      this.tone(note, 2.4, { type: "sine", gain: 0.014, release: 1.8 });
+      const night = this.timeOfDay === "night";
+      const rainy = this.weather === "rain";
+      const harmony = this.ambientStep % 4 === 0 ? note / 2 : note * (night ? 1.19 : 1.25);
+      this.tone(note, night ? 3.2 : 2.4, {
+        type: night ? "triangle" : "sine",
+        gain: night ? 0.011 : rainy ? 0.017 : 0.014,
+        release: night ? 2.4 : 1.8,
+      });
       this.tone(harmony, 2.4, {
-        type: "triangle",
-        gain: 0.006,
+        type: night ? "sine" : "triangle",
+        gain: night ? 0.004 : 0.006,
         release: 2.0,
         delay: 0.18,
       });
+      if (rainy && this.ambientStep % 2 === 0) this.noise(0.22, 0.009);
       this.ambientStep += 1;
-    }, 4200);
+    }, this.ambientTempo);
   }
 
   stopAmbient() {

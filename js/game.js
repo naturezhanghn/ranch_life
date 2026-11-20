@@ -189,6 +189,10 @@ let inputLocked = false;
 let autosaveClock = 0;
 let stageRect = null;
 let mobileCamera = { x: 0, y: 0, initialized: false };
+// A background tab may receive throttled animation frames. Keep those frames
+// from advancing the in-game clock or consuming stamina while the player is
+// away, then restart the frame delta cleanly when the tab becomes visible.
+let pageHidden = document.hidden;
 
 const keys = new Set();
 const touchDirections = new Set();
@@ -414,6 +418,7 @@ function beginPlay({ fresh = false, loadedState = null } = {}) {
   inputLocked = false;
   audio.setEnabled(state.settings.sound);
   audio.setScene(state.world?.scene || "farm");
+  audio.setMood({ weather: state.weather, minutes: state.minutes });
   audio.unlock();
   dom.welcome.classList.add("is-hidden");
   document.body.classList.add("is-playing");
@@ -452,6 +457,20 @@ function showIntroLetter() {
         “牧心”接进了牧场的旧传感器。它正在学习你。
       </p>
       <p class="story-goal">这块地欠着旧债，也藏着一段还没有被讲完的历史。</p>
+      <div class="story-beat-grid" aria-label="这段旅程的三个线索">
+        <div class="story-beat">
+          <span class="story-beat-icon" aria-hidden="true">⌂</span>
+          <div><strong>先照料</strong><span>让土地重新记住你的脚步</span></div>
+        </div>
+        <div class="story-beat">
+          <span class="story-beat-icon" aria-hidden="true">≈</span>
+          <div><strong>再追问</strong><span>把水渠的旧故事拼回原处</span></div>
+        </div>
+        <div class="story-beat">
+          <span class="story-beat-icon" aria-hidden="true">◇</span>
+          <div><strong>最后决定</strong><span>让牧心学会怎样与人共同生活</span></div>
+        </div>
+      </div>
     `,
     footer: `<button type="button" class="button button--primary" data-action="introDone">推开门，开始第一天</button>`,
   });
@@ -459,6 +478,7 @@ function showIntroLetter() {
 
 function updateHUD(force = false) {
   if (!state) return;
+  audio.setMood({ weather: state.weather, minutes: state.minutes });
   const weather = weatherPresentation[state.weather] || weatherPresentation.sunny;
   dom.dayNumber.textContent = state.day;
   const seasonNode = document.querySelector(".date-season");
@@ -711,7 +731,7 @@ function updateInteractionHint() {
 }
 
 function update(delta) {
-  if (!active || !state) return;
+  if (!active || !state || pageHidden) return;
 
   if (minigameLayer.active) {
     minigameLayer.update(delta);
@@ -3922,7 +3942,17 @@ function bindEvents() {
   });
 
   document.addEventListener("visibilitychange", () => {
-    if (document.hidden && active) saveGame(state);
+    pageHidden = document.hidden;
+    if (pageHidden) {
+      clearTouchInputs();
+      keys.clear();
+      if (active) saveGame(state);
+      return;
+    }
+    // The next frame should start from zero so returning from a throttled tab
+    // cannot produce a large movement or clock jump.
+    lastTimestamp = performance.now();
+    updateHUD(true);
   });
 
   dom.toolbelt.addEventListener("click", (event) => {
@@ -3984,7 +4014,7 @@ function loop(timestamp) {
   lastTimestamp = timestamp;
   update(delta);
   updateCamera(delta);
-  renderer.render(state, runtime, delta);
+  if (!pageHidden) renderer.render(state, runtime, delta);
   window.requestAnimationFrame(loop);
 }
 
