@@ -146,6 +146,7 @@ export class WorldRenderer {
     this.drawArchive(ctx, time);
     this.drawNoticeboard(ctx, time);
     this.drawShippingBin(ctx, time);
+    this.drawFarmBuildingAccents(ctx, state, time);
     this.drawCanalGate(ctx, state, time);
     this.drawStaticProps(ctx, time);
     this.drawFarmSignature(ctx, state, time);
@@ -784,6 +785,243 @@ export class WorldRenderer {
     ctx.restore();
   }
 
+  drawDetailedStructure(ctx, x, y, w, h, label, roof, time) {
+    const isCivic = /议事|档案|建设|公告|安全|公共/.test(label);
+    const isNature = /花园|温室|精灵|伙伴|潮声|月光|蜂蜜/.test(label);
+    const isIndustrial = /仓库|矿|种子|出货|航线|渡轮/.test(label);
+    const wall = isCivic ? "#d8d1bb" : isNature ? "#d8dfb8" : isIndustrial ? "#d7c49f" : "#e4d1aa";
+    const trim = isCivic ? "#8d9b9b" : isNature ? "#8ca66f" : isIndustrial ? "#a77e4e" : "#b68a60";
+    const shadow = "rgba(31, 49, 41, 0.24)";
+    ctx.save();
+    ctx.lineJoin = "round";
+    ctx.fillStyle = shadow;
+    ctx.beginPath();
+    ctx.ellipse(x + w / 2, y + h + 13, w * 0.54, 18, 0, 0, TAU);
+    ctx.fill();
+
+    const bodyGradient = ctx.createLinearGradient(x, y + 30, x, y + h);
+    bodyGradient.addColorStop(0, wall);
+    bodyGradient.addColorStop(1, isCivic ? "#c1c3af" : "#c7ad87");
+    ctx.fillStyle = bodyGradient;
+    roundedRect(ctx, x + 7, y + 30, w - 14, h - 30, 9);
+    ctx.fill();
+    ctx.fillStyle = "rgba(93, 72, 53, 0.18)";
+    ctx.fillRect(x + 12, y + h - 13, w - 24, 8);
+    ctx.fillStyle = trim;
+    ctx.fillRect(x + 12, y + h - 17, w - 24, 4);
+
+    const roofGradient = ctx.createLinearGradient(x, y - 8, x, y + 42);
+    roofGradient.addColorStop(0, roof);
+    roofGradient.addColorStop(1, "#5a5146");
+    ctx.fillStyle = roofGradient;
+    ctx.beginPath();
+    ctx.moveTo(x - 12, y + 38);
+    ctx.lineTo(x + w * 0.16, y + 2);
+    ctx.lineTo(x + w * 0.5, y - 17);
+    ctx.lineTo(x + w * 0.84, y + 2);
+    ctx.lineTo(x + w + 12, y + 38);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = "rgba(57, 48, 39, 0.46)";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.strokeStyle = "rgba(255, 228, 166, 0.24)";
+    ctx.lineWidth = 1.4;
+    for (let tile = 0; tile < 7; tile += 1) {
+      const t = (tile + 1) / 8;
+      const roofX = x + w * (0.16 + t * 0.68);
+      const roofY = y + 2 - Math.sin(Math.PI * t) * 19;
+      ctx.beginPath();
+      ctx.moveTo(roofX - 20, roofY + 24);
+      ctx.lineTo(roofX, roofY + 2);
+      ctx.lineTo(roofX + 20, roofY + 24);
+      ctx.stroke();
+    }
+    ctx.fillStyle = "rgba(255, 235, 174, 0.48)";
+    ctx.fillRect(x + w / 2 - 25, y - 7, 50, 4);
+
+    const windowY = y + 64;
+    const windowWidth = Math.max(24, Math.min(42, w * 0.18));
+    const windowHeight = 30;
+    const windowXs = w > 210 ? [x + w * 0.21, x + w * 0.79] : [x + w * 0.26, x + w * 0.74];
+    for (const windowX of windowXs) {
+      ctx.fillStyle = "#674a36";
+      roundedRect(ctx, windowX - windowWidth / 2 - 4, windowY - 4, windowWidth + 8, windowHeight + 8, 4);
+      ctx.fill();
+      const windowGlow = 0.68 + Math.sin(time * 0.7 + windowX) * 0.06;
+      ctx.fillStyle = `rgba(249, 205, 112, ${windowGlow})`;
+      roundedRect(ctx, windowX - windowWidth / 2, windowY, windowWidth, windowHeight, 2);
+      ctx.fill();
+      ctx.strokeStyle = "rgba(108, 76, 49, 0.72)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(windowX, windowY);
+      ctx.lineTo(windowX, windowY + windowHeight);
+      ctx.moveTo(windowX - windowWidth / 2, windowY + windowHeight / 2);
+      ctx.lineTo(windowX + windowWidth / 2, windowY + windowHeight / 2);
+      ctx.stroke();
+      ctx.fillStyle = "rgba(255, 242, 184, 0.24)";
+      ctx.fillRect(windowX - windowWidth / 2 + 3, windowY + 3, windowWidth * 0.32, 4);
+    }
+
+    const doorWidth = Math.max(24, Math.min(40, w * 0.16));
+    const doorX = x + w / 2 - doorWidth / 2;
+    ctx.fillStyle = "#694936";
+    roundedRect(ctx, doorX - 4, y + h - 67, doorWidth + 8, 67, 5);
+    ctx.fill();
+    ctx.fillStyle = "#8e6548";
+    roundedRect(ctx, doorX, y + h - 63, doorWidth, 63, 3);
+    ctx.fill();
+    ctx.strokeStyle = "rgba(250, 213, 139, 0.42)";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(doorX + doorWidth / 2, y + h - 60);
+    ctx.lineTo(doorX + doorWidth / 2, y + h - 4);
+    ctx.stroke();
+    ctx.fillStyle = "#efc16c";
+    ctx.beginPath();
+    ctx.arc(doorX + doorWidth - 7, y + h - 32, 2.2, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = trim;
+    ctx.fillRect(doorX - 10, y + h - 69, doorWidth + 20, 5);
+
+    if (isNature || label.includes("休息")) {
+      ctx.strokeStyle = "#73925c";
+      ctx.lineWidth = 2;
+      for (const side of [-1, 1]) {
+        const planterX = x + w / 2 + side * Math.min(72, w * 0.32);
+        ctx.fillStyle = "#a16d46";
+        roundedRect(ctx, planterX - 14, y + h - 27, 28, 9, 3);
+        ctx.fill();
+        for (let leaf = 0; leaf < 3; leaf += 1) {
+          ctx.beginPath();
+          ctx.moveTo(planterX + (leaf - 1) * 7, y + h - 20);
+          ctx.quadraticCurveTo(planterX + (leaf - 1) * 8 + side * 4, y + h - 34, planterX + (leaf - 1) * 7 + side * 7, y + h - 38);
+          ctx.stroke();
+        }
+      }
+    } else if (isIndustrial) {
+      ctx.fillStyle = "#b88d55";
+      ctx.fillRect(x + 16, y + h - 30, 20, 13);
+      ctx.fillRect(x + w - 36, y + h - 30, 20, 13);
+      ctx.fillStyle = "#6c4d35";
+      ctx.fillRect(x + 18, y + h - 28, 16, 2);
+      ctx.fillRect(x + w - 34, y + h - 28, 16, 2);
+    }
+
+    ctx.fillStyle = "rgba(255, 247, 218, 0.95)";
+    ctx.font = "700 11px 'PingFang SC', sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(label, x + w / 2, y + h + 24);
+    ctx.fillStyle = "rgba(46, 67, 55, 0.74)";
+    ctx.font = "600 8px 'PingFang SC', sans-serif";
+    ctx.fillText(isCivic ? "公共服务" : isNature ? "自然共居" : isIndustrial ? "生产与流通" : "日常生活", x + w / 2, y + h + 36);
+    this.drawPlaceTag(ctx, x + w / 2, y - 15, label, "rgba(255, 247, 216, 0.92)", "#36594a");
+    ctx.restore();
+  }
+
+  drawFarmBuildingAccents(ctx, state, time) {
+    const night = state.minutes >= 18 * 60 || state.minutes < 7 * 60;
+    const drawLantern = (x, y, color = "#e9bd63") => {
+      ctx.save();
+      ctx.strokeStyle = "#654a34";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(x, y - 12);
+      ctx.lineTo(x, y - 4);
+      ctx.stroke();
+      ctx.fillStyle = "#6b4a34";
+      roundedRect(ctx, x - 6, y - 5, 12, 16, 3);
+      ctx.fill();
+      ctx.globalAlpha = night ? 0.86 : 0.42;
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(x, y + 3, 4, 0, TAU);
+      ctx.fill();
+      ctx.globalAlpha = 0.16 + Math.sin(time * 1.6 + x) * 0.04;
+      ctx.fillStyle = "#ffe9a8";
+      ctx.beginPath();
+      ctx.arc(x, y + 3, 13, 0, TAU);
+      ctx.fill();
+      ctx.restore();
+    };
+    const drawPlanter = (x, y, hue = "#77a65d") => {
+      ctx.save();
+      ctx.fillStyle = "#a5724b";
+      roundedRect(ctx, x - 16, y - 7, 32, 10, 3);
+      ctx.fill();
+      ctx.strokeStyle = hue;
+      ctx.lineWidth = 2;
+      for (let leaf = -1; leaf <= 1; leaf += 1) {
+        ctx.beginPath();
+        ctx.moveTo(x + leaf * 7, y - 6);
+        ctx.quadraticCurveTo(x + leaf * 8 - 4, y - 20, x + leaf * 7 - 2, y - 25);
+        ctx.stroke();
+      }
+      ctx.restore();
+    };
+    const drawCrate = (x, y, color = "#a77a4b") => {
+      ctx.save();
+      ctx.fillStyle = color;
+      roundedRect(ctx, x - 12, y - 11, 24, 20, 3);
+      ctx.fill();
+      ctx.strokeStyle = "rgba(79, 54, 35, 0.58)";
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(x - 8, y - 8, 16, 14);
+      ctx.beginPath();
+      ctx.moveTo(x - 7, y - 7);
+      ctx.lineTo(x + 7, y + 5);
+      ctx.moveTo(x + 7, y - 7);
+      ctx.lineTo(x - 7, y + 5);
+      ctx.stroke();
+      ctx.restore();
+    };
+
+    const house = WORLD.house;
+    drawLantern(house.x + 27, house.y + house.h - 34);
+    drawLantern(house.x + house.w - 28, house.y + house.h - 34, "#edcf7a");
+    drawPlanter(house.x + 80, house.y + house.h - 7, "#d27d6b");
+    drawPlanter(house.x + house.w - 72, house.y + house.h - 7, "#78a865");
+
+    const ai = WORLD.aiShed;
+    drawLantern(ai.x + 18, ai.y + ai.h - 15, "#8bd4c2");
+    drawLantern(ai.x + ai.w - 18, ai.y + ai.h - 15, "#8bd4c2");
+    ctx.save();
+    ctx.strokeStyle = "rgba(143, 220, 199, 0.58)";
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    ctx.moveTo(ai.x + 22, ai.y + ai.h + 2);
+    ctx.quadraticCurveTo(ai.x + ai.w / 2, ai.y + ai.h + 18, ai.x + ai.w - 22, ai.y + ai.h + 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+
+    const housing = WORLD.workerHousing;
+    drawLantern(housing.x + 19, housing.y + housing.h - 14);
+    drawLantern(housing.x + housing.w - 19, housing.y + housing.h - 14);
+    drawPlanter(housing.x + 45, housing.y + housing.h - 4, "#d27d6b");
+    drawPlanter(housing.x + housing.w - 45, housing.y + housing.h - 4, "#78a865");
+
+    const market = WORLD.villageShop;
+    drawCrate(market.x + 25, market.y + market.h - 6, "#c6924e");
+    drawCrate(market.x + market.w - 26, market.y + market.h - 6, "#8cac63");
+    drawLantern(market.x + market.w / 2, market.y + market.h - 8, "#f0c76d");
+    const archive = WORLD.archive;
+    drawPlanter(archive.x + 24, archive.y + archive.h - 4, "#86a66c");
+    drawPlanter(archive.x + archive.w - 24, archive.y + archive.h - 4, "#c28a64");
+    drawLantern(archive.x + archive.w / 2, archive.y + archive.h - 7, "#e7c477");
+
+    const board = WORLD.noticeboard;
+    drawLantern(board.x + board.w / 2, board.y + board.h + 13, "#efc66e");
+    const bin = WORLD.shippingBin;
+    drawCrate(bin.x + bin.w / 2, bin.y + bin.h + 12, "#a8784a");
+
+    const pasture = WORLD.pasture;
+    drawPlanter(pasture.x + 28, pasture.y + pasture.h - 25, "#9fc66f");
+    drawPlanter(pasture.x + pasture.w - 30, pasture.y + pasture.h - 25, "#d3a269");
+  }
+
   drawSceneStructures(ctx, sceneId, time) {
     const structures = {
       city: [
@@ -833,30 +1071,7 @@ export class WorldRenderer {
         [290, 405, 700, 180, "公共厨房与餐厅", "#8b7959"],
       ],
     }[sceneId] || [];
-    for (const [x, y, w, h, label, roof] of structures) {
-      ctx.save();
-      ctx.fillStyle = "rgba(34, 55, 46, 0.2)";
-      ctx.beginPath();
-      ctx.ellipse(x + w / 2, y + h + 10, w * 0.52, 18, 0, 0, TAU);
-      ctx.fill();
-      ctx.fillStyle = "#dfd0a9";
-      roundedRect(ctx, x, y + 30, w, h - 30, 7);
-      ctx.fill();
-      ctx.fillStyle = roof;
-      ctx.beginPath();
-      ctx.moveTo(x - 9, y + 36);
-      ctx.lineTo(x + w / 2, y - 6);
-      ctx.lineTo(x + w + 9, y + 36);
-      ctx.closePath();
-      ctx.fill();
-      ctx.fillStyle = "rgba(69, 60, 48, 0.36)";
-      ctx.fillRect(x + w / 2 - 12, y + h - 50, 24, 50);
-      ctx.fillStyle = "#f3cf79";
-      ctx.fillRect(x + 22, y + 62, 24, 20);
-      ctx.fillRect(x + w - 46, y + 62, 24, 20);
-      this.drawPlaceTag(ctx, x + w / 2, y - 12, label, "rgba(255, 247, 216, 0.85)", "#36594a");
-      ctx.restore();
-    }
+    for (const [x, y, w, h, label, roof] of structures) this.drawDetailedStructure(ctx, x, y, w, h, label, roof, time);
     if (sceneId === "house") {
       ctx.save();
       ctx.fillStyle = "rgba(255, 248, 223, 0.68)";
@@ -1594,6 +1809,41 @@ export class WorldRenderer {
       ctx.fillStyle = "#f0c16c";
       ctx.fillRect(house.x + 24, house.y + 52, 17, 15);
       ctx.fillRect(house.x + house.w - 43, house.y + 52, 17, 15);
+      ctx.strokeStyle = "rgba(255, 224, 166, 0.3)";
+      ctx.lineWidth = 1.5;
+      for (let tile = 0; tile < 5; tile += 1) {
+        ctx.beginPath();
+        ctx.moveTo(house.x + 15 + tile * 22, house.y + 30);
+        ctx.lineTo(house.x + house.w / 2, house.y + 4);
+        ctx.stroke();
+      }
+      ctx.fillStyle = "#6a4b34";
+      ctx.fillRect(house.x + house.w / 2 - 14, house.y + 54, 28, 4);
+      ctx.fillStyle = "#e7bb65";
+      ctx.beginPath();
+      ctx.arc(house.x + house.w / 2 + 8, house.y + 72, 2, 0, TAU);
+      ctx.fill();
+      ctx.fillStyle = "#9d6d45";
+      roundedRect(ctx, house.x + 9, house.y + house.h - 11, 25, 8, 2);
+      ctx.fill();
+      roundedRect(ctx, house.x + house.w - 34, house.y + house.h - 11, 25, 8, 2);
+      ctx.fill();
+      ctx.strokeStyle = house.roof === "#8d5b3d" ? "#79a35f" : "#b6a568";
+      ctx.lineWidth = 1.5;
+      for (const planterX of [house.x + 17, house.x + house.w - 22]) {
+        ctx.beginPath();
+        ctx.moveTo(planterX, house.y + house.h - 4);
+        ctx.quadraticCurveTo(planterX - 4, house.y + house.h - 18, planterX - 2, house.y + house.h - 23);
+        ctx.moveTo(planterX + 8, house.y + house.h - 4);
+        ctx.quadraticCurveTo(planterX + 11, house.y + house.h - 17, planterX + 9, house.y + house.h - 22);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 0.18 + Math.sin(time * 0.8 + house.x) * 0.04;
+      ctx.fillStyle = "#f6e5be";
+      ctx.beginPath();
+      ctx.arc(house.x + house.w - 24, house.y - 10, 7, 0, TAU);
+      ctx.arc(house.x + house.w - 19, house.y - 21, 5, 0, TAU);
+      ctx.fill();
       ctx.restore();
     }
 
