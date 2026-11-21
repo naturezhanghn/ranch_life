@@ -4152,9 +4152,13 @@ export function loadGame() {
     merged.fishPond.health = Number.isFinite(Number(merged.fishPond.health))
       ? Math.max(0, Math.min(100, Number(merged.fishPond.health)))
       : base.fishPond.health;
-    merged.barn.level = Number.isFinite(Number(merged.barn.level)) ? Math.max(0, Math.floor(Number(merged.barn.level))) : base.barn.level;
+    const maxBarnLevel = BARN_UPGRADES[BARN_UPGRADES.length - 1]?.level || base.barn.level;
+    const maxBarnCapacity = BARN_UPGRADES[BARN_UPGRADES.length - 1]?.capacity || base.barn.capacity;
+    merged.barn.level = Number.isFinite(Number(merged.barn.level))
+      ? Math.max(0, Math.min(maxBarnLevel, Math.floor(Number(merged.barn.level))))
+      : base.barn.level;
     merged.barn.capacity = Number.isFinite(Number(merged.barn.capacity))
-      ? Math.max(ANIMAL_DEFS.length, Math.floor(Number(merged.barn.capacity)))
+      ? Math.max(ANIMAL_DEFS.length, Math.min(maxBarnCapacity, Math.floor(Number(merged.barn.capacity))))
       : base.barn.capacity;
     merged.barn.name = typeof merged.barn.name === "string" ? merged.barn.name : base.barn.name;
     merged.pasture.grassPlots = base.pasture.grassPlots.map((plot, index) => {
