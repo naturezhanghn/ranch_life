@@ -1,4 +1,5 @@
 import { RanchPhaserFarmScene } from "./phaser-farm-scene.js";
+import { WORLD } from "./data.js";
 
 export function startPhaserBridge() {
   if (window.__RANCH_PHASER__) return window.__RANCH_PHASER__;
@@ -12,8 +13,8 @@ export function startPhaserBridge() {
   const game = new Phaser.Game({
     type: Phaser.CANVAS,
     renderType: Phaser.CANVAS,
-    width: 1280,
-    height: 720,
+    width: WORLD.width,
+    height: WORLD.height,
     parent: stage,
     canvas,
     transparent: false,

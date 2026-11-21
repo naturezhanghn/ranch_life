@@ -103,6 +103,8 @@ const FARM_EMPLOYEE_ROUTES = {
 export class WorldRenderer {
   constructor(canvas) {
     this.canvas = canvas;
+    canvas.width = WORLD.width;
+    canvas.height = WORLD.height;
     this.ctx = canvas.getContext("2d", { alpha: false });
     this.ctx.imageSmoothingEnabled = true;
     this.time = 0;
@@ -502,8 +504,8 @@ export class WorldRenderer {
     ctx.fillStyle = palette[0];
     for (let index = 0; index < 22; index += 1) {
       const drift = time * (5 + index % 4);
-      const x = ((index * 137 + drift) % 1320) - 20;
-      const y = 80 + ((index * 83 + Math.sin(time * 0.5 + index) * 24 + drift * (0.3 + (index % 3) * 0.18)) % 540);
+      const x = ((index * 137 + drift) % (WORLD.width + 40)) - 20;
+      const y = 80 + ((index * 83 + Math.sin(time * 0.5 + index) * 24 + drift * (0.3 + (index % 3) * 0.18)) % Math.max(260, WORLD.height - 180));
       ctx.globalAlpha = state.season === "冬" ? 0.4 : 0.28;
       if (palette[1] === "leaf") {
         ctx.save();
@@ -594,16 +596,18 @@ export class WorldRenderer {
       ctx.fillRect(54, 52, WORLD.width - 108, WORLD.height - 92);
       ctx.strokeStyle = "rgba(116, 78, 52, 0.22)";
       ctx.lineWidth = 2;
-      for (let x = 70; x < 1210; x += 42) {
+      const roomRight = WORLD.width - 60;
+      const roomBottom = WORLD.height - 50;
+      for (let x = 70; x < roomRight; x += 42) {
         ctx.beginPath();
         ctx.moveTo(x, 58);
-        ctx.lineTo(x, 670);
+        ctx.lineTo(x, roomBottom);
         ctx.stroke();
       }
-      for (let y = 74; y < 670; y += 42) {
+      for (let y = 74; y < roomBottom; y += 42) {
         ctx.beginPath();
         ctx.moveTo(60, y);
-        ctx.lineTo(1220, y);
+        ctx.lineTo(roomRight, y);
         ctx.stroke();
       }
       ctx.fillStyle = "rgba(171, 125, 82, 0.25)";
@@ -1095,8 +1099,8 @@ export class WorldRenderer {
 
     ctx.save();
     ctx.globalAlpha = state.weather === "drought" ? 0.27 : 0.18;
-    for (let row = 0; row < 13; row += 1) {
-      for (let col = 0; col < 23; col += 1) {
+    for (let row = 0; row < Math.ceil(WORLD.height / 58) + 1; row += 1) {
+      for (let col = 0; col < Math.ceil(WORLD.width / 58) + 1; col += 1) {
         const x = 14 + col * 58;
         const y = 12 + row * 58;
         const n = hash01(row * 37 + col * 91);
@@ -1179,6 +1183,19 @@ export class WorldRenderer {
     ctx.beginPath();
     ctx.moveTo(580, 490);
     ctx.bezierCurveTo(630, 535, 641, 566, 665, 654);
+    ctx.stroke();
+
+    // The enlarged ranch keeps a visible route into the new eastern and
+    // southern acreage so the camera reveals destinations as the player walks.
+    ctx.strokeStyle = "#cfaf74";
+    ctx.lineWidth = 42;
+    ctx.beginPath();
+    ctx.moveTo(842, 525);
+    ctx.bezierCurveTo(1010, 560, 1190, 606, 1415, 690);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(1040, 575);
+    ctx.bezierCurveTo(1145, 500, 1260, 430, 1450, 360);
     ctx.stroke();
     ctx.restore();
 
@@ -2490,6 +2507,12 @@ export class WorldRenderer {
       [65, 376, 0.68],
       [611, 670, 0.58],
       [754, 691, 0.62],
+      [1320, 108, 0.78],
+      [1480, 210, 0.92],
+      [1370, 468, 0.76],
+      [1510, 760, 0.86],
+      [1120, 832, 0.7],
+      [1380, 846, 0.64],
     ];
     for (const [x, y, scale] of trees) {
       this.drawTree(ctx, x, y, scale, time);
@@ -2502,8 +2525,8 @@ export class WorldRenderer {
     ctx.fillStyle = "#d6b573";
     ctx.globalAlpha = 0.8;
     for (let flower = 0; flower < 34; flower += 1) {
-      const x = 68 + hash01(flower * 9.7) * 1130;
-      const y = 58 + hash01(flower * 13.1) * 592;
+      const x = 68 + hash01(flower * 9.7) * (WORLD.width - 118);
+      const y = 58 + hash01(flower * 13.1) * (WORLD.height - 108);
       if (
         (x > 100 && x < 760 && y > 260 && y < 510) ||
         (x > 810 && y > 470)
@@ -3369,8 +3392,9 @@ export class WorldRenderer {
     const bushes = [
       [12, 720, 0.9],
       [95, 717, 0.56],
-      [1238, 694, 0.94],
-      [1130, 715, 0.5],
+      [1558, 874, 0.94],
+      [1390, 880, 0.5],
+      [1260, 862, 0.62],
     ];
     for (const [x, y, scale] of bushes) {
       ctx.save();
@@ -3397,8 +3421,8 @@ export class WorldRenderer {
     ctx.save();
     for (let particle = 0; particle < 18; particle += 1) {
       const speed = 7 + (particle % 5) * 3;
-      const x = ((particle * 79 + time * speed) % 1320) - 20;
-      const y = 100 + ((particle * 53 + Math.sin(time * 0.3 + particle) * 22) % 530);
+      const x = ((particle * 79 + time * speed) % (WORLD.width + 40)) - 20;
+      const y = 100 + ((particle * 53 + Math.sin(time * 0.3 + particle) * 22) % (WORLD.height - 170));
       ctx.globalAlpha = 0.12 + (particle % 4) * 0.03;
       ctx.fillStyle = particle % 3 === 0 ? "#f4dfa7" : "#dfe9c1";
       ctx.beginPath();
@@ -3410,8 +3434,8 @@ export class WorldRenderer {
     if (state.minutes >= 19 * 60) {
       ctx.save();
       for (let fly = 0; fly < 15; fly += 1) {
-        const x = 140 + hash01(fly * 15.7) * 1010;
-        const y = 360 + hash01(fly * 19.3) * 300;
+        const x = 140 + hash01(fly * 15.7) * (WORLD.width - 250);
+        const y = 360 + hash01(fly * 19.3) * (WORLD.height - 430);
         const alpha = Math.max(0, Math.sin(time * 1.2 + fly * 2.4)) * 0.7;
         if (alpha < 0.08) continue;
         ctx.globalAlpha = alpha;
@@ -3435,8 +3459,8 @@ export class WorldRenderer {
       ctx.lineWidth = 1.2;
       for (let drop = 0; drop < 110; drop += 1) {
         const speed = 520 + (drop % 5) * 55;
-        const x = ((drop * 131 + time * 120) % 1320) - 20;
-        const y = ((drop * 83 + time * speed) % 780) - 30;
+        const x = ((drop * 131 + time * 120) % (WORLD.width + 40)) - 20;
+        const y = ((drop * 83 + time * speed) % (WORLD.height + 60)) - 30;
         ctx.beginPath();
         ctx.moveTo(x, y);
         ctx.lineTo(x - 5, y + 16);
@@ -3444,8 +3468,8 @@ export class WorldRenderer {
       }
       ctx.strokeStyle = "rgba(206, 238, 235, 0.18)";
       for (let ring = 0; ring < 13; ring += 1) {
-        const x = 120 + hash01(ring * 11) * 1040;
-        const y = 390 + hash01(ring * 17) * 260;
+        const x = 120 + hash01(ring * 11) * Math.max(520, WORLD.width - 240);
+        const y = 390 + hash01(ring * 17) * Math.max(180, WORLD.height - 520);
         const pulse = (time * 0.9 + ring * 0.3) % 1;
         ctx.beginPath();
         ctx.ellipse(x, y, 3 + pulse * 9, 1 + pulse * 3, 0, 0, TAU);
@@ -3462,8 +3486,8 @@ export class WorldRenderer {
       ctx.fillStyle = "rgba(198, 153, 70, 0.1)";
       ctx.fillRect(0, 0, WORLD.width, WORLD.height);
       for (let mote = 0; mote < 24; mote += 1) {
-        const x = ((mote * 127 + time * 12) % 1320) - 20;
-        const y = 140 + ((mote * 71 + Math.sin(time * 0.5 + mote) * 28) % 520);
+        const x = ((mote * 127 + time * 12) % (WORLD.width + 40)) - 20;
+        const y = 140 + ((mote * 71 + Math.sin(time * 0.5 + mote) * 28) % Math.max(240, WORLD.height - 240));
         ctx.globalAlpha = 0.12 + (mote % 3) * 0.03;
         ctx.fillStyle = "#f3d18a";
         ctx.beginPath();

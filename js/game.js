@@ -812,26 +812,20 @@ function update(delta) {
 
 function resizeViewport() {
   if (!dom.gameStage) return;
-  if (window.innerWidth > 900) {
-    stageRect = null;
-    mobileCamera.initialized = false;
-    canvas.style.width = "";
-    canvas.style.height = "";
-    canvas.style.transform = "";
-    canvas.style.top = "";
-    canvas.style.left = "";
-    return;
-  }
   const rect = dom.gameStage.getBoundingClientRect();
   stageRect = { width: rect.width, height: rect.height };
   mobileCamera.initialized = false;
 }
 
 function updateCamera(delta) {
-  if (!stageRect || window.innerWidth > 900) return;
+  if (!stageRect) return;
   const { width: stageWidth, height: stageHeight } = stageRect;
   if (!stageWidth || !stageHeight) return;
-  const scale = Math.max(stageWidth / WORLD.width, stageHeight / WORLD.height);
+  const fitScale = Math.max(stageWidth / WORLD.width, stageHeight / WORLD.height);
+  // A small zoom keeps the player readable and leaves enough world outside
+  // the viewport for the camera to follow in both directions.
+  const zoom = window.innerWidth > 900 ? 1.08 : 1.18;
+  const scale = fitScale * zoom;
   const renderWidth = WORLD.width * scale;
   const renderHeight = WORLD.height * scale;
   const desiredX = clamp(
@@ -855,6 +849,7 @@ function updateCamera(delta) {
   }
   canvas.style.width = `${renderWidth}px`;
   canvas.style.height = `${renderHeight}px`;
+  canvas.style.position = "absolute";
   canvas.style.top = "0px";
   canvas.style.left = "0px";
   canvas.style.transform = `translate(${mobileCamera.x}px, ${mobileCamera.y}px)`;

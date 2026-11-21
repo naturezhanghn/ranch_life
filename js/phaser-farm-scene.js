@@ -1,3 +1,5 @@
+import { WORLD } from "./data.js";
+
 export class RanchPhaserFarmScene extends Phaser.Scene {
   constructor() {
     super({ key: "RanchPhaserFarmScene" });
@@ -15,7 +17,7 @@ export class RanchPhaserFarmScene extends Phaser.Scene {
       padding: { left: 10, right: 10, top: 7, bottom: 7 },
     });
     this.label.setScrollFactor(0);
-    this.cameras.main.setBounds(0, 0, 1280, 720);
+    this.cameras.main.setBounds(0, 0, WORLD.width, WORLD.height);
     this.keys = this.input.keyboard.addKeys("W,A,S,D,UP,DOWN,LEFT,RIGHT,E");
     this.held = new Set();
     this.onWindowKeyDown = (event) => {
@@ -45,8 +47,8 @@ export class RanchPhaserFarmScene extends Phaser.Scene {
     if (this.held.has("A") || this.held.has("ARROWLEFT")) dx -= speed;
     if (this.held.has("D") || this.held.has("ARROWRIGHT")) dx += speed;
     if (dx || dy) {
-      state.player.x = Math.max(76, Math.min(1204, state.player.x + dx));
-      state.player.y = Math.max(86, Math.min(684, state.player.y + dy));
+      state.player.x = Math.max(WORLD.bounds.left + 14, Math.min(WORLD.bounds.right - 14, state.player.x + dx));
+      state.player.y = Math.max(WORLD.bounds.top + 14, Math.min(WORLD.bounds.bottom - 14, state.player.y + dy));
       state.player.facing = Math.abs(dx) > Math.abs(dy) ? (dx < 0 ? "left" : "right") : dy < 0 ? "up" : "down";
     }
     this.player.clear();
@@ -60,7 +62,7 @@ export class RanchPhaserFarmScene extends Phaser.Scene {
   drawFarm() {
     this.map.clear();
     this.map.fillStyle(0x88a762, 1);
-    this.map.fillRect(0, 0, 1280, 720);
+    this.map.fillRect(0, 0, WORLD.width, WORLD.height);
     this.map.fillStyle(0xd9bd83, 1);
     this.map.fillRoundedRect(180, 100, 92, 520, 30);
     this.map.fillRoundedRect(220, 410, 700, 68, 28);

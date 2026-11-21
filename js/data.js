@@ -184,9 +184,9 @@ export const REGIONS = {
 };
 
 export const WORLD = {
-  width: 1280,
-  height: 720,
-  bounds: { left: 62, top: 72, right: 1218, bottom: 698 },
+  width: 1600,
+  height: 900,
+  bounds: { left: 62, top: 72, right: 1538, bottom: 878 },
   field: { x: 260, y: 300, cols: 8, rows: 4, tile: 56 },
   house: { x: 90, y: 50, w: 250, h: 175 },
   aiShed: { x: 355, y: 68, w: 170, h: 132 },

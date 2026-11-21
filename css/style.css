@@ -477,11 +477,14 @@ body.modal-open .app-shell {
 }
 
 #gameCanvas {
+  position: absolute;
+  inset: 0 auto auto 0;
   width: 100%;
   height: 100%;
   display: block;
   touch-action: none;
   background: #8caa69;
+  will-change: transform;
 }
 
 #phaserCanvas {
