@@ -1,3 +1,4 @@
+游戏地址：https://naturezhanghn.github.io/ranch_life/
 # 牧场生活：共同体
 
 **Ranch Life: The Common Ground**
