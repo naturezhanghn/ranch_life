@@ -45,6 +45,7 @@ import {
   TOOLS,
   TOOL_UPGRADE_LEVELS,
   WORKER_DEFS,
+  WORKER_HOUSING_UPGRADES,
   WORLD,
 } from "./data.js";
 import {
@@ -102,6 +103,7 @@ import {
   upgradeBarn,
   upgradeTool,
   upgradeHouse,
+  upgradeWorkerHousing,
   getBagUsage,
   getBridgeQuestStep,
   recordClue,
@@ -920,6 +922,7 @@ function canMoveTo(x, y) {
   const farmBlockers = [
     WORLD.house,
     WORLD.aiShed,
+    WORLD.workerHousing,
     WORLD.villageShop,
     WORLD.archive,
     WORLD.noticeboard,
@@ -1115,6 +1118,28 @@ function handleInteraction(id) {
     openSceneFacility(sceneInteraction.facilityId);
     return;
   }
+  if (currentSceneId() === "workerDorm") {
+    if (sceneInteraction?.id === "dorm_workers") {
+      openDormVisit("workers");
+      return;
+    }
+    if (sceneInteraction?.id === "dorm_sprites") {
+      openDormVisit("sprites");
+      return;
+    }
+    if (sceneInteraction?.id === "dorm_kitchen") {
+      openHouseKitchen();
+      return;
+    }
+    if (sceneInteraction?.id === "dorm_beds") {
+      openDormBeds();
+      return;
+    }
+    if (sceneInteraction?.id === "dorm_upgrade") {
+      openRegionHub("sprites");
+      return;
+    }
+  }
   if (sceneInteraction?.minigame) {
     if (sceneInteraction.minigame === "hunt" && currentSceneId() === "wilderness" && !["shotgun", "huntingKnife"].includes(state.selectedTool)) {
       audio.play("error");
@@ -1179,6 +1204,9 @@ function handleInteraction(id) {
       break;
     case "house_game":
       openHouseGame();
+      break;
+    case "worker_housing":
+      travelToScene("workerDorm", "road");
       break;
     case "house_bed":
       openSleepDialog();
@@ -1461,6 +1489,83 @@ function openSceneFacility(facilityId) {
     wide: true,
     body: `<p class="story-lead">${facility.subtitle}</p><div class="region-card-grid facility-grid">${rows}</div><div class="weather-note">每张地图的房屋都提供十项可执行功能，时间消耗和产出会写入当前存档。</div>`,
     footer: `<button type="button" class="button button--primary" data-action="close">离开房屋</button>`,
+  });
+}
+
+function workerShiftIsActive() {
+  return state.minutes >= 10 * 60 && state.minutes < 18 * 60;
+}
+
+function dormResidentCard(character, kind, status) {
+  return `
+    <article class="region-card facility-card dorm-resident-card">
+      ${characterPortrait(character, kind)}
+      <div class="region-card-copy"><strong>${escapeHtml(character.name)}</strong><span>${escapeHtml(character.talent || "今天也在牧场帮忙。")}</span><small>${escapeHtml(status)}</small></div>
+    </article>
+  `;
+}
+
+function openDormVisit(group = "workers") {
+  if (workerShiftIsActive()) {
+    showToast("员工和小精灵正在牧场上班，18:00 后回宿舍再来慰问。", { strong: "宿舍作息" });
+    return;
+  }
+  state.housing ||= { level: 0, capacity: 4, name: "临时住宿棚", lastUpgradeDay: 0, lastVisitDay: 0 };
+  const isWorkerGroup = group === "workers";
+  const residents = isWorkerGroup
+    ? (state.workers?.hired || []).map((id) => WORKER_DEFS[id]).filter(Boolean)
+    : (state.sprites?.unlocked || []).map((id) => SPRITE_DEFS[id]).filter(Boolean);
+  const label = isWorkerGroup ? "员工" : "小精灵";
+  const cards = residents.map((resident) => {
+    const assignment = isWorkerGroup
+      ? Object.entries(state.workers?.assignments || {}).find(([, workerId]) => workerId === resident.id)?.[0]
+      : Object.entries(state.sprites?.assignments || {}).find(([, spriteId]) => spriteId === resident.id)?.[0];
+    const role = assignment ? `今天负责${assignment === "watering" ? "浇水" : assignment === "planting" ? "开垦与播种" : assignment === "animals" ? "照料牲畜" : assignment === "fishing" ? "钓鱼" : assignment === "fishery" ? "养鱼" : assignment === "hunting" ? "狩猎副手" : assignment === "trade" ? "贸易" : "牧场事务"}` : "今天完成了基础劳动";
+    return dormResidentCard(resident, isWorkerGroup ? "worker" : "sprite", role);
+  }).join("");
+  const firstVisitToday = state.housing.lastVisitDay !== state.day;
+  if (firstVisitToday) {
+    state.housing.lastVisitDay = state.day;
+    state.relations.workers = Math.min(100, (state.relations.workers || 0) + 1);
+    if (!isWorkerGroup) {
+      for (const spriteId of state.sprites.unlocked || []) {
+        state.sprites.friendship[spriteId] = Math.min(100, (state.sprites.friendship[spriteId] || 0) + 1);
+      }
+    }
+    addMemory(state, `你在宿舍慰问了${label}，听他们说完今天的工作。`, "social", 2);
+    saveGame(state);
+    updateHUD(true);
+  }
+  openModal({
+    kicker: `宿舍 · ${formatClock(state.minutes)} · 下班后`,
+    title: `晚间慰问${label}`,
+    wide: true,
+    body: `
+      <p class="story-lead">${residents.length ? `宿舍的灯已经亮起。${label}把工具放回门边，愿意和你聊聊今天真正做完的事。` : `宿舍里还没有${label}入住。先在员工面板完成雇用或招募，再回来看看他们的晚间生活。`}</p>
+      <div class="region-card-grid dorm-resident-grid">${cards || '<div class="empty-note">这里暂时没有住户。</div>'}</div>
+      <div class="weather-note">每个自然日首次慰问会让劳动者关系提高 1 点，并记录一条宿舍记忆。宿舍公共厨房和床位也可以在这里使用。</div>
+    `,
+    footer: `<button type="button" class="button button--primary" data-action="close">让大家早点休息</button>`,
+  });
+}
+
+function openDormBeds() {
+  state.housing ||= { level: 0, capacity: 4, name: "临时住宿棚", lastUpgradeDay: 0, lastVisitDay: 0 };
+  const residentCount = (state.workers?.hired?.length || 0) + (state.sprites?.unlocked?.length || 0);
+  const next = WORKER_HOUSING_UPGRADES.find((entry) => entry.level === state.housing.level + 1);
+  openModal({
+    kicker: "宿舍管理 · 固定床位",
+    title: "查看入住床位",
+    body: `
+      <div class="day-summary-grid">
+        <div class="summary-tile"><strong>${residentCount}</strong><span>当前住户</span></div>
+        <div class="summary-tile"><strong>${state.housing.capacity}</strong><span>可用床位</span></div>
+        <div class="summary-tile"><strong>Lv.${state.housing.level}</strong><span>宿舍等级</span></div>
+      </div>
+      <p class="story-lead">${residentCount > state.housing.capacity ? "当前住户超过床位，下一次扩建应优先补足住宿容量。" : "每位员工和小精灵都有固定床位。下班后他们会从牧场回到这里，第二天再出发工作。"}</p>
+      <div class="weather-note">${next ? `${next.title}需要 ${next.cost} 金，可容纳 ${next.capacity} 人。` : "宿舍已经扩建到最大规模。"}</div>
+    `,
+    footer: `<button type="button" class="button button--ghost" data-action="close">返回宿舍</button>${next ? `<button type="button" class="button button--primary" data-action="upgradeHousing" ${state.coins < next.cost ? "disabled" : ""}>${next.title} · ✦ ${next.cost}</button>` : ""}`,
   });
 }
 
@@ -2356,6 +2461,10 @@ function renderSpritesPanel() {
     hunting: "狩猎副手",
   };
   const assignments = state.sprites.assignments || {};
+  const housing = state.housing || { level: 0, capacity: 4, name: "临时住宿棚" };
+  const residentCount = (state.workers?.hired?.length || 0) + (state.sprites?.unlocked?.length || 0);
+  const nextHousing = WORKER_HOUSING_UPGRADES.find((entry) => entry.level === housing.level + 1);
+  const housingCard = `<article class="region-card housing-card"><div class="region-card-icon region-card-icon--ink">⌂</div><div class="region-card-copy"><strong>${housing.name} · Lv.${housing.level}</strong><span>入住 ${residentCount} / ${housing.capacity} · 下班后员工和小精灵会回这里休息。</span><small>${nextHousing ? `${nextHousing.title} · ${nextHousing.description}` : "住宿已经扩建到最大规模。"}</small></div><button type="button" class="shop-buy" data-action="upgradeHousing" ${!nextHousing || state.coins < nextHousing.cost ? "disabled" : ""}>${nextHousing ? `修建 ✦ ${nextHousing.cost}` : "已满级"}</button></article>`;
   const roleButtons = (spriteId) => Object.entries(roleLabels)
     .map(([role, label]) => {
       const primary = SPRITE_DEFS[spriteId].role === role;
@@ -2398,6 +2507,8 @@ function renderSpritesPanel() {
       regionMetric("自动劳动", Object.values(assignments).filter(Boolean).length, "is-gold"),
       regionMetric("鱼塘存鱼", `${state.fishPond?.stock || 0}/${state.fishPond?.capacity || 0}`, "is-blue"),
     ].join(""))}
+    <div class="region-section-heading"><span>员工住宿</span><small>宿舍建成后，员工和小精灵有固定的下班空间</small></div>
+    <div class="region-card-grid">${housingCard}</div>
     <div class="sprite-workboard">
       <span>当前分工</span>
       <div>${Object.entries(roleLabels).map(([role, label]) => `<b>${label} · ${assignments[role] ? SPRITE_DEFS[assignments[role]].name : state.workers?.assignments?.[role] ? WORKER_DEFS[state.workers.assignments[role]]?.name : "空缺"}</b>`).join("")}</div>
@@ -3490,7 +3601,8 @@ function openShippingBin() {
   for (const [id, count] of Object.entries(state.inventory.resources || {})) {
     if (count <= 0 || !MARKET_GOODS[id]) continue;
     const price = getMarketPrice(state, id);
-    rows.push(`<div class="shop-row"><span class="item-swatch" aria-hidden="true">${MARKET_GOODS[id].icon}</span><span class="shop-row-copy"><strong>${MARKET_GOODS[id].name} × ${count}</strong><small>海岛资源 · ${price} 金 / 份</small></span><span class="clue-status">${price * count} 金</span></div>`);
+    const source = id === "tidefish" ? "钓鱼与鱼塘产出 · 可直接出货" : `${MARKET_GOODS[id].source || "海岛资源"} · 可直接出货`;
+    rows.push(`<div class="shop-row"><span class="item-swatch" aria-hidden="true">${MARKET_GOODS[id].icon}</span><span class="shop-row-copy"><strong>${MARKET_GOODS[id].name} × ${count}</strong><small>${source} · ${price} 金 / 份</small></span><span class="clue-status">${price * count} 金</span></div>`);
   }
   const qualityProductPriceForUi = (id, quality) => Math.round((PRODUCTS[id]?.sellPrice || 0) * ({ S: 1, M: 1.35, L: 1.8 }[quality] || 1));
   const binValue = Object.entries(state.shipping.bin || {}).reduce((sum, [id, count]) => {
@@ -3538,6 +3650,7 @@ function openShippingBin() {
       <div class="day-summary-grid"><div class="summary-tile"><strong>${state.shipping.dailyConsignedUnits}</strong><span>今日交付</span></div><div class="summary-tile"><strong>${state.shipping.totalUnits}</strong><span>累计件数</span></div><div class="summary-tile"><strong>${state.shipping.totalValue}</strong><span>累计金币</span></div></div>
       <div class="weather-note">
         收获作物会直接进入出货箱，不占背包。出货收入会在隔夜日结到账，品质越高，结算单价越高。
+        河流垂钓、鱼塘养殖和员工钓鱼得到的潮汐银鱼也会进入这里，点击“全部交付”即可随下一班船出货。
       </div>
     `,
     footer: `
@@ -3802,6 +3915,17 @@ function handleModalClick(event) {
       } else {
         audio.play("error");
         showToast(result.message);
+      }
+      break;
+    }
+    case "upgradeHousing": {
+      const result = upgradeWorkerHousing(state);
+      if (result.ok) {
+        audio.play("success");
+        refreshRegionPanel(result.message);
+      } else {
+        audio.play("error");
+        showToast(result.message, { strong: "员工住宿" });
       }
       break;
     }

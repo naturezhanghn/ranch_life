@@ -2,6 +2,7 @@ import {
   ANIMAL_DEFS,
   BACKPACK_UPGRADES,
   BARN_UPGRADES,
+  WORKER_HOUSING_UPGRADES,
   BIRTHDAYS,
   BRIDGE_QUEST,
   CITY_PROJECTS,
@@ -389,6 +390,13 @@ export function createInitialState() {
       tripHistory: [],
     },
     house: { level: 0, upgrades: {}, fridge: {}, storageSlots: 0, kitchen: false },
+    housing: {
+      level: 0,
+      capacity: 4,
+      name: "临时住宿棚",
+      lastUpgradeDay: 0,
+      lastVisitDay: 0,
+    },
     home: { mealsCooked: 0, tvMinutes: 0, gamesPlayed: 0 },
     forage: {
       available: [],
@@ -3170,6 +3178,21 @@ export function upgradeHouse(state) {
   return { ok: true, message: `${next.title}完成，${next.features.join("、")}已经可用。` };
 }
 
+export function upgradeWorkerHousing(state) {
+  const housing = state.housing || { level: 0, capacity: 4, name: "临时住宿棚", lastUpgradeDay: 0 };
+  state.housing = housing;
+  const next = WORKER_HOUSING_UPGRADES.find((entry) => entry.level === housing.level + 1);
+  if (!next) return { ok: false, message: "员工与小精灵宿舍已经扩建到最大规模。" };
+  if (state.coins < next.cost) return { ok: false, message: `还差 ${next.cost - state.coins} 金才能${next.title}。` };
+  state.coins -= next.cost;
+  housing.level = next.level;
+  housing.capacity = next.capacity;
+  housing.name = next.title;
+  housing.lastUpgradeDay = state.day;
+  addMemory(state, `${next.title}完成。${next.description}员工和小精灵终于有了下班后可以回去的地方。`, "care", 4);
+  return { ok: true, message: `${next.title}完成，住宿容量提高到 ${next.capacity} 人。` };
+}
+
 export function cookRecipe(state, recipeId) {
   const recipe = HOME_RECIPES.find((entry) => entry.id === recipeId);
   if (!recipe) return { ok: false, message: "这道菜还没有写进食谱。" };
@@ -3967,6 +3990,7 @@ export function loadGame() {
           : base.shipping.selectedRoute,
       },
       house: { ...base.house, ...(parsed.house || {}), upgrades: { ...base.house.upgrades, ...(parsed.house?.upgrades || {}) }, fridge: { ...base.house.fridge, ...(parsed.house?.fridge || {}) } },
+      housing: { ...base.housing, ...(parsed.housing || {}) },
       home: { ...base.home, ...(parsed.home || {}) },
       barn: { ...base.barn, ...(parsed.barn || {}) },
       pasture: {
@@ -4257,6 +4281,21 @@ export function loadGame() {
       ? Math.max(ANIMAL_DEFS.length, Math.min(maxBarnCapacity, Math.floor(Number(merged.barn.capacity))))
       : base.barn.capacity;
     merged.barn.name = typeof merged.barn.name === "string" ? merged.barn.name : base.barn.name;
+    const maxHousingLevel = WORKER_HOUSING_UPGRADES[WORKER_HOUSING_UPGRADES.length - 1]?.level || base.housing.level;
+    const maxHousingCapacity = WORKER_HOUSING_UPGRADES[WORKER_HOUSING_UPGRADES.length - 1]?.capacity || base.housing.capacity;
+    merged.housing.level = Number.isFinite(Number(merged.housing.level))
+      ? Math.max(0, Math.min(maxHousingLevel, Math.floor(Number(merged.housing.level))))
+      : base.housing.level;
+    merged.housing.capacity = Number.isFinite(Number(merged.housing.capacity))
+      ? Math.max(base.housing.capacity, Math.min(maxHousingCapacity, Math.floor(Number(merged.housing.capacity))))
+      : base.housing.capacity;
+    merged.housing.name = typeof merged.housing.name === "string" ? merged.housing.name : base.housing.name;
+    merged.housing.lastUpgradeDay = Number.isFinite(Number(merged.housing.lastUpgradeDay))
+      ? Math.max(0, Math.floor(Number(merged.housing.lastUpgradeDay)))
+      : base.housing.lastUpgradeDay;
+    merged.housing.lastVisitDay = Number.isFinite(Number(merged.housing.lastVisitDay))
+      ? Math.max(0, Math.floor(Number(merged.housing.lastVisitDay)))
+      : base.housing.lastVisitDay;
     merged.pasture.grassPlots = base.pasture.grassPlots.map((plot, index) => {
       const source = merged.pasture.grassPlots[index] && typeof merged.pasture.grassPlots[index] === "object"
         ? merged.pasture.grassPlots[index]

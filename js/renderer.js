@@ -141,6 +141,7 @@ export class WorldRenderer {
     this.drawVillageBase(ctx, time);
     this.drawHouse(ctx, state, time);
     this.drawAiShed(ctx, state, time);
+    this.drawHousingStructures(ctx, state, time);
     this.drawMarket(ctx, time);
     this.drawArchive(ctx, time);
     this.drawNoticeboard(ctx, time);
@@ -825,6 +826,11 @@ export class WorldRenderer {
         [926, 74, 238, 162, "废矿车棚", "#716053"],
         [190, 376, 208, 112, "碎石场", "#8a7659"],
         [834, 380, 246, 118, "安全站", "#6e7464"],
+      ],
+      workerDorm: [
+        [100, 70, 410, 225, "员工休息室", "#a86c4f"],
+        [590, 70, 410, 225, "小精灵房间", "#718e61"],
+        [290, 405, 700, 180, "公共厨房与餐厅", "#8b7959"],
       ],
     }[sceneId] || [];
     for (const [x, y, w, h, label, roof] of structures) {
@@ -1698,6 +1704,148 @@ export class WorldRenderer {
     ctx.restore();
 
     this.drawPlaceTag(ctx, x + w - 55, y - 22, "家", "#f6e5b8", "#224c40");
+  }
+
+  drawHousingStructures(ctx, state, time) {
+    const housing = WORLD.housing || {};
+    if (WORLD.workerHousing) {
+      const building = WORLD.workerHousing;
+      const occupancy = (state.workers?.hired?.length || 0) + (state.sprites?.unlocked?.length || 0);
+      const capacity = state.housing?.capacity || 8;
+      this.drawHousingBuilding(ctx, building, {
+        label: state.housing?.name || "员工与精灵宿舍",
+        sublabel: "居民与伙伴共居",
+        roof: "#8b6d59",
+        wall: "#e2cda3",
+        accent: "#e8c476",
+        icon: "⌂✦",
+        occupancy,
+        capacity,
+        level: state.housing?.level || 0,
+        time,
+      });
+      return;
+    }
+    const workerHouse = housing.worker || { x: 536, y: 72, w: 164, h: 112 };
+    const spriteHouse = housing.sprite || { x: 536, y: 192, w: 164, h: 92 };
+    const workerState = state.housing?.worker || state.housing?.workers || {};
+    const spriteState = state.housing?.sprite || state.housing?.sprites || {};
+    this.drawHousingBuilding(ctx, workerHouse, {
+      label: "员工宿舍",
+      sublabel: "居民员工",
+      roof: "#a86c4f",
+      wall: "#e3c79b",
+      accent: "#e7bc6a",
+      icon: "⌂",
+      occupancy: state.workers?.hired?.length || 0,
+      capacity: workerState.capacity || 4,
+      level: workerState.level || 0,
+      time,
+    });
+    this.drawHousingBuilding(ctx, spriteHouse, {
+      label: "精灵小屋",
+      sublabel: "伙伴共居",
+      roof: "#718e61",
+      wall: "#d4e0ae",
+      accent: "#f0d47d",
+      icon: "✦",
+      occupancy: state.sprites?.unlocked?.length || 0,
+      capacity: spriteState.capacity || 4,
+      level: spriteState.level || 0,
+      time: time + 1.8,
+    });
+  }
+
+  drawHousingBuilding(ctx, building, options) {
+    const {
+      label,
+      sublabel,
+      roof,
+      wall,
+      accent,
+      icon,
+      occupancy,
+      capacity,
+      level,
+      time,
+    } = options;
+    const { x, y, w, h } = building;
+    const safeCapacity = Math.max(1, Number(capacity) || 1);
+    const safeOccupancy = Math.max(0, Number(occupancy) || 0);
+    ctx.save();
+    ctx.fillStyle = "rgba(39, 57, 43, 0.22)";
+    ctx.beginPath();
+    ctx.ellipse(x + w / 2, y + h + 8, w * 0.54, 13, 0, 0, TAU);
+    ctx.fill();
+
+    ctx.fillStyle = wall;
+    roundedRect(ctx, x + 7, y + 27, w - 14, h - 27, 7);
+    ctx.fill();
+    ctx.fillStyle = "rgba(116, 79, 53, 0.18)";
+    for (let line = 0; line < 3; line += 1) {
+      ctx.fillRect(x + 15, y + 44 + line * 18, w - 30, 2);
+    }
+    ctx.fillStyle = roof;
+    ctx.beginPath();
+    ctx.moveTo(x - 6, y + 34);
+    ctx.lineTo(x + w / 2, y - 10);
+    ctx.lineTo(x + w + 6, y + 34);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = "rgba(67, 55, 42, 0.35)";
+    ctx.lineWidth = 2;
+    for (let tile = 0; tile < 4; tile += 1) {
+      ctx.beginPath();
+      ctx.moveTo(x + 12 + tile * 8, y + 30);
+      ctx.lineTo(x + w / 2 + tile * 8, y - 2);
+      ctx.stroke();
+      ctx.moveTo(x + w - 12 - tile * 8, y + 30);
+      ctx.lineTo(x + w / 2 - tile * 8, y - 2);
+      ctx.stroke();
+    }
+
+    ctx.fillStyle = "#664735";
+    roundedRect(ctx, x + w / 2 - 13, y + h - 38, 26, 38, 4);
+    ctx.fill();
+    ctx.fillStyle = accent;
+    ctx.fillRect(x + 16, y + 47, 26, 19);
+    ctx.fillRect(x + w - 42, y + 47, 26, 19);
+    ctx.fillStyle = "rgba(255, 239, 169, 0.76)";
+    ctx.fillRect(x + 19, y + 50, 20, 13);
+    ctx.fillRect(x + w - 39, y + 50, 20, 13);
+    ctx.strokeStyle = "rgba(97, 68, 45, 0.55)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x + 29, y + 50);
+    ctx.lineTo(x + 29, y + 63);
+    ctx.moveTo(x + w - 29, y + 50);
+    ctx.lineTo(x + w - 29, y + 63);
+    ctx.stroke();
+
+    ctx.fillStyle = accent;
+    ctx.beginPath();
+    ctx.arc(x + w / 2, y + 21, 11, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = "#5a4538";
+    ctx.font = "700 12px 'PingFang SC', sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(icon, x + w / 2, y + 25);
+
+    ctx.fillStyle = "rgba(255, 247, 218, 0.96)";
+    ctx.font = "700 11px 'PingFang SC', sans-serif";
+    ctx.fillText(label, x + w / 2, y + h + 22);
+    ctx.fillStyle = "rgba(248, 236, 196, 0.86)";
+    ctx.font = "600 8px 'PingFang SC', sans-serif";
+    ctx.fillText(`${sublabel} · ${safeOccupancy}/${safeCapacity} · Lv.${level}`, x + w / 2, y + h + 35);
+
+    const smoke = (Math.sin(time * 1.3) + 1) * 0.5;
+    ctx.globalAlpha = 0.16 + smoke * 0.08;
+    ctx.fillStyle = "#f5e6bd";
+    ctx.beginPath();
+    ctx.arc(x + w - 29 + Math.sin(time * 0.8) * 2, y - 18 - smoke * 6, 5, 0, TAU);
+    ctx.arc(x + w - 23 + Math.sin(time * 0.9 + 1) * 2, y - 28 - smoke * 5, 4, 0, TAU);
+    ctx.fill();
+    ctx.restore();
   }
 
   drawWindow(ctx, x, y, width, height, color, time) {

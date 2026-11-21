@@ -91,6 +91,12 @@ export const BARN_UPGRADES = [
   { level: 2, capacity: 10, cost: 480, title: "扩建牛羊棚", description: "增加通风棚舍和饮水槽，最多容纳 10 只牲畜。" },
 ];
 
+export const WORKER_HOUSING_UPGRADES = [
+  { level: 1, capacity: 8, cost: 220, title: "修建员工宿舍", description: "在牧场北侧修建带公共厨房和储物柜的员工宿舍，可容纳 8 名员工与小精灵。" },
+  { level: 2, capacity: 14, cost: 460, title: "扩建员工宿舍", description: "增加独立床位、洗衣间和夜间灯带，可容纳 14 名员工与小精灵。" },
+  { level: 3, capacity: 22, cost: 860, title: "修建伙伴长屋", description: "建成长屋和暖棚，所有牧场员工与小精灵都有固定床位，可容纳 22 人。" },
+];
+
 export const HOME_RECIPES = [
   {
     id: "farm_stew",
@@ -154,6 +160,7 @@ export const SCENE_REGION_MAP = {
   ),
   quarry: "city",
   house: "farm",
+  workerDorm: "farm",
   wilderness: "farm",
 };
 
@@ -229,6 +236,7 @@ export const WORLD = {
   field: { x: 260, y: 300, cols: 8, rows: 4, tile: 56 },
   house: { x: 90, y: 50, w: 250, h: 175 },
   aiShed: { x: 355, y: 68, w: 170, h: 132 },
+  workerHousing: { x: 548, y: 68, w: 150, h: 132 },
   pasture: { x: 735, y: 28, w: 495, h: 360 },
   pond: { x: 1010, y: 620, rx: 205, ry: 88 },
   villageShop: { x: 92, y: 540, w: 185, h: 103 },
@@ -277,6 +285,17 @@ export const SCENE_DEFS = {
     ],
     portals: [
       { id: "portal_farm", x: 640, y: 680, radius: 42, target: "farm", label: "回到牧场" },
+    ],
+  },
+  workerDorm: {
+    id: "workerDorm",
+    name: "员工与小精灵宿舍",
+    subtitle: "下班后的公共厨房、床位和晚间慰问空间",
+    palette: ["#c8ad86", "#796b63"],
+    spawn: { x: 640, y: 660, facing: "up" },
+    blockers: [],
+    portals: [
+      { id: "portal_farm", x: 640, y: 730, radius: 44, target: "farm", label: "回到牧场" },
     ],
   },
   city: {
@@ -824,6 +843,13 @@ export const SCENE_SEASON_VARIANTS = {
 };
 
 export const SCENE_INTERACTIONS = {
+  workerDorm: [
+    { id: "dorm_workers", x: 300, y: 350, radius: 62, label: "下班后慰问员工", keycap: "E" },
+    { id: "dorm_sprites", x: 800, y: 350, radius: 62, label: "和小精灵聊聊", keycap: "E" },
+    { id: "dorm_kitchen", x: 640, y: 470, radius: 60, label: "查看宿舍公共厨房", keycap: "E" },
+    { id: "dorm_beds", x: 640, y: 260, radius: 58, label: "查看入住床位", keycap: "E" },
+    { id: "dorm_upgrade", x: 640, y: 560, radius: 58, label: "扩建住宿", keycap: "E" },
+  ],
   house: [
     { id: "house_kitchen", x: 200, y: 310, radius: 64, label: "在厨房做饭", keycap: "E" },
     { id: "house_tv", x: 640, y: 300, radius: 58, label: "打开电视", keycap: "E" },
@@ -2678,6 +2704,14 @@ export const INTERACTIONS = [
     label: "进入牧场综合作业屋",
     keycap: "E",
     facilityId: "farm",
+  },
+  {
+    id: "worker_housing",
+    x: 623,
+    y: 214,
+    radius: 54,
+    label: "进入员工与小精灵宿舍",
+    keycap: "E",
   },
   {
     id: "ai",
