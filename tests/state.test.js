@@ -1244,6 +1244,10 @@ test("illegal save numbers are clamped and missing fields get defaults", () => {
     assert.equal(sparse.player.x, createInitialState().player.x);
     assert.ok(sparse.quests && sparse.festival && sparse.weekly);
 
+    store[SAVE_KEY] = JSON.stringify({ selectedSeed: "grass" });
+    const dedicatedGrassSelection = loadGame();
+    assert.equal(dedicatedGrassSelection.selectedSeed, createInitialState().selectedSeed);
+
     const legacyAnimals = createInitialState().animals.filter((animal) => animal.id !== "duck");
     legacyAnimals[1].health = 61;
     store[SAVE_KEY] = JSON.stringify({ animals: legacyAnimals });
