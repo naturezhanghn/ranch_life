@@ -171,46 +171,45 @@ export class WorldRenderer {
       draw: () => this.drawWorker(ctx, 705, workerY, time),
     });
 
-    const assignedWorkers = new Set();
-    for (const [role, workerId] of Object.entries(state.workers?.assignments || {})) {
-      const worker = WORKER_DEFS[workerId];
-      if (!worker || !FARM_EMPLOYEE_ROUTES[role] || assignedWorkers.has(workerId)) continue;
-      assignedWorkers.add(workerId);
-      const visibleRole = workShift ? role : "休息";
-      const motion = this.getFarmEmployeeMotion(visibleRole, workerId, time);
-      motion.working = workShift;
-      drawables.push({
-        y: motion.y,
-        draw: () => this.drawFarmEmployee(ctx, motion.x, motion.y, worker, visibleRole, time, motion),
+    if (workShift) {
+      const assignedWorkers = new Set();
+      for (const [role, workerId] of Object.entries(state.workers?.assignments || {})) {
+        const worker = WORKER_DEFS[workerId];
+        if (!worker || !FARM_EMPLOYEE_ROUTES[role] || assignedWorkers.has(workerId)) continue;
+        assignedWorkers.add(workerId);
+        const motion = this.getFarmEmployeeMotion(role, workerId, time);
+        motion.working = true;
+        drawables.push({
+          y: motion.y,
+          draw: () => this.drawFarmEmployee(ctx, motion.x, motion.y, worker, role, time, motion),
+        });
+      }
+      const unassignedWorkers = (state.workers?.hired || [])
+        .filter((workerId) => !assignedWorkers.has(workerId))
+        .map((workerId) => WORKER_DEFS[workerId])
+        .filter(Boolean);
+      unassignedWorkers.forEach((worker, index) => {
+        const defaultRole = ["planting", "watering", "animals"][index % 3];
+        const motion = this.getFarmEmployeeMotion(defaultRole, worker.id, time, index);
+        motion.working = true;
+        drawables.push({
+          y: motion.y,
+          draw: () => this.drawFarmEmployee(ctx, motion.x, motion.y, worker, defaultRole, time, motion),
+        });
       });
-    }
-    const unassignedWorkers = (state.workers?.hired || [])
-      .filter((workerId) => !assignedWorkers.has(workerId))
-      .map((workerId) => WORKER_DEFS[workerId])
-      .filter(Boolean);
-    unassignedWorkers.forEach((worker, index) => {
-      const defaultRole = ["planting", "watering", "animals"][index % 3];
-      const visibleRole = workShift ? defaultRole : "休息";
-      const motion = this.getFarmEmployeeMotion(visibleRole, worker.id, time, index);
-      motion.working = workShift;
-      drawables.push({
-        y: motion.y,
-        draw: () => this.drawFarmEmployee(ctx, motion.x, motion.y, worker, visibleRole, time, motion),
-      });
-    });
 
-    const assignedSprites = new Set();
-    for (const [role, spriteId] of Object.entries(state.sprites?.assignments || {})) {
-      const sprite = SPRITE_DEFS[spriteId];
-      if (!sprite || !FARM_EMPLOYEE_ROUTES[role] || assignedSprites.has(spriteId)) continue;
-      assignedSprites.add(spriteId);
-      const visibleRole = workShift ? role : "休息";
-      const motion = this.getFarmSpriteMotion(visibleRole, spriteId, time);
-      motion.working = workShift;
-      drawables.push({
-        y: motion.y - 8,
-        draw: () => this.drawFarmSprite(ctx, motion.x, motion.y, sprite, visibleRole, time, motion),
-      });
+      const assignedSprites = new Set();
+      for (const [role, spriteId] of Object.entries(state.sprites?.assignments || {})) {
+        const sprite = SPRITE_DEFS[spriteId];
+        if (!sprite || !FARM_EMPLOYEE_ROUTES[role] || assignedSprites.has(spriteId)) continue;
+        assignedSprites.add(spriteId);
+        const motion = this.getFarmSpriteMotion(role, spriteId, time);
+        motion.working = true;
+        drawables.push({
+          y: motion.y - 8,
+          draw: () => this.drawFarmSprite(ctx, motion.x, motion.y, sprite, role, time, motion),
+        });
+      }
     }
 
     if (this.shouldShowInvestor(state)) {
@@ -278,6 +277,9 @@ export class WorldRenderer {
       this.drawSeasonalRoute(ctx, state, sceneId, seasonVariant, time);
       this.drawSceneStructures(ctx, sceneId, time);
       this.drawSceneSignature(ctx, state, sceneId, time);
+      if (sceneId === "workerDorm" && !this.isWorkShift(state)) {
+        this.drawOffShiftResidents(ctx, state, time);
+      }
     }
     this.drawSeasonalBlockers(ctx, state, seasonVariant, time);
     this.drawScenePortals(ctx, scene, time);
@@ -782,6 +784,52 @@ export class WorldRenderer {
         ctx.fill();
       }
     }
+    ctx.restore();
+  }
+
+  drawOffShiftResidents(ctx, state, time) {
+    const workerSlots = [
+      [160, 224], [244, 224], [328, 224], [412, 224],
+      [186, 270], [270, 270], [354, 270], [438, 270],
+    ];
+    const spriteSlots = [
+      [650, 224], [730, 224], [810, 224], [890, 224],
+      [690, 270], [770, 270], [850, 270], [930, 270],
+    ];
+    const makeIdleMotion = (x, y, id, index) => {
+      const seed = [...String(id || index)].reduce((total, character, characterIndex) => (
+        total + character.charCodeAt(0) * (characterIndex + 1)
+      ), 0);
+      return {
+        x,
+        y,
+        facing: index % 2 ? -1 : 1,
+        moving: false,
+        working: false,
+        seed,
+        walkPhase: time * 1.4 + seed * 0.04,
+        actionPhase: time * 1.1 + seed * 0.03,
+      };
+    };
+    (state.workers?.hired || []).map((id) => WORKER_DEFS[id]).filter(Boolean).forEach((worker, index) => {
+      const slot = workerSlots[index % workerSlots.length];
+      const motion = makeIdleMotion(slot[0], slot[1], worker.id, index);
+      this.drawFarmEmployee(ctx, motion.x, motion.y, worker, "休息", time, motion);
+    });
+    (state.sprites?.unlocked || []).map((id) => SPRITE_DEFS[id]).filter(Boolean).forEach((sprite, index) => {
+      const slot = spriteSlots[index % spriteSlots.length];
+      const motion = makeIdleMotion(slot[0], slot[1], sprite.id, index + 20);
+      this.drawFarmSprite(ctx, motion.x, motion.y, sprite, "休息", time, motion);
+    });
+    ctx.save();
+    ctx.fillStyle = "rgba(255, 239, 172, 0.75)";
+    ctx.font = "700 11px 'PingFang SC', sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("18:00 后 · 住户回屋休息", 550, 322);
+    ctx.fillStyle = "rgba(255, 247, 218, 0.58)";
+    ctx.font = "600 9px 'PingFang SC', sans-serif";
+    ctx.fillText("员工房间", 305, 312);
+    ctx.fillText("小精灵房间", 795, 312);
     ctx.restore();
   }
 
