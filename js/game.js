@@ -1,5 +1,6 @@
 import {
   ANIMAL_DEFS,
+  AUTOMATION_UPGRADES,
   BACKPACK_UPGRADES,
   BARN_UPGRADES,
   BIRTHDAYS,
@@ -22,7 +23,10 @@ import {
   MARKET_GOODS,
   MINIGAME_DEFS,
   MARKET_TIERS,
+  METROPOLIS_RESEARCH,
+  METROPOLIS_VARIETIES,
   NPC_TOPICS,
+  NPC_BONDS,
   NPC_STORY_ARCS,
   POST_GAME_MODIFIERS,
   SCENE_FINDS,
@@ -89,6 +93,8 @@ import {
   fulfillTradeContract,
   holdTownHall,
   investInCity,
+  researchMetropolis,
+  tradeMetropolisFinance,
   isNpcBirthday,
   joinFestivalActivity,
   loadGame,
@@ -104,6 +110,7 @@ import {
   upgradeTool,
   upgradeHouse,
   upgradeWorkerHousing,
+  upgradeAutomation,
   getBagUsage,
   getBridgeQuestStep,
   recordClue,
@@ -1208,6 +1215,9 @@ function handleInteraction(id) {
     case "worker_housing":
       travelToScene("workerDorm", "road");
       break;
+    case "automation_machine":
+      openAutomationPanel();
+      break;
     case "house_bed":
       openSleepDialog();
       break;
@@ -1271,11 +1281,36 @@ function handleInteraction(id) {
       if (state.world.unlockedRegions.includes("island")) travelToScene("island", "road");
       else openRegionHub("city");
       break;
+    case "port_metropolis":
+      travelToScene("metropolis", "road");
+      break;
     case "port_shipping":
       openShippingBin();
       break;
     case "port_sailor":
       openSceneNpcDialogue("merchant");
+      break;
+    case "metro_machine_lab":
+      openMetropolisResearch("machine");
+      break;
+    case "metro_university":
+      openMetropolisResearch("seeds");
+      break;
+    case "metro_breeding":
+      openMetropolisResearch("breeds");
+      break;
+    case "metro_finance":
+    case "metro_cityhall":
+      openMetropolisFinance();
+      break;
+    case "metro_trade":
+      openRegionHub("trade");
+      break;
+    case "metro_library":
+      openMetropolisResearch("all");
+      break;
+    case "metro_port":
+      travelToScene("port", "road");
       break;
     case "council_government":
       openRegionHub("government");
@@ -1569,6 +1604,63 @@ function openDormBeds() {
   });
 }
 
+function openAutomationPanel() {
+  const automation = state.automation || { level: 0, name: "手工作业区", lastRunDay: 0, lastActions: [] };
+  const next = AUTOMATION_UPGRADES.find((entry) => entry.level === automation.level + 1);
+  const actionNames = { harvest: "收获", plant: "播种", water: "浇灌" };
+  const actionSummary = (automation.lastRunDay === state.day && automation.lastActions?.length)
+    ? automation.lastActions.map((action) => actionNames[action.type] || action.type).join("、")
+    : "今天还没有运行记录";
+  openModal({
+    kicker: "牧场左侧 · 自动化农机区",
+    title: automation.name,
+    wide: true,
+    body: `
+      <div class="day-summary-grid">
+        <div class="summary-tile"><strong>Lv.${automation.level}</strong><span>农机等级</span></div>
+        <div class="summary-tile"><strong>${automation.lastActions?.length || 0}</strong><span>最近处理格数</span></div>
+        <div class="summary-tile"><strong>${automation.lastRunDay === state.day ? "已运行" : "待运行"}</strong><span>今日状态</span></div>
+      </div>
+      <p class="story-lead">左侧扩建区的机器会在 10:00–18:00 的工作班次里逐格作业。机器优先处理成熟作物、空地和待浇水作物，收获物直接进入出货箱。</p>
+      <div class="weather-note">最近一次记录 · ${actionSummary}</div>
+      ${next ? `<div class="region-card-grid"><article class="region-card facility-card"><div class="region-card-icon region-card-icon--ink">⚙</div><div class="region-card-copy"><strong>${next.title} · ✦ ${next.cost}</strong><span>${next.description}</span><small>安装后解锁${next.machine}，每天最多处理 ${next.capacity} 格。</small></div></article></div>` : '<div class="weather-note">三套农机已经全部安装，左侧扩建区进入稳定运行。</div>'}
+    `,
+    footer: `<button type="button" class="button button--ghost" data-action="close">返回牧场</button>${next ? `<button type="button" class="button button--primary" data-action="upgradeAutomation" ${state.coins < next.cost ? "disabled" : ""}>${next.title} · ✦ ${next.cost}</button>` : ""}`,
+  });
+}
+
+function openMetropolisResearch(researchId = "all") {
+  const research = state.city?.research || { completed: [], discoveredVarieties: [] };
+  const projects = researchId === "all" ? Object.values(METROPOLIS_RESEARCH) : [METROPOLIS_RESEARCH[researchId]].filter(Boolean);
+  const cards = projects.map((project) => {
+    const done = research.completed.includes(project.id);
+    return `<article class="region-card project-card ${done ? "is-complete" : ""}">
+      <div class="region-card-icon region-card-icon--ink" aria-hidden="true">${project.icon}</div>
+      <div class="region-card-copy"><strong>${project.title}</strong><span>${project.description}</span><small>${done ? "研究已完成" : `研究经费 ✦ ${project.cost}`}</small></div>
+      <button type="button" class="shop-buy" data-action="metroResearch" data-value="${project.id}" ${done || state.coins < project.cost ? "disabled" : ""}>${done ? "已完成" : `研发 · ✦ ${project.cost}`}</button>
+    </article>`;
+  }).join("");
+  const varieties = METROPOLIS_VARIETIES.filter((entry) => research.discoveredVarieties.includes(entry.id));
+  openModal({
+    kicker: "新潮大都会 · 研究网络",
+    title: researchId === "machine" ? "农机研发中心" : researchId === "seeds" ? "大学种子实验室" : researchId === "breeds" ? "畜牧遗传学院" : "城市研究档案",
+    wide: true,
+    body: `<p class="story-lead">研究员把牧场每天遇到的问题带进实验室，再把可以落地的方案送回月溪。每项研究只需投入一次，成果会永久保留。</p><div class="region-card-grid">${cards}</div><div class="region-section-heading"><span>已发现的优良品种</span><small>${varieties.length} 项</small></div><div class="region-card-grid">${varieties.length ? varieties.map((entry) => `<article class="region-card"><div class="region-card-icon region-card-icon--leaf">${entry.kind === "seed" ? "✿" : "♜"}</div><div class="region-card-copy"><strong>${entry.name}</strong><span>${entry.description}</span></div></article>`).join("") : '<div class="empty-note">完成大学或遗传学院研究后，这里会出现可用新品种。</div>'}</div>`,
+    footer: `<button type="button" class="button button--ghost" data-action="close">离开研究园区</button>`,
+  });
+}
+
+function openMetropolisFinance() {
+  const finance = state.city?.finance || { balance: 0, trades: 0, interestDay: 0 };
+  openModal({
+    kicker: "新潮大都会 · 金融交易所",
+    title: "让贸易资金流动起来",
+    wide: true,
+    body: `<div class="day-summary-grid"><div class="summary-tile"><strong>✦ ${Math.floor(finance.balance)}</strong><span>待结算票据</span></div><div class="summary-tile"><strong>${finance.trades}</strong><span>交易笔数</span></div><div class="summary-tile"><strong>第 ${finance.interestDay || "—"} 天</strong><span>预计结算</span></div></div><p class="story-lead">交易所把牧场的闲置资金接入城市贸易网络。每张短期票据需要 100 金，三天后按 118 金结算，可以继续投入种子和设备。</p><div class="region-callout region-callout--city"><div><strong>短期贸易票据</strong><span>锁定三天，结算时本金和收益一次到账。</span></div><button type="button" class="button button--secondary" data-action="metroFinance" data-value="deposit" ${state.coins < 100 ? "disabled" : ""}>买入 ✦ 100</button></div>`,
+    footer: `<button type="button" class="button button--ghost" data-action="close">返回城市街区</button>${finance.balance > 0 ? `<button type="button" class="button button--primary" data-action="metroFinance" data-value="withdraw">结算票据</button>` : ""}`,
+  });
+}
+
 function facilityFunctionDescription(action) {
   return {
     rest: "恢复 6 点体力并经过 15 分钟。",
@@ -1656,6 +1748,14 @@ function openSceneNpcDialogue(npcId) {
   const birthday = isNpcBirthday(state, npcId);
   const topic = getNpcTopic(state, npcId);
   const storyArc = NPC_STORY_ARCS[npcId];
+  const bonds = NPC_BONDS.filter((bond) => bond.a === npcId || bond.b === npcId);
+  const bondMarkup = bonds.length
+    ? `<div class="weather-note">关系线 · ${bonds.map((bond) => {
+      const otherId = bond.a === npcId ? bond.b : bond.a;
+      const other = SCENE_NPCS.find((entry) => entry.id === otherId);
+      return `${bond.label}：${other?.name || "伙伴"} · ${bond.line}`;
+    }).join(" ／ ")}</div>`
+    : "";
   const storyBeat = storyArc?.beats?.[(Math.max(1, state.day) - 1) % storyArc.beats.length];
   const storyMarkup = storyArc
     ? `<div class="npc-story-card"><div class="npc-story-kicker">${escapeHtml(storyArc.role)} · 第 ${state.day} 天</div><strong>${escapeHtml(storyArc.title)}</strong><p>${escapeHtml(storyBeat)}</p></div>`
@@ -1666,6 +1766,7 @@ function openSceneNpcDialogue(npcId) {
       title: `${npc.name}问你`,
       body: `
         ${storyMarkup}
+        ${bondMarkup}
         ${speakerBlock({ name: npc.name, role: npc.role, text: `“${topic.prompt}”` })}
         <div class="choice-grid" style="margin-top:16px;">
           ${topic.choices
@@ -1698,7 +1799,7 @@ function openSceneNpcDialogue(npcId) {
   openModal({
     kicker: `${npc.role} · 第 ${formatClock(state.minutes)}`,
     title: npc.name,
-    body: `${storyMarkup}${speakerBlock({ name: npc.name, role: npc.role, text: copy })}<div class="weather-note">日程：${state.minutes < 11 * 60 ? "上午" : state.minutes < 16 * 60 ? "午后" : "傍晚"}。再过一段时间，${npc.name}会去另一个场景。</div>${birthday ? `<div class="day-report-card"><strong>今天是${npc.name}的生日</strong><span>${BIRTHDAYS[npcId].season}季第 ${BIRTHDAYS[npcId].day} 天 · 礼物关系加成翻倍。</span></div>` : ""}`,
+    body: `${storyMarkup}${bondMarkup}${speakerBlock({ name: npc.name, role: npc.role, text: copy })}<div class="weather-note">日程：${state.minutes < 11 * 60 ? "上午" : state.minutes < 16 * 60 ? "午后" : "傍晚"}。再过一段时间，${npc.name}会去另一个场景。</div>${birthday ? `<div class="day-report-card"><strong>今天是${npc.name}的生日</strong><span>${BIRTHDAYS[npcId].season}季第 ${BIRTHDAYS[npcId].day} 天 · 礼物关系加成翻倍。</span></div>` : ""}`,
     footer: `
       <button type="button" class="button button--ghost" data-action="close">记下这句话</button>
       <button type="button" class="button button--primary" data-action="openGiftPanel" data-value="${npc.id}" ${
@@ -2465,6 +2566,9 @@ function renderSpritesPanel() {
   const residentCount = (state.workers?.hired?.length || 0) + (state.sprites?.unlocked?.length || 0);
   const nextHousing = WORKER_HOUSING_UPGRADES.find((entry) => entry.level === housing.level + 1);
   const housingCard = `<article class="region-card housing-card"><div class="region-card-icon region-card-icon--ink">⌂</div><div class="region-card-copy"><strong>${housing.name} · Lv.${housing.level}</strong><span>入住 ${residentCount} / ${housing.capacity} · 下班后员工和小精灵会回这里休息。</span><small>${nextHousing ? `${nextHousing.title} · ${nextHousing.description}` : "住宿已经扩建到最大规模。"}</small></div><button type="button" class="shop-buy" data-action="upgradeHousing" ${!nextHousing || state.coins < nextHousing.cost ? "disabled" : ""}>${nextHousing ? `修建 ✦ ${nextHousing.cost}` : "已满级"}</button></article>`;
+  const automation = state.automation || { level: 0, name: "手工作业区", lastRunDay: 0 };
+  const nextAutomation = AUTOMATION_UPGRADES.find((entry) => entry.level === automation.level + 1);
+  const automationCard = `<article class="region-card housing-card"><div class="region-card-icon region-card-icon--ink">⚙</div><div class="region-card-copy"><strong>${automation.name} · Lv.${automation.level}</strong><span>牧场左侧自动播种、滴灌和收获机器${automation.lastRunDay === state.day ? " · 今日已运行" : ""}</span><small>${nextAutomation ? `${nextAutomation.title} · ${nextAutomation.description}` : "自动化农机已经全部安装。"}</small></div><button type="button" class="shop-buy" data-action="upgradeAutomation" ${!nextAutomation || state.coins < nextAutomation.cost ? "disabled" : ""}>${nextAutomation ? `扩建 ✦ ${nextAutomation.cost}` : "已满级"}</button></article>`;
   const roleButtons = (spriteId) => Object.entries(roleLabels)
     .map(([role, label]) => {
       const primary = SPRITE_DEFS[spriteId].role === role;
@@ -2509,6 +2613,8 @@ function renderSpritesPanel() {
     ].join(""))}
     <div class="region-section-heading"><span>员工住宿</span><small>宿舍建成后，员工和小精灵有固定的下班空间</small></div>
     <div class="region-card-grid">${housingCard}</div>
+    <div class="region-section-heading"><span>左侧自动化农机</span><small>花钱扩建后，机器会在每天的工作时段按地块运行</small></div>
+    <div class="region-card-grid">${automationCard}</div>
     <div class="sprite-workboard">
       <span>当前分工</span>
       <div>${Object.entries(roleLabels).map(([role, label]) => `<b>${label} · ${assignments[role] ? SPRITE_DEFS[assignments[role]].name : state.workers?.assignments?.[role] ? WORKER_DEFS[state.workers.assignments[role]]?.name : "空缺"}</b>`).join("")}</div>
@@ -3926,6 +4032,48 @@ function handleModalClick(event) {
       } else {
         audio.play("error");
         showToast(result.message, { strong: "员工住宿" });
+      }
+      break;
+    }
+    case "upgradeAutomation": {
+      const result = upgradeAutomation(state);
+      if (result.ok) {
+        audio.play("success");
+        saveGame(state);
+        updateHUD(true);
+        openAutomationPanel();
+        showToast(result.message, { strong: "自动化农机" });
+      } else {
+        audio.play("error");
+        showToast(result.message, { strong: "自动化农机" });
+      }
+      break;
+    }
+    case "metroResearch": {
+      const result = researchMetropolis(state, value);
+      if (result.ok) {
+        audio.play("success");
+        saveGame(state);
+        updateHUD(true);
+        openMetropolisResearch(value);
+        showToast(result.message, { strong: "大都会研发" });
+      } else {
+        audio.play("error");
+        showToast(result.message, { strong: "大都会研发" });
+      }
+      break;
+    }
+    case "metroFinance": {
+      const result = tradeMetropolisFinance(state, value);
+      if (result.ok) {
+        audio.play("success");
+        saveGame(state);
+        updateHUD(true);
+        openMetropolisFinance();
+        showToast(result.message, { strong: "金融交易所" });
+      } else {
+        audio.play("error");
+        showToast(result.message, { strong: "金融交易所" });
       }
       break;
     }

@@ -48,8 +48,8 @@ export const FORAGE_NODE_DEFS = [
     id: "farm_rain_trail",
     interactionId: "forage",
     scene: "farm",
-    x: 610,
-    y: 180,
+    x: 390,
+    y: 246,
     radius: 58,
     label: "寻找雨后足迹",
   },
@@ -95,6 +95,33 @@ export const WORKER_HOUSING_UPGRADES = [
   { level: 1, capacity: 8, cost: 220, title: "修建员工宿舍", description: "在牧场北侧修建带公共厨房和储物柜的员工宿舍，可容纳 8 名员工与小精灵。" },
   { level: 2, capacity: 14, cost: 460, title: "扩建员工宿舍", description: "增加独立床位、洗衣间和夜间灯带，可容纳 14 名员工与小精灵。" },
   { level: 3, capacity: 22, cost: 860, title: "修建伙伴长屋", description: "建成长屋和暖棚，所有牧场员工与小精灵都有固定床位，可容纳 22 人。" },
+];
+
+export const AUTOMATION_UPGRADES = [
+  {
+    level: 1,
+    cost: 480,
+    title: "安装自动播种机",
+    description: "在牧场左侧铺设轨道和播种臂，每天自动开垦并播下 2 格当季作物。",
+    machine: "播种臂",
+    capacity: 2,
+  },
+  {
+    level: 2,
+    cost: 760,
+    title: "接入滴灌系统",
+    description: "为左侧农机区接入水渠，每天按地块顺序灌溉 4 格作物。",
+    machine: "滴灌轨道",
+    capacity: 4,
+  },
+  {
+    level: 3,
+    cost: 980,
+    title: "安装自动收获机",
+    description: "成熟作物会由收获机逐格采下并直接送入出货箱，每天最多收获 6 格。",
+    machine: "收获车",
+    capacity: 6,
+  },
 ];
 
 export const HOME_RECIPES = [
@@ -159,6 +186,7 @@ export const SCENE_REGION_MAP = {
     Object.entries(REGION_SCENE_MAP).map(([regionId, sceneId]) => [sceneId, regionId]),
   ),
   quarry: "city",
+  metropolis: "city",
   house: "farm",
   workerDorm: "farm",
   wilderness: "farm",
@@ -237,6 +265,7 @@ export const WORLD = {
   house: { x: 90, y: 50, w: 250, h: 175 },
   aiShed: { x: 355, y: 68, w: 170, h: 132 },
   workerHousing: { x: 548, y: 68, w: 150, h: 132 },
+  automationYard: { x: 74, y: 300, w: 148, h: 194 },
   pasture: { x: 735, y: 28, w: 495, h: 360 },
   pond: { x: 1010, y: 620, rx: 205, ry: 88 },
   villageShop: { x: 92, y: 540, w: 185, h: 103 },
@@ -352,6 +381,25 @@ export const SCENE_DEFS = {
     ],
     portals: [
       { id: "portal_city", x: 86, y: 640, radius: 42, target: "city", label: "回河港市" },
+    ],
+  },
+  metropolis: {
+    id: "metropolis",
+    name: "新潮大都会",
+    subtitle: "研发园区、金融街、贸易塔与大学城",
+    palette: ["#718fa4", "#344d62"],
+    spawn: { x: 100, y: 650, facing: "right" },
+    blockers: [
+      { x: 48, y: 72, w: 258, h: 194 },
+      { x: 350, y: 64, w: 264, h: 202 },
+      { x: 658, y: 66, w: 268, h: 204 },
+      { x: 970, y: 60, w: 246, h: 210 },
+      { x: 50, y: 382, w: 280, h: 148 },
+      { x: 392, y: 390, w: 276, h: 144 },
+      { x: 734, y: 388, w: 282, h: 144 },
+    ],
+    portals: [
+      { id: "portal_port", x: 82, y: 700, radius: 46, target: "port", label: "乘船回贸易港" },
     ],
   },
   council: {
@@ -894,6 +942,18 @@ export const SCENE_INTERACTIONS = {
     { id: "port_delivery_run", x: 760, y: 520, radius: 58, label: "限时运货", keycap: "E", minigame: "delivery" },
     { id: "port_weekly", x: 900, y: 600, radius: 54, label: "查看本周收货牌", keycap: "E" },
     { id: "port_facility", x: 1040, y: 430, radius: 64, label: "进入港口值班屋", keycap: "E", facilityId: "port" },
+    { id: "port_metropolis", x: 970, y: 278, radius: 58, label: "乘船去新潮大都会", keycap: "E" },
+  ],
+  metropolis: [
+    { id: "metro_machine_lab", x: 178, y: 310, radius: 64, label: "进入农机研发中心", keycap: "E" },
+    { id: "metro_finance", x: 480, y: 310, radius: 64, label: "进入金融交易所", keycap: "E" },
+    { id: "metro_university", x: 790, y: 310, radius: 64, label: "进入大学种子实验室", keycap: "E" },
+    { id: "metro_breeding", x: 1090, y: 310, radius: 64, label: "进入畜牧遗传学院", keycap: "E" },
+    { id: "metro_trade", x: 190, y: 575, radius: 58, label: "查看大都会贸易牌", keycap: "E" },
+    { id: "metro_cityhall", x: 530, y: 575, radius: 58, label: "访问城市金融服务台", keycap: "E" },
+    { id: "metro_library", x: 850, y: 575, radius: 58, label: "查阅研究档案", keycap: "E" },
+    { id: "metro_port", x: 1120, y: 575, radius: 58, label: "乘船回贸易港", keycap: "E" },
+    { id: "metro_facility", x: 1100, y: 700, radius: 64, label: "进入大都会服务站", keycap: "E", facilityId: "metropolis" },
   ],
   quarry: [
     { id: "quarry_vein", x: 620, y: 330, radius: 64, label: "旧矿脉采样", keycap: "E", minigame: "mining" },
@@ -1038,6 +1098,18 @@ export const SCENE_FACILITY_FUNCTIONS = {
     "记录探索路线",
     "查看野果与猎获仓",
   ]),
+  metropolis: buildFacility("大都会综合服务站", "研发、金融、贸易和大学研究在这里交接，成果会回到你的牧场。", [
+    "在城市公园休息",
+    "查看城市气象",
+    "领取公共饮水",
+    "查看城市人才",
+    "查看实验种子",
+    "翻阅大学档案",
+    "整理研究收藏",
+    "查看港口鱼讯",
+    "写下研发日志",
+    "查看金融仓单",
+  ]),
 };
 
 export const SCENE_NPCS = [
@@ -1046,6 +1118,7 @@ export const SCENE_NPCS = [
     name: "市政官沈禾",
     role: "河港市公共事务协调员",
     speedRatio: 0.44,
+    visual: { body: "#476878", trim: "#e7c979", skin: "#e2b38d", hair: "#283a42", hairStyle: "swept", accessory: "clipboard", face: "focused" },
     scenes: [
       { from: 6 * 60, to: 11 * 60, scene: "city", x: 474, y: 526, path: [{ x: 474, y: 526 }, { x: 620, y: 560 }] },
       { from: 11 * 60, to: 15 * 60, scene: "council", x: 600, y: 566, path: [{ x: 600, y: 566 }, { x: 520, y: 610 }] },
@@ -1057,6 +1130,7 @@ export const SCENE_NPCS = [
     name: "港口商人岑岑",
     role: "贸易航线经纪人",
     speedRatio: 0.42,
+    visual: { body: "#a9684d", trim: "#f0c67d", skin: "#c98e6d", hair: "#5a342e", hairStyle: "bob", accessory: "satchel", face: "smile" },
     scenes: [
       { from: 6 * 60, to: 13 * 60, scene: "port", x: 500, y: 542, path: [{ x: 500, y: 542 }, { x: 640, y: 600 }] },
       { from: 13 * 60, to: 18 * 60, scene: "city", x: 430, y: 275, path: [{ x: 430, y: 275 }, { x: 560, y: 380 }] },
@@ -1064,10 +1138,23 @@ export const SCENE_NPCS = [
     ],
   },
   {
+    id: "pirateCaptain",
+    name: "海盗船长鸦七",
+    role: "自由贸易船队领航员",
+    speedRatio: 0.45,
+    visual: { body: "#384d67", trim: "#d7a958", skin: "#c68763", hair: "#2b303b", hairStyle: "hat", accessory: "⚓", face: "smile" },
+    scenes: [
+      { from: 6 * 60, to: 12 * 60, scene: "port", x: 760, y: 542, path: [{ x: 760, y: 542 }, { x: 930, y: 590 }] },
+      { from: 12 * 60, to: 17 * 60, scene: "city", x: 900, y: 580, path: [{ x: 900, y: 580 }, { x: 820, y: 500 }] },
+      { from: 17 * 60, to: 22 * 60, scene: "metropolis", x: 1120, y: 575, path: [{ x: 1120, y: 575 }, { x: 1040, y: 690 }] },
+    ],
+  },
+  {
     id: "spriteKeeper",
     name: "精灵看守白露",
     role: "小精灵工坊的照看人",
     speedRatio: 0.39,
+    visual: { body: "#728e63", trim: "#e4d58b", skin: "#f0c59d", hair: "#557c5e", hairStyle: "leaf", accessory: "staff", face: "kind" },
     scenes: [
       { from: 6 * 60, to: 10 * 60, scene: "workshop", x: 760, y: 566, path: [{ x: 760, y: 566 }, { x: 620, y: 610 }] },
       { from: 10 * 60, to: 16 * 60, scene: "island", x: 760, y: 342, path: [{ x: 760, y: 342 }, { x: 640, y: 420 }] },
@@ -1079,6 +1166,7 @@ export const SCENE_NPCS = [
     name: "罗婶",
     role: "上游村种植户",
     speedRatio: 0.46,
+    visual: { body: "#a96b63", trim: "#f2d59b", skin: "#b9795f", hair: "#514038", hairStyle: "bun", accessory: "basket", face: "kind" },
     scenes: [
       { from: 6 * 60, to: 10 * 60, scene: "city", x: 260, y: 526, path: [{ x: 260, y: 526 }, { x: 360, y: 560 }] },
       { from: 10 * 60, to: 14 * 60, scene: "port", x: 310, y: 540, path: [{ x: 310, y: 540 }, { x: 420, y: 600 }] },
@@ -1089,6 +1177,7 @@ export const SCENE_NPCS = [
     id: "archivist",
     name: "顾遥",
     role: "地方档案员",
+    visual: { body: "#59647f", trim: "#c6d8d1", skin: "#e7ba99", hair: "#30394a", hairStyle: "bob", accessory: "book", face: "glasses" },
     scenes: [
       { from: 6 * 60, to: 12 * 60, scene: "council", x: 860, y: 366 },
       { from: 12 * 60, to: 17 * 60, scene: "city", x: 770, y: 275 },
@@ -1099,6 +1188,7 @@ export const SCENE_NPCS = [
     id: "cook",
     name: "阿澜",
     role: "港口厨房主理人",
+    visual: { body: "#c87059", trim: "#f2dfad", skin: "#d39a73", hair: "#8a4736", hairStyle: "bun", accessory: "ladle", face: "bright" },
     scenes: [
       { from: 6 * 60, to: 11 * 60, scene: "port", x: 1114, y: 286 },
       { from: 11 * 60, to: 16 * 60, scene: "city", x: 430, y: 275 },
@@ -1109,6 +1199,7 @@ export const SCENE_NPCS = [
     id: "islandChild",
     name: "小满",
     role: "蓝潮海岛见习采集员",
+    visual: { body: "#4f9ba1", trim: "#e9d58c", skin: "#c98d69", hair: "#294b53", hairStyle: "short", accessory: "shell", face: "bright" },
     scenes: [
       { from: 6 * 60, to: 12 * 60, scene: "island", x: 372, y: 342 },
       { from: 12 * 60, to: 17 * 60, scene: "island", x: 590, y: 590 },
@@ -1119,10 +1210,47 @@ export const SCENE_NPCS = [
     id: "quarryForeman",
     name: "衡叔",
     role: "旧矿道安全员",
+    visual: { body: "#5c6262", trim: "#e0b86d", skin: "#b77d61", hair: "#6a5a4d", hairStyle: "beard", accessory: "lantern", face: "stern" },
     scenes: [
       { from: 6 * 60, to: 12 * 60, scene: "quarry", x: 300, y: 560 },
       { from: 12 * 60, to: 17 * 60, scene: "city", x: 560, y: 580 },
       { from: 17 * 60, to: 22 * 60, scene: "quarry", x: 300, y: 560 },
+    ],
+  },
+  {
+    id: "professorLin",
+    name: "林教授",
+    role: "大学种子实验室负责人",
+    speedRatio: 0.38,
+    visual: { body: "#6578a0", trim: "#d7c781", skin: "#e4b58e", hair: "#3d4658", hairStyle: "swept", accessory: "book", face: "glasses" },
+    scenes: [
+      { from: 6 * 60, to: 12 * 60, scene: "metropolis", x: 790, y: 310, path: [{ x: 790, y: 310 }, { x: 850, y: 575 }] },
+      { from: 12 * 60, to: 17 * 60, scene: "metropolis", x: 850, y: 575, path: [{ x: 850, y: 575 }, { x: 790, y: 310 }] },
+      { from: 17 * 60, to: 22 * 60, scene: "metropolis", x: 790, y: 310, path: [{ x: 790, y: 310 }, { x: 850, y: 575 }] },
+    ],
+  },
+  {
+    id: "bankerQiao",
+    name: "乔理事",
+    role: "金融交易所风控师",
+    speedRatio: 0.4,
+    visual: { body: "#586977", trim: "#e8bf77", skin: "#c98968", hair: "#2f3940", hairStyle: "short", accessory: "clipboard", face: "focused" },
+    scenes: [
+      { from: 6 * 60, to: 12 * 60, scene: "metropolis", x: 480, y: 310, path: [{ x: 480, y: 310 }, { x: 530, y: 575 }] },
+      { from: 12 * 60, to: 17 * 60, scene: "metropolis", x: 530, y: 575, path: [{ x: 530, y: 575 }, { x: 480, y: 310 }] },
+      { from: 17 * 60, to: 22 * 60, scene: "metropolis", x: 480, y: 310, path: [{ x: 480, y: 310 }, { x: 530, y: 575 }] },
+    ],
+  },
+  {
+    id: "engineerHe",
+    name: "何工",
+    role: "农机研发工程师",
+    speedRatio: 0.43,
+    visual: { body: "#568375", trim: "#e5d18b", skin: "#d19b72", hair: "#4c3f38", hairStyle: "short", accessory: "satchel", face: "bright" },
+    scenes: [
+      { from: 6 * 60, to: 12 * 60, scene: "metropolis", x: 178, y: 310, path: [{ x: 178, y: 310 }, { x: 190, y: 575 }] },
+      { from: 12 * 60, to: 17 * 60, scene: "metropolis", x: 190, y: 575, path: [{ x: 190, y: 575 }, { x: 178, y: 310 }] },
+      { from: 17 * 60, to: 22 * 60, scene: "metropolis", x: 178, y: 310, path: [{ x: 178, y: 310 }, { x: 190, y: 575 }] },
     ],
   },
 ];
@@ -1360,7 +1488,52 @@ export const NPC_TOPICS = {
       },
     ],
   },
+  professorLin: {
+    prompt: "林教授把两株候选作物放在灯下：新品种应该先追求更高产量，还是先保证明年还能留种？",
+    choices: [
+      { id: "seed", label: "先保证可留种，再逐年提高产量。", delta: 3, ecology: 2, reply: "“实验室的成果要能走出实验室，才算真正成熟。”" },
+      { id: "yield", label: "先把产量做到最高，再补上留种方案。", delta: 0, ecology: -1, reply: "“数字会先变漂亮，但土地不会忘记代价。”" },
+    ],
+  },
+  bankerQiao: {
+    prompt: "乔理事问：牧场的第一笔贷款，应该投入看得见的机器，还是留作雨季的备用金？",
+    choices: [
+      { id: "reserve", label: "留出备用金，先把风险写进账本。", delta: 3, community: 1, reply: "“会算风险的人，才有机会把收益留到下一季。”" },
+      { id: "machine", label: "先买机器，让产量尽快增长。", delta: 1, community: 0, reply: "“增长可以很快，偿还也要有同样清楚的计划。”" },
+    ],
+  },
+  engineerHe: {
+    prompt: "何工把自动收获车停在试验田边：机器要替人做完所有动作，还是只接手重复的那一段？",
+    choices: [
+      { id: "assist", label: "只接手重复劳动，把判断留给干活的人。", delta: 3, community: 1, reply: "“这样机器才是伙伴，人的经验也有位置。”" },
+      { id: "replace", label: "先追求全自动，效率最重要。", delta: -1, community: -1, reply: "“效率曲线很陡，回头路往往没有标记。”" },
+    ],
+  },
+  pirateCaptain: {
+    prompt: "鸦七把一张没有盖章的航线图压在桌上：自由船队要不要绕开城市的正规码头？",
+    choices: [
+      { id: "share", label: "先登记货物，也把小船的路线公开。", delta: 3, community: 1, reply: "“规矩不是锁链，能让每条船都知道自己不会被悄悄丢下。”" },
+      { id: "hide", label: "趁没人发现，走最快的暗线。", delta: -1, community: -1, reply: "“暗线走得快，可出了风暴，没人知道该去哪里找你。”" },
+    ],
+  },
 };
+
+// 角色之间的固定协作关系会在同一地图相遇时以短动画和气泡呈现，也会在对话里留下线索。
+export const NPC_BONDS = [
+  { a: "mayor", b: "merchant", scene: "city", label: "水量与航线", line: "先把本地货物的船位留出来，再谈远洋报价。" },
+  { a: "mayor", b: "archivist", scene: "city", label: "公开记录", line: "每一份水量记录都要能被居民查到。" },
+  { a: "merchant", b: "cook", scene: "port", label: "港口餐桌", line: "今天靠岸的鱼先给厨房留一筐。" },
+  { a: "farmerLuo", b: "cook", scene: "city", label: "种子与餐桌", line: "我留种，你把它变成大家吃得到的饭。" },
+  { a: "spriteKeeper", b: "islandChild", scene: "island", label: "潮汐与精灵", line: "记住没有拿走的东西，也是一种采集。" },
+  { a: "archivist", b: "quarryForeman", scene: "city", label: "安全档案", line: "最后一页仍然要写所有人平安回来。" },
+  { a: "farmerLuo", b: "mayor", scene: "city", label: "水章与田埂", line: "先把水量和种子的来处写清楚。" },
+  { a: "merchant", b: "islandChild", scene: "port", label: "潮路交接", line: "这张潮汐图先交给下一班船员。" },
+  { a: "professorLin", b: "engineerHe", scene: "metropolis", label: "种子与机器", line: "先让机器读懂作物的节奏，再追求更快。" },
+  { a: "bankerQiao", b: "engineerHe", scene: "metropolis", label: "预算与维护", line: "每一台机器都要把维修费写进第一张账。" },
+  { a: "professorLin", b: "bankerQiao", scene: "metropolis", label: "研究经费", line: "好的研究需要耐心，也需要一笔透明的预算。" },
+  { a: "pirateCaptain", b: "merchant", scene: "port", label: "暗线与账本", line: "每一条自由航线，也要给货物留下能追溯的名字。" },
+  { a: "pirateCaptain", b: "bankerQiao", scene: "metropolis", label: "风险与风暴", line: "海上的风向变得快，账本要给船员留出回头路。" },
+];
 
 export const NPC_STORY_ARCS = {
   mayor: {
@@ -1433,6 +1606,42 @@ export const NPC_STORY_ARCS = {
       "衡叔每天下井前都摸一遍木梁。他说矿灯只照亮脚下，不能替任何人判断下一步是否安全。",
       "一块富矿露出金色边缘，支柱却发出细响。衡叔把矿镐放下，带所有人回到地面，宁愿让订单晚一天。",
       "他把那块矿石留在安全站，旁边立着一本新簿子，第一页写着：今天所有人平安回来。",
+    ],
+  },
+  professorLin: {
+    title: "让种子走出玻璃房",
+    role: "林教授的大学研究线",
+    beats: [
+      "林教授把每株幼苗的来处写在白板上。她说研究不是把植物锁在玻璃房里，而是让它们回到真正的田地。",
+      "她和何工争论滴灌速度，最后把计时器交给种植户试用。实验记录第一次多了一栏：人觉得顺不顺手。",
+      "毕业生们把第一批优良种子送到牧场，林教授只留下两包作为下一年的对照组。她说，分享也是研究的一部分。",
+    ],
+  },
+  bankerQiao: {
+    title: "账本上的雨季",
+    role: "乔理事的金融线",
+    beats: [
+      "乔理事每天在交易所门口写下当天的风险。她说，最可靠的收益不是最高的数字，而是遇到坏天气还能兑现。",
+      "他把机器维护费单独列成一栏，拒绝把它藏进宣传里的‘效率提升’。每个借款人都能看见自己承担的部分。",
+      "当第一笔票据顺利结算，乔理事把利息的一部分投入大学奖学金。资金流动起来，也应该让下一代有选择。",
+    ],
+  },
+  engineerHe: {
+    title: "机器要听见田地",
+    role: "何工的农机线",
+    beats: [
+      "何工把传感器插进土里，先听了半天风。他说真正的自动化不是让人消失，而是让重复动作不再磨损人的手。",
+      "他邀请周禾一起调试收获车，把一格一格的泥土反馈写进程序。机器第一次因为人的一句‘慢一点’而改变路线。",
+      "新机器交付时，何工把维修扳手留在牧场。他知道一台有用的机器，必须让使用它的人能打开外壳。",
+    ],
+  },
+  pirateCaptain: {
+    title: "没有旗子的航线",
+    role: "海盗船长鸦七的自由贸易线",
+    beats: [
+      "鸦七的船没有旗子，只有一盏在雾里不肯熄灭的灯。他说自由不是没人管，而是每个人都知道自己能回到哪里。",
+      "一批急着出港的货物没有登记，鸦七把缆绳重新系紧，等商人和船员把来源写清楚。暗线也要能追溯，风暴来时才不会丢下任何人。",
+      "他把一面新旗挂在桅杆上，旗面没有徽章，只有港口、城市和牧场共同画出的三条线。鸦七终于有了愿意认领的航线。",
     ],
   },
 };
@@ -2358,6 +2567,43 @@ export const CITY_PROJECTS = {
   },
 };
 
+// 大城市科研与金融系统。研究成果会直接作用于牧场生产，形成可持续的升级循环。
+export const METROPOLIS_RESEARCH = {
+  machine: {
+    id: "machine",
+    title: "农机研发中心",
+    icon: "⚙",
+    cost: 520,
+    description: "研发模块化播种、滴灌与收获组件，让自动化农机每天多处理 2 格地块。",
+    reward: "automationCapacity",
+  },
+  seeds: {
+    id: "seeds",
+    title: "大学种子实验室",
+    icon: "✿",
+    cost: 460,
+    description: "培育高产作物种子，解锁一组跨季节优良品种。",
+    reward: "seedVarieties",
+  },
+  breeds: {
+    id: "breeds",
+    title: "畜牧遗传学院",
+    icon: "♜",
+    cost: 620,
+    description: "研究鸡、牛、羊的友好育种，解锁高品质畜产品。",
+    reward: "animalVarieties",
+  },
+};
+
+export const METROPOLIS_VARIETIES = [
+  { id: "golden_turnip", name: "金冠萝卜", kind: "seed", crop: "turnip", season: "春", bonus: 0.18, description: "春季成熟更快，出货价提高 18%。" },
+  { id: "tide_tomato", name: "潮光番茄", kind: "seed", crop: "tomato", season: "夏", bonus: 0.22, description: "夏季果实带有海风甜味，出货价提高 22%。" },
+  { id: "moon_cabbage", name: "月霜卷心菜", kind: "seed", crop: "cabbage", season: "冬", bonus: 0.2, description: "冬季耐寒，浇水不足时仍能保持品质。" },
+  { id: "blue_egg", name: "蓝潮蛋鸡", kind: "animal", animal: "chicken", bonus: 0.2, description: "产出蓝潮蛋，售价提高 20%。" },
+  { id: "river_cow", name: "河湾奶牛", kind: "animal", animal: "cow", bonus: 0.2, description: "产出浓郁牛奶，售价提高 20%。" },
+  { id: "cloud_sheep", name: "云岚绵羊", kind: "animal", animal: "sheep", bonus: 0.2, description: "羊毛更蓬松，售价提高 20%。" },
+];
+
 export const GOVERNMENT_POLICIES = {
   waterCharter: {
     id: "waterCharter",
@@ -2679,7 +2925,7 @@ export const SHOP_SEEDS = Object.values(CROPS).map((crop) => ({
 }));
 
 export const INTERACTIONS = [
-  { id: "forage", x: 610, y: 180, radius: 58, label: "寻找雨后足迹", keycap: "E", forageNode: true },
+  { id: "forage", x: 390, y: 246, radius: 58, label: "寻找雨后足迹", keycap: "E", forageNode: true },
   {
     id: "sleep",
     x: 145,
@@ -2711,6 +2957,14 @@ export const INTERACTIONS = [
     y: 214,
     radius: 54,
     label: "进入员工与小精灵宿舍",
+    keycap: "E",
+  },
+  {
+    id: "automation_machine",
+    x: 148,
+    y: 388,
+    radius: 58,
+    label: "管理自动化农机",
     keycap: "E",
   },
   {

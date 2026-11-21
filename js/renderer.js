@@ -3,6 +3,7 @@ import {
   CROPS,
   FESTIVALS,
   INTERACTIONS,
+  NPC_BONDS,
   SCENE_DEFS,
   SCENE_FINDS,
   SCENE_INTERACTIONS,
@@ -142,6 +143,7 @@ export class WorldRenderer {
     this.drawHouse(ctx, state, time);
     this.drawAiShed(ctx, state, time);
     this.drawHousingStructures(ctx, state, time);
+    this.drawAutomationYard(ctx, state, time);
     this.drawMarket(ctx, time);
     this.drawArchive(ctx, time);
     this.drawNoticeboard(ctx, time);
@@ -291,7 +293,9 @@ export class WorldRenderer {
     this.drawFestivalMarkers(ctx, state, sceneId, time);
 
     const drawables = [];
-    for (const position of scheduledNpcPositions(state.minutes, sceneId)) {
+    const npcPositions = scheduledNpcPositions(state.minutes, sceneId);
+    this.drawNpcInteractions(ctx, npcPositions, sceneId, time);
+    for (const position of npcPositions) {
       drawables.push({
         y: position.y,
         draw: () => this.drawSceneNpc(ctx, position.npc, position, time),
@@ -558,7 +562,7 @@ export class WorldRenderer {
     ctx.globalAlpha = 0.18;
     ctx.strokeStyle = sceneId === "island" ? "#e6f0c6" : "#e8d4a6";
     ctx.lineWidth = 2;
-    if (sceneId === "city" || sceneId === "council") {
+    if (sceneId === "city" || sceneId === "council" || sceneId === "metropolis") {
       for (let x = 0; x < WORLD.width; x += 46) {
         ctx.beginPath();
         ctx.moveTo(x, 0);
@@ -797,36 +801,78 @@ export class WorldRenderer {
       [650, 224], [730, 224], [810, 224], [890, 224],
       [690, 270], [770, 270], [850, 270], [930, 270],
     ];
-    const makeIdleMotion = (x, y, id, index) => {
+    const makeIdleMotion = (x, y, id, index, moving = false, facing = 1) => {
       const seed = [...String(id || index)].reduce((total, character, characterIndex) => (
         total + character.charCodeAt(0) * (characterIndex + 1)
       ), 0);
       return {
         x,
         y,
-        facing: index % 2 ? -1 : 1,
-        moving: false,
+        facing,
+        moving,
         working: false,
         seed,
         walkPhase: time * 1.4 + seed * 0.04,
         actionPhase: time * 1.1 + seed * 0.03,
       };
     };
-    (state.workers?.hired || []).map((id) => WORKER_DEFS[id]).filter(Boolean).forEach((worker, index) => {
-      const slot = workerSlots[index % workerSlots.length];
-      const motion = makeIdleMotion(slot[0], slot[1], worker.id, index);
-      this.drawFarmEmployee(ctx, motion.x, motion.y, worker, "休息", time, motion);
-    });
-    (state.sprites?.unlocked || []).map((id) => SPRITE_DEFS[id]).filter(Boolean).forEach((sprite, index) => {
-      const slot = spriteSlots[index % spriteSlots.length];
-      const motion = makeIdleMotion(slot[0], slot[1], sprite.id, index + 20);
-      this.drawFarmSprite(ctx, motion.x, motion.y, sprite, "休息", time, motion);
+    const residents = [
+      ...(state.workers?.hired || []).map((id, index) => ({
+        kind: "worker",
+        character: WORKER_DEFS[id],
+        slot: workerSlots[index % workerSlots.length],
+      })),
+      ...(state.sprites?.unlocked || []).map((id, index) => ({
+        kind: "sprite",
+        character: SPRITE_DEFS[id],
+        slot: spriteSlots[index % spriteSlots.length],
+      })),
+    ].filter((entry) => entry.character && entry.slot);
+
+    // The evening return is staged so residents pass through the shared door
+    // one at a time. The game clock remains authoritative, while `time` only
+    // supplies the walking bob and keeps each arrival visually alive.
+    const eveningStart = 18 * 60;
+    const entrySpacing = 4;
+    const entryDuration = 3.5;
+    const minutes = Number.isFinite(Number(state.minutes)) ? Number(state.minutes) : eveningStart;
+    const arriving = minutes >= eveningStart && minutes < eveningStart + residents.length * entrySpacing + entryDuration;
+    if (arriving) {
+      ctx.save();
+      ctx.fillStyle = "rgba(255, 244, 186, 0.72)";
+      ctx.beginPath();
+      ctx.arc(550, 332, 18 + Math.sin(time * 3) * 2, 0, TAU);
+      ctx.fill();
+      ctx.fillStyle = "rgba(255, 244, 186, 0.95)";
+      ctx.font = "700 10px 'PingFang SC', sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText("回屋入口", 550, 365);
+      ctx.restore();
+    }
+
+    residents.forEach(({ kind, character, slot }, index) => {
+      const arrivalAt = eveningStart + index * entrySpacing;
+      const elapsed = minutes - arrivalAt;
+      if (minutes >= eveningStart && elapsed < 0) return;
+      const progress = minutes < eveningStart ? 1 : Math.min(1, elapsed / entryDuration);
+      const from = { x: 550, y: 348 };
+      const eased = progress * progress * (3 - 2 * progress);
+      const x = from.x + (slot[0] - from.x) * eased;
+      const y = from.y + (slot[1] - from.y) * eased;
+      const moving = progress < 1;
+      const facing = slot[0] >= from.x ? 1 : -1;
+      const motion = makeIdleMotion(x, y, character.id, index, moving, facing);
+      if (kind === "worker") {
+        this.drawFarmEmployee(ctx, x, y, character, "休息", time, motion);
+      } else {
+        this.drawFarmSprite(ctx, x, y, character, "休息", time, motion);
+      }
     });
     ctx.save();
     ctx.fillStyle = "rgba(255, 239, 172, 0.75)";
     ctx.font = "700 11px 'PingFang SC', sans-serif";
     ctx.textAlign = "center";
-    ctx.fillText("18:00 后 · 住户回屋休息", 550, 322);
+    ctx.fillText(arriving ? "18:00 后 · 住户按序回屋休息" : "住户已回屋 · 安静休息中", 550, 322);
     ctx.fillStyle = "rgba(255, 247, 218, 0.58)";
     ctx.font = "600 9px 'PingFang SC', sans-serif";
     ctx.fillText("员工房间", 305, 312);
@@ -1147,6 +1193,15 @@ export class WorldRenderer {
         [160, 408, 198, 128, "蜂蜜花园", "#b28b4c"],
         [854, 400, 220, 130, "伙伴休息处", "#906a52"],
       ],
+      metropolis: [
+        [48, 72, 258, 194, "农机研发中心", "#577b91"],
+        [350, 64, 264, 202, "金融交易所", "#806b56"],
+        [658, 66, 268, 204, "大学种子实验室", "#657c9b"],
+        [970, 60, 246, 210, "畜牧遗传学院", "#806568"],
+        [50, 382, 280, 148, "国际贸易塔", "#667e79"],
+        [392, 390, 276, 144, "城市金融服务台", "#8b7559"],
+        [734, 388, 282, 144, "研究图书馆", "#647795"],
+      ],
       island: [
         [74, 72, 250, 168, "潮声湾", "#6faba1"],
         [488, 86, 214, 156, "银沙滩", "#ccb878"],
@@ -1313,26 +1368,235 @@ export class WorldRenderer {
   }
 
   drawSceneNpc(ctx, npc, position, time) {
-    this.drawShadow(ctx, position.x, position.y + 4, 19, 8);
+    const visual = npc.visual || {};
+    const moving = position.moving !== false;
+    const facing = position.facing || 1;
+    const bob = Math.sin(time * (moving ? 2.4 : 1.4) + position.x * 0.01) * (moving ? 1.5 : 0.7);
+    const step = moving ? Math.sin(time * 8 + position.x * 0.02) * 2.5 : 0;
+    this.drawShadow(ctx, position.x, position.y + 4, moving ? 20 : 19, 8);
     ctx.save();
-    ctx.translate(position.x, position.y);
-    const bob = Math.sin(time * 2.2 + position.x * 0.01) * 1.5;
-    ctx.translate(0, bob);
-    ctx.fillStyle = npc.id === "mayor" ? "#4d6670" : npc.id === "merchant" ? "#9c704e" : "#748f5f";
-    ctx.fillRect(-12, -30, 24, 28);
-    ctx.fillStyle = "#e2b889";
-    ctx.beginPath();
-    ctx.arc(0, -40, 10, 0, TAU);
+    ctx.translate(position.x, position.y + bob);
+    ctx.fillStyle = "#403b36";
+    ctx.fillRect(-10 + step, -8, 7, 10);
+    ctx.fillRect(3 - step, -8, 7, 10);
+    ctx.fillStyle = "#52463b";
+    ctx.fillRect(-12 + step, 1, 10, 3);
+    ctx.fillRect(2 - step, 1, 10, 3);
+    ctx.fillStyle = visual.body || "#6d806f";
+    roundedRect(ctx, -14, -38, 28, 31, 5);
     ctx.fill();
-    ctx.fillStyle = "#38443c";
+    ctx.fillStyle = visual.trim || "#d9c27c";
+    ctx.fillRect(-14, -35, 28, 4);
+    ctx.fillRect(-3, -31, 6, 22);
+    ctx.fillStyle = visual.skin || "#d9a47f";
     ctx.beginPath();
-    ctx.arc(0, -46, 11, Math.PI, 0);
+    ctx.arc(0, -49, 11, 0, TAU);
     ctx.fill();
-    ctx.fillStyle = "rgba(255, 248, 221, 0.92)";
+    ctx.fillStyle = visual.hair || "#403934";
+    if (visual.hairStyle === "bun") {
+      ctx.beginPath();
+      ctx.arc(0, -55, 12, Math.PI, 0);
+      ctx.arc(-11, -50, 5, 0, TAU);
+      ctx.fill();
+    } else if (visual.hairStyle === "beard") {
+      ctx.beginPath();
+      ctx.arc(0, -55, 12, Math.PI, 0);
+      ctx.fill();
+      ctx.fillStyle = "#8b7663";
+      ctx.beginPath();
+      ctx.arc(0, -43, 6, 0, TAU);
+      ctx.fill();
+    } else if (visual.hairStyle === "short") {
+      ctx.beginPath();
+      ctx.arc(0, -55, 12, Math.PI, 0);
+      ctx.fill();
+      ctx.fillRect(-12, -56, 5, 8);
+    } else if (visual.hairStyle === "hat") {
+      ctx.beginPath();
+      ctx.arc(0, -55, 12, Math.PI, 0);
+      ctx.fill();
+      ctx.fillStyle = visual.trim || "#d9c27c";
+      ctx.fillRect(-15, -58, 30, 5);
+      ctx.fillStyle = "#9b4c48";
+      ctx.fillRect(-11, -53, 22, 4);
+    } else if (visual.hairStyle === "leaf") {
+      ctx.beginPath();
+      ctx.arc(0, -55, 12, Math.PI, 0);
+      ctx.fill();
+      ctx.fillStyle = visual.trim || "#d9c27c";
+      ctx.beginPath();
+      ctx.ellipse(-7, -66, 3, 7, -0.4, 0, TAU);
+      ctx.ellipse(5, -67, 3, 7, 0.4, 0, TAU);
+      ctx.fill();
+    } else {
+      ctx.beginPath();
+      ctx.arc(0, -55, 12, Math.PI, 0);
+      ctx.fill();
+      if (visual.hairStyle === "swept") {
+        ctx.beginPath();
+        ctx.moveTo(-10, -55);
+        ctx.quadraticCurveTo(0, -64, 11, -57);
+        ctx.lineTo(7, -49);
+        ctx.closePath();
+        ctx.fill();
+      } else if (visual.hairStyle === "bob") {
+        ctx.fillRect(-12, -53, 5, 13);
+        ctx.fillRect(7, -53, 5, 13);
+      }
+    }
+    ctx.fillStyle = "#2f2b2a";
+    ctx.beginPath();
+    ctx.arc(facing * 3, -50, 1.4, 0, TAU);
+    ctx.arc(facing * 8, -50, 1.4, 0, TAU);
+    ctx.fill();
+    if (visual.face === "glasses") {
+      ctx.strokeStyle = "#43525a";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(facing * 1, -54, 6, 4);
+      ctx.strokeRect(facing * 7, -54, 6, 4);
+      ctx.beginPath();
+      ctx.moveTo(facing * 6, -52);
+      ctx.lineTo(facing * 7, -52);
+      ctx.stroke();
+    } else {
+      ctx.strokeStyle = visual.face === "stern" ? "#754f42" : "#a85f56";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(facing * 6, -46, visual.face === "smile" || visual.face === "bright" ? 2.6 : 1.8, 0.15, Math.PI - 0.15);
+      ctx.stroke();
+    }
+    this.drawNpcAccessory(ctx, visual.accessory, facing, time, moving);
+    ctx.fillStyle = "rgba(255, 248, 221, 0.96)";
     ctx.font = "700 8px 'PingFang SC', sans-serif";
     ctx.textAlign = "center";
-    ctx.fillText(npc.name, 0, -58);
+    ctx.fillText(npc.name, 0, -70);
+    ctx.fillStyle = "rgba(232, 220, 181, 0.8)";
+    ctx.font = "600 7px 'PingFang SC', sans-serif";
+    ctx.fillText(npc.role, 0, -61);
     ctx.restore();
+  }
+
+  drawNpcInteractions(ctx, positions, sceneId, time) {
+    if (!positions?.length) return;
+    const visible = new Map(positions.map((position) => [position.npc.id, position]));
+    NPC_BONDS.filter((bond) => bond.scene === sceneId).forEach((bond, index) => {
+      const first = visible.get(bond.a);
+      const second = visible.get(bond.b);
+      if (!first || !second) return;
+      const distance = Math.hypot(first.x - second.x, first.y - second.y);
+      if (distance > 210) return;
+      const x = (first.x + second.x) / 2;
+      const y = Math.min(first.y, second.y) - 48;
+      const pulse = 0.78 + Math.sin(time * 2 + index) * 0.08;
+      ctx.save();
+      ctx.globalAlpha = 0.24;
+      ctx.strokeStyle = "#f4d487";
+      ctx.lineWidth = 2;
+      ctx.setLineDash([4, 5]);
+      ctx.beginPath();
+      ctx.moveTo(first.x, first.y - 23);
+      ctx.lineTo(second.x, second.y - 23);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.globalAlpha = pulse;
+      ctx.fillStyle = "rgba(255, 247, 214, 0.94)";
+      roundedRect(ctx, x - 72, y - 11, 144, 22, 8);
+      ctx.fill();
+      ctx.fillStyle = "#5a624b";
+      ctx.font = "700 8px 'PingFang SC', sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText(`${bond.label} · ${bond.line}`, x, y + 2);
+      ctx.restore();
+    });
+  }
+
+  drawNpcAccessory(ctx, accessory, facing, time, moving) {
+    if (accessory === "clipboard") {
+      ctx.fillStyle = "#c69b58";
+      ctx.fillRect(facing * 16 - 7, -25, 12, 16);
+      ctx.fillStyle = "#f2e5ba";
+      ctx.fillRect(facing * 16 - 4, -22, 7, 9);
+    } else if (accessory === "satchel") {
+      ctx.fillStyle = "#7c563c";
+      roundedRect(ctx, facing * 17 - 7, -25, 14, 16, 3);
+      ctx.fill();
+      ctx.strokeStyle = "#e0be77";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(facing * 17, -25, 7, Math.PI, TAU);
+      ctx.stroke();
+    } else if (accessory === "staff") {
+      ctx.strokeStyle = "#6d5139";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(facing * 16, -13);
+      ctx.lineTo(facing * 22, -50);
+      ctx.stroke();
+      ctx.fillStyle = "#dce998";
+      ctx.beginPath();
+      ctx.arc(facing * 22, -52 + Math.sin(time * 2) * 2, 4, 0, TAU);
+      ctx.fill();
+    } else if (accessory === "basket") {
+      ctx.fillStyle = "#b67b45";
+      roundedRect(ctx, facing * 17 - 9, -17, 18, 11, 3);
+      ctx.fill();
+      ctx.strokeStyle = "#e8c477";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(facing * 17, -18, 9, Math.PI, TAU);
+      ctx.stroke();
+    } else if (accessory === "book") {
+      ctx.fillStyle = "#9e6d61";
+      ctx.fillRect(facing * 16 - 8, -24, 16, 12);
+      ctx.strokeStyle = "#f0d898";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(facing * 16, -23);
+      ctx.lineTo(facing * 16, -13);
+      ctx.stroke();
+    } else if (accessory === "ladle") {
+      ctx.strokeStyle = "#d8d1b1";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(facing * 15, -15);
+      ctx.lineTo(facing * 24, -40 + Math.sin(time * 2 + (moving ? 1 : 0)) * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(facing * 24, -43, 4, 0, TAU);
+      ctx.stroke();
+    } else if (accessory === "shell") {
+      ctx.fillStyle = "#f0d18b";
+      ctx.beginPath();
+      ctx.arc(facing * 14, -19, 5, 0, TAU);
+      ctx.fill();
+      ctx.strokeStyle = "#c3e5d2";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(-7, -31);
+      ctx.quadraticCurveTo(0, -24, 7, -31);
+      ctx.stroke();
+    } else if (accessory === "lantern") {
+      ctx.fillStyle = "#6a4a35";
+      roundedRect(ctx, facing * 17 - 6, -27, 12, 16, 3);
+      ctx.fill();
+      ctx.fillStyle = "#f3cf76";
+      ctx.globalAlpha = 0.8;
+      ctx.beginPath();
+      ctx.arc(facing * 17, -19, 4, 0, TAU);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    } else if (accessory === "⚓") {
+      ctx.strokeStyle = "#e7c77b";
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      ctx.arc(facing * 17, -22, 5, 0, TAU);
+      ctx.moveTo(facing * 17, -27);
+      ctx.lineTo(facing * 17, -14);
+      ctx.moveTo(facing * 12, -18);
+      ctx.lineTo(facing * 17, -14);
+      ctx.lineTo(facing * 22, -18);
+      ctx.stroke();
+    }
   }
 
   drawSceneAtmosphere(ctx, sceneId, time) {
@@ -1395,6 +1659,32 @@ export class WorldRenderer {
     if (sceneId === "workshop") this.drawWorkshopSignature(ctx, time);
     if (sceneId === "island") this.drawIslandSignature(ctx, time);
     if (sceneId === "quarry") this.drawQuarrySignature(ctx, time);
+    if (sceneId === "metropolis") this.drawMetropolisSignature(ctx, time);
+  }
+
+  drawMetropolisSignature(ctx, time) {
+    ctx.save();
+    ctx.globalAlpha = 0.24;
+    ctx.strokeStyle = "#c6e1d4";
+    ctx.lineWidth = 2;
+    for (let lane = 0; lane < 7; lane += 1) {
+      const y = 302 + lane * 34;
+      const offset = (time * (16 + lane * 3)) % 150;
+      ctx.beginPath();
+      ctx.moveTo(-30 + offset, y);
+      ctx.lineTo(110 + offset, y);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 0.35;
+    ctx.fillStyle = "#f0c777";
+    for (let tower = 0; tower < 9; tower += 1) {
+      const x = 56 + tower * 142;
+      const y = 740 + Math.sin(time * 0.7 + tower) * 3;
+      ctx.beginPath();
+      ctx.arc(x, y, 4 + (tower % 3), 0, TAU);
+      ctx.fill();
+    }
+    ctx.restore();
   }
 
   drawCitySignature(ctx, time) {
@@ -2798,6 +3088,80 @@ export class WorldRenderer {
     ctx.restore();
   }
 
+  drawAutomationYard(ctx, state, time) {
+    const yard = WORLD.automationYard;
+    if (!yard) return;
+    const automation = state.automation || { level: 0, name: "手工作业区" };
+    ctx.save();
+    ctx.fillStyle = "rgba(47, 66, 47, 0.2)";
+    ctx.beginPath();
+    ctx.ellipse(yard.x + yard.w / 2, yard.y + yard.h + 8, yard.w * 0.54, 14, 0, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = "#92744c";
+    roundedRect(ctx, yard.x, yard.y, yard.w, yard.h, 12);
+    ctx.fill();
+    ctx.strokeStyle = "rgba(241, 218, 164, 0.48)";
+    ctx.lineWidth = 2;
+    for (let line = 0; line < 4; line += 1) {
+      ctx.beginPath();
+      ctx.moveTo(yard.x + 16, yard.y + 22 + line * 42);
+      ctx.lineTo(yard.x + yard.w - 16, yard.y + 22 + line * 42);
+      ctx.stroke();
+    }
+    ctx.fillStyle = "#5e5445";
+    roundedRect(ctx, yard.x + 18, yard.y + 22, yard.w - 36, 74, 9);
+    ctx.fill();
+    ctx.fillStyle = "#3e4f49";
+    roundedRect(ctx, yard.x + 30, yard.y + 36, yard.w - 60, 46, 6);
+    ctx.fill();
+    ctx.strokeStyle = "#c8ad68";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(yard.x + 40, yard.y + 58);
+    ctx.lineTo(yard.x + yard.w - 40, yard.y + 58);
+    ctx.stroke();
+    const running = automation.level > 0 && Math.floor(time * 1.4) % 2 === 0;
+    ctx.fillStyle = running ? "#e6c56e" : "#789e86";
+    for (let index = 0; index < 3; index += 1) {
+      ctx.beginPath();
+      ctx.arc(yard.x + 44 + index * 30, yard.y + 58, 5, 0, TAU);
+      ctx.fill();
+    }
+    if (automation.level >= 1) this.drawAutomationMachine(ctx, yard.x + 34, yard.y + 122, "播种", running, time);
+    if (automation.level >= 2) this.drawAutomationMachine(ctx, yard.x + 74, yard.y + 122, "滴灌", running, time);
+    if (automation.level >= 3) this.drawAutomationMachine(ctx, yard.x + 114, yard.y + 122, "收获", running, time);
+    ctx.fillStyle = "#f3e1ad";
+    ctx.font = "700 10px 'PingFang SC', sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(`左侧农机区 · Lv.${automation.level}`, yard.x + yard.w / 2, yard.y + yard.h - 18);
+    ctx.fillStyle = "rgba(255, 247, 218, 0.86)";
+    ctx.font = "600 8px 'PingFang SC', sans-serif";
+    ctx.fillText(automation.level ? "逐格自动作业" : "可扩建自动化", yard.x + yard.w / 2, yard.y + yard.h - 6);
+    ctx.restore();
+  }
+
+  drawAutomationMachine(ctx, x, y, label, running, time) {
+    ctx.save();
+    ctx.fillStyle = "#4e493c";
+    roundedRect(ctx, x - 15, y - 12, 30, 22, 5);
+    ctx.fill();
+    ctx.fillStyle = running ? "#f0c86d" : "#8eaa91";
+    ctx.beginPath();
+    ctx.arc(x, y - 1, 6 + Math.sin(time * 2 + x) * 1.2, 0, TAU);
+    ctx.fill();
+    ctx.strokeStyle = "#d9c27d";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(x - 10, y + 11);
+    ctx.lineTo(x + 10, y + 11);
+    ctx.stroke();
+    ctx.fillStyle = "#f2e0ac";
+    ctx.font = "700 7px 'PingFang SC', sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(label, x, y + 23);
+    ctx.restore();
+  }
+
   drawField(ctx, state, time, runtime) {
     const { field } = WORLD;
     ctx.save();
@@ -3566,6 +3930,11 @@ export class WorldRenderer {
     ctx.fill();
     ctx.fillStyle = "#273a3c";
     ctx.beginPath();
+    ctx.arc(-4, -54, 1.3, 0, TAU);
+    ctx.arc(4, -54, 1.3, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = "#273a3c";
+    ctx.beginPath();
     ctx.arc(0, -58, 13, Math.PI, 0);
     ctx.lineTo(11, -48);
     ctx.quadraticCurveTo(0, -52, -11, -48);
@@ -3598,6 +3967,11 @@ export class WorldRenderer {
     ctx.fillStyle = "#d5ac80";
     ctx.beginPath();
     ctx.arc(0, -51, 11, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = "#38443b";
+    ctx.beginPath();
+    ctx.arc(-4, -51, 1.2, 0, TAU);
+    ctx.arc(4, -51, 1.2, 0, TAU);
     ctx.fill();
     ctx.fillStyle = "#3f4843";
     ctx.beginPath();
@@ -4127,6 +4501,11 @@ export class WorldRenderer {
     ctx.fill();
     ctx.fillStyle = "#2e3130";
     ctx.beginPath();
+    ctx.arc(-4, -56, 1.3, 0, TAU);
+    ctx.arc(4, -56, 1.3, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = "#2e3130";
+    ctx.beginPath();
     ctx.arc(0, -58, 13, Math.PI, 0);
     ctx.lineTo(12, -50);
     ctx.quadraticCurveTo(0, -54, -12, -50);
@@ -4162,6 +4541,11 @@ export class WorldRenderer {
     ctx.fillStyle = "#d4aa81";
     ctx.beginPath();
     ctx.arc(0, -51, 11, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = "#4b3d34";
+    ctx.beginPath();
+    ctx.arc(-4, -51, 1.2, 0, TAU);
+    ctx.arc(4, -51, 1.2, 0, TAU);
     ctx.fill();
     ctx.fillStyle = "#dedbd0";
     ctx.beginPath();

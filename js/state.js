@@ -1,5 +1,6 @@
 import {
   ANIMAL_DEFS,
+  AUTOMATION_UPGRADES,
   BACKPACK_UPGRADES,
   BARN_UPGRADES,
   WORKER_HOUSING_UPGRADES,
@@ -23,6 +24,8 @@ import {
   ISLAND_SPOTS,
   MARKET_GOODS,
   MARKET_TIERS,
+  METROPOLIS_RESEARCH,
+  METROPOLIS_VARIETIES,
   MINIGAME_DEFS,
   NPC_TOPICS,
   PLAYER_START,
@@ -126,6 +129,7 @@ function createAnimals() {
     totalOutdoorMinutes: 0,
     grazed: false,
     fedByGrass: false,
+    variety: null,
   }));
 }
 
@@ -397,6 +401,13 @@ export function createInitialState() {
       lastUpgradeDay: 0,
       lastVisitDay: 0,
     },
+    automation: {
+      level: 0,
+      name: "手工作业区",
+      lastUpgradeDay: 0,
+      lastRunDay: 0,
+      lastActions: [],
+    },
     home: { mealsCooked: 0, tvMinutes: 0, gamesPlayed: 0 },
     forage: {
       available: [],
@@ -560,6 +571,16 @@ export function createInitialState() {
         civicCenter: 0,
       },
       lastTownHallDay: 0,
+      research: {
+        completed: [],
+        discoveredVarieties: [],
+        lastResearchDay: 0,
+      },
+      finance: {
+        balance: 0,
+        interestDay: 0,
+        trades: 0,
+      },
     },
     island: {
       visitedSpots: [],
@@ -2029,6 +2050,65 @@ export function investInCity(state, projectId) {
   return { ok: true, message: `${project.title}已建成。`, projectId };
 }
 
+export function researchMetropolis(state, researchId) {
+  const project = METROPOLIS_RESEARCH[researchId];
+  if (!project) return { ok: false, message: "研究所还没有这项课题。" };
+  state.city = state.city || {};
+  state.city.research = state.city.research || { completed: [], discoveredVarieties: [], lastResearchDay: 0 };
+  state.city.research.completed = Array.isArray(state.city.research.completed) ? state.city.research.completed : [];
+  state.city.research.discoveredVarieties = Array.isArray(state.city.research.discoveredVarieties)
+    ? state.city.research.discoveredVarieties
+    : [];
+  if (state.city.research.completed.includes(researchId)) return { ok: false, message: `${project.title}已经完成研究。` };
+  if (state.coins < project.cost) return { ok: false, message: `还差 ${project.cost - state.coins} 金才能启动${project.title}。` };
+  state.coins -= project.cost;
+  state.city.research.completed.push(researchId);
+  state.city.research.lastResearchDay = state.day;
+  const unlocked = [];
+  for (const variety of METROPOLIS_VARIETIES.filter((entry) => (
+    (researchId === "seeds" && entry.kind === "seed") || (researchId === "breeds" && entry.kind === "animal")
+  ))) {
+    if (!state.city.research.discoveredVarieties.includes(variety.id)) {
+      state.city.research.discoveredVarieties.push(variety.id);
+      unlocked.push(variety.name);
+      if (variety.kind === "seed") state.inventory.seeds[variety.crop] = (state.inventory.seeds[variety.crop] || 0) + 2;
+      if (variety.kind === "animal") {
+        const animal = state.animals.find((entry) => entry.id === variety.animal && !entry.variety);
+        if (animal) animal.variety = variety.id;
+      }
+    }
+  }
+  state.city.reputation = bounded((state.city.reputation || 0) + 8);
+  addMemory(state, `${project.title}完成。${unlocked.length ? `解锁${unlocked.join("、")}。` : "自动化与研究网络开始运转。"}`, "city", 4);
+  return { ok: true, message: `${project.title}完成${unlocked.length ? `，解锁 ${unlocked.join("、")}` : ""}。`, project };
+}
+
+export function tradeMetropolisFinance(state, action = "deposit") {
+  state.city = state.city || {};
+  state.city.finance = state.city.finance || { balance: 0, interestDay: 0, trades: 0 };
+  if (action === "deposit") {
+    if (state.coins < 100) return { ok: false, message: "至少需要 100 金才能开一笔城市贸易票据。" };
+    state.coins -= 100;
+    state.city.finance.balance += 118;
+    state.city.finance.trades += 1;
+    state.city.finance.interestDay = state.day + 3;
+    addMemory(state, "你在金融交易所买入一张短期贸易票据，资金会在三天后结算。", "economy", 3);
+    return { ok: true, message: "已买入 100 金贸易票据，三天后结算 118 金。" };
+  }
+  if (action === "withdraw" && state.city.finance.balance > 0) {
+    if (state.day < (state.city.finance.interestDay || 0)) {
+      return { ok: false, message: `贸易票据还需 ${state.city.finance.interestDay - state.day} 天结算。` };
+    }
+    const payout = state.city.finance.balance;
+    state.coins += payout;
+    state.stats.earned += payout;
+    state.city.finance.balance = 0;
+    addMemory(state, `你在金融交易所结算贸易票据，到账 ${payout} 金。`, "economy", 3);
+    return { ok: true, message: `贸易票据已结算，到账 ${payout} 金。` };
+  }
+  return { ok: false, message: "目前没有可以结算的贸易票据。" };
+}
+
 export function holdTownHall(state) {
   if (state.city.lastTownHallDay === state.day) return { ok: false, message: "今天的市民议事已经结束了。" };
   state.city.lastTownHallDay = state.day;
@@ -2835,6 +2915,77 @@ function applySpriteAssignments(state, report) {
   }
 }
 
+function applyAutomationSystem(state, report) {
+  const automation = state.automation;
+  if (!automation?.level) return;
+  const actions = [];
+  const nextRunDay = state.day + 1;
+  const cropId = plantingSeedForSeason(state);
+  const crop = CROPS[cropId];
+  const calendar = cropId ? SEASONAL_CROP_CALENDAR[cropId] : null;
+
+  if (automation.level >= 3) {
+    let harvested = 0;
+    const machineBonus = state.city?.research?.completed?.includes("machine") ? 2 : 0;
+    for (const plot of state.plots) {
+      if (harvested >= AUTOMATION_UPGRADES[2].capacity + machineBonus || !plot.crop || plot.growth < CROPS[plot.crop].days) continue;
+      const harvestCrop = CROPS[plot.crop];
+      const amount = plot.wateredDays >= harvestCrop.days ? 2 : 1;
+      state.shipping.bin[harvestCrop.id] = (state.shipping.bin[harvestCrop.id] || 0) + amount;
+      actions.push({ type: "harvest", index: plot.index, crop: harvestCrop.id, amount });
+      plot.crop = null;
+      plot.growth = 0;
+      plot.watered = false;
+      plot.wateredDays = 0;
+      bumpCounter(state, "harvested", amount);
+      harvested += 1;
+    }
+    if (harvested) report.helperActions.push(`自动收获机逐格收获了 ${harvested} 格作物，已送入出货箱`);
+  }
+
+  if (automation.level >= 1 && crop && (!calendar || calendar.seasons.includes(state.season))) {
+    let planted = 0;
+    const machineBonus = state.city?.research?.completed?.includes("machine") ? 2 : 0;
+    for (const plot of state.plots) {
+      if (planted >= AUTOMATION_UPGRADES[0].capacity + machineBonus || (state.inventory.seeds[cropId] || 0) <= 0) break;
+      if (plot.crop) continue;
+      if (plot.state !== "tilled") {
+        plot.state = "tilled";
+        bumpCounter(state, "tilled");
+      }
+      plot.crop = cropId;
+      plot.growth = 0;
+      plot.watered = false;
+      plot.wateredDays = 0;
+      state.inventory.seeds[cropId] -= 1;
+      actions.push({ type: "plant", index: plot.index, crop: cropId });
+      bumpCounter(state, "planted");
+      planted += 1;
+    }
+    if (planted) report.helperActions.push(`自动播种机逐格播下了 ${planted} 格${crop.name}`);
+  }
+
+  if (automation.level >= 2 && state.water > 0) {
+    let watered = 0;
+    const machineBonus = state.city?.research?.completed?.includes("machine") ? 2 : 0;
+    for (const plot of state.plots) {
+      if (watered >= AUTOMATION_UPGRADES[1].capacity + machineBonus || state.water <= 0) break;
+      if (!plot.crop || plot.watered) continue;
+      plot.watered = true;
+      plot.wateredDays += 1;
+      state.water -= 1;
+      actions.push({ type: "water", index: plot.index });
+      bumpCounter(state, "watered");
+      watered += 1;
+    }
+    if (watered) report.helperActions.push(`滴灌轨道逐格灌溉了 ${watered} 格作物`);
+  }
+
+  automation.lastRunDay = nextRunDay;
+  automation.lastActions = actions;
+  if (actions.length) addMemory(state, `自动化农机完成了${actions.length} 格农务，播种、浇灌和收获都按地块记录。`, "care", 2);
+}
+
 function applyWorkerAssignments(state, report) {
   const workforce = state.workers;
   if (!workforce?.hired?.length) return;
@@ -3206,6 +3357,26 @@ export function upgradeWorkerHousing(state) {
   housing.lastUpgradeDay = state.day;
   addMemory(state, `${next.title}完成。${next.description}员工和小精灵终于有了下班后可以回去的地方。`, "care", 4);
   return { ok: true, message: `${next.title}完成，住宿容量提高到 ${next.capacity} 人。` };
+}
+
+export function upgradeAutomation(state) {
+  const automation = state.automation || {
+    level: 0,
+    name: "手工作业区",
+    lastUpgradeDay: 0,
+    lastRunDay: 0,
+    lastActions: [],
+  };
+  state.automation = automation;
+  const next = AUTOMATION_UPGRADES.find((entry) => entry.level === automation.level + 1);
+  if (!next) return { ok: false, message: "自动化农机已经扩建到最高等级。" };
+  if (state.coins < next.cost) return { ok: false, message: `还差 ${next.cost - state.coins} 金才能${next.title}。` };
+  state.coins -= next.cost;
+  automation.level = next.level;
+  automation.name = next.title;
+  automation.lastUpgradeDay = state.day;
+  addMemory(state, `${next.title}完成。${next.description}`, "upgrade", 4);
+  return { ok: true, message: `${next.title}完成，左侧自动化农机开始运行。` };
 }
 
 export function cookRecipe(state, recipeId) {
@@ -3646,6 +3817,7 @@ export function advanceDay(state) {
   settleShipping(state, report);
 
   restoreOvernightWeeds(state, report);
+  applyAutomationSystem(state, report);
   applySpriteAssignments(state, report);
   // Animals already released to the pasture graze before paid staff handle
   // feed. The livestock specialist releases the remaining animals below.
@@ -3661,7 +3833,10 @@ export function advanceDay(state) {
       const definition = animalDefinition(animal.id);
       if (animal.productCounter >= definition.productEvery) {
         animal.productCounter = 0;
-        const quality = animalQuality(animal);
+        const baseQuality = animalQuality(animal);
+        const quality = animal.variety
+          ? ({ S: "M", M: "L", L: "L" }[baseQuality] || baseQuality)
+          : baseQuality;
         const qualityId = qualityProductId(definition.product, quality);
         state.inventory.produce[definition.product] += 1;
         state.inventory.qualityProduce[qualityId] += 1;
@@ -4006,6 +4181,11 @@ export function loadGame() {
       },
       house: { ...base.house, ...(parsed.house || {}), upgrades: { ...base.house.upgrades, ...(parsed.house?.upgrades || {}) }, fridge: { ...base.house.fridge, ...(parsed.house?.fridge || {}) } },
       housing: { ...base.housing, ...(parsed.housing || {}) },
+      automation: {
+        ...base.automation,
+        ...(parsed.automation || {}),
+        lastActions: Array.isArray(parsed.automation?.lastActions) ? parsed.automation.lastActions : base.automation.lastActions,
+      },
       home: { ...base.home, ...(parsed.home || {}) },
       barn: { ...base.barn, ...(parsed.barn || {}) },
       pasture: {
@@ -4130,6 +4310,15 @@ export function loadGame() {
         ...base.city,
         ...(parsed.city || {}),
         projects: { ...base.city.projects, ...(parsed.city?.projects || {}) },
+        research: {
+          ...base.city.research,
+          ...(parsed.city?.research || {}),
+          completed: Array.isArray(parsed.city?.research?.completed) ? parsed.city.research.completed : base.city.research.completed,
+          discoveredVarieties: Array.isArray(parsed.city?.research?.discoveredVarieties)
+            ? parsed.city.research.discoveredVarieties
+            : base.city.research.discoveredVarieties,
+        },
+        finance: { ...base.city.finance, ...(parsed.city?.finance || {}) },
       },
       island: {
         ...base.island,
@@ -4321,6 +4510,36 @@ export function loadGame() {
     merged.housing.lastVisitDay = Number.isFinite(Number(merged.housing.lastVisitDay))
       ? Math.max(0, Math.floor(Number(merged.housing.lastVisitDay)))
       : base.housing.lastVisitDay;
+    const maxAutomationLevel = AUTOMATION_UPGRADES[AUTOMATION_UPGRADES.length - 1]?.level || base.automation.level;
+    merged.automation.level = Number.isFinite(Number(merged.automation.level))
+      ? Math.max(0, Math.min(maxAutomationLevel, Math.floor(Number(merged.automation.level))))
+      : base.automation.level;
+    merged.automation.name = typeof merged.automation.name === "string" ? merged.automation.name : base.automation.name;
+    merged.automation.lastUpgradeDay = Number.isFinite(Number(merged.automation.lastUpgradeDay))
+      ? Math.max(0, Math.floor(Number(merged.automation.lastUpgradeDay)))
+      : base.automation.lastUpgradeDay;
+    merged.automation.lastRunDay = Number.isFinite(Number(merged.automation.lastRunDay))
+      ? Math.max(0, Math.floor(Number(merged.automation.lastRunDay)))
+      : base.automation.lastRunDay;
+    merged.automation.lastActions = Array.isArray(merged.automation.lastActions)
+      ? merged.automation.lastActions.slice(0, 24)
+      : [];
+    merged.city.research.completed = Array.from(new Set(
+      merged.city.research.completed.filter((id) => METROPOLIS_RESEARCH[id]),
+    ));
+    const varietyIds = new Set(METROPOLIS_VARIETIES.map((variety) => variety.id));
+    merged.city.research.discoveredVarieties = Array.from(new Set(
+      merged.city.research.discoveredVarieties.filter((id) => varietyIds.has(id)),
+    ));
+    merged.city.finance.balance = Number.isFinite(Number(merged.city.finance.balance))
+      ? Math.max(0, Math.floor(Number(merged.city.finance.balance)))
+      : 0;
+    merged.city.finance.interestDay = Number.isFinite(Number(merged.city.finance.interestDay))
+      ? Math.max(0, Math.floor(Number(merged.city.finance.interestDay)))
+      : 0;
+    merged.city.finance.trades = Number.isFinite(Number(merged.city.finance.trades))
+      ? Math.max(0, Math.floor(Number(merged.city.finance.trades)))
+      : 0;
     merged.pasture.grassPlots = base.pasture.grassPlots.map((plot, index) => {
       const source = merged.pasture.grassPlots[index] && typeof merged.pasture.grassPlots[index] === "object"
         ? merged.pasture.grassPlots[index]
@@ -4401,6 +4620,9 @@ export function loadGame() {
         productCounter: finite("productCounter", 0, 999),
         outdoorMinutes: finite("outdoorMinutes", 0, 511),
         totalOutdoorMinutes: finite("totalOutdoorMinutes", 0, 65535),
+        variety: typeof source.variety === "string" && METROPOLIS_VARIETIES.some((entry) => entry.id === source.variety && entry.kind === "animal")
+          ? source.variety
+          : animal.variety,
       };
     });
     merged.forage = normalizeForageState(merged.forage, merged);
