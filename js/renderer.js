@@ -1461,6 +1461,62 @@ export class WorldRenderer {
       }
     }
 
+    ctx.strokeStyle = "rgba(208, 225, 151, 0.72)";
+    ctx.lineWidth = 2;
+    for (let tuft = 0; tuft < 34; tuft += 1) {
+      const tuftX = x + 24 + hash01(tuft * 4.7) * (w - 48);
+      const tuftY = y + 34 + hash01(tuft * 8.1) * (h - 72);
+      const sway = Math.sin(time * 1.1 + tuft) * 2;
+      ctx.beginPath();
+      ctx.moveTo(tuftX, tuftY + 8);
+      ctx.quadraticCurveTo(tuftX - 2, tuftY + 1, tuftX - 4 + sway, tuftY - 5);
+      ctx.moveTo(tuftX, tuftY + 8);
+      ctx.quadraticCurveTo(tuftX + 2, tuftY + 1, tuftX + 5 + sway, tuftY - 5);
+      ctx.stroke();
+    }
+    const grassPlots = state.pasture?.grassPlots || [];
+    const grassCols = 12;
+    const grassRows = 6;
+    const grassLeft = x + 28;
+    const grassTop = y + 54;
+    const grassWidth = w - 56;
+    const grassHeight = h - 108;
+    for (const plot of grassPlots) {
+      const cellW = grassWidth / grassCols;
+      const cellH = grassHeight / grassRows;
+      const cellX = grassLeft + plot.col * cellW;
+      const cellY = grassTop + plot.row * cellH;
+      const planted = plot.crop === "grass";
+      const ready = planted && plot.growth >= CROPS.grass.days;
+      ctx.save();
+      ctx.globalAlpha = planted ? (ready ? 0.72 : 0.46) : 0.2;
+      ctx.fillStyle = ready ? "#a8d36e" : "#8fbc64";
+      roundedRect(ctx, cellX + 3, cellY + 4, cellW - 6, cellH - 8, 6);
+      ctx.fill();
+      ctx.strokeStyle = ready ? "#d9ee9d" : "#c3dd8a";
+      ctx.lineWidth = ready ? 2 : 1;
+      const bladeCount = ready ? 5 : planted ? 3 : 2;
+      for (let blade = 0; blade < bladeCount; blade += 1) {
+        const bladeX = cellX + 8 + (blade + 1) * (cellW - 16) / (bladeCount + 1);
+        const bladeY = cellY + cellH - 8;
+        ctx.beginPath();
+        ctx.moveTo(bladeX, bladeY);
+        ctx.quadraticCurveTo(bladeX - 2, bladeY - 8, bladeX - 4 + Math.sin(time + plot.index + blade) * 1.5, bladeY - 13);
+        ctx.moveTo(bladeX, bladeY);
+        ctx.quadraticCurveTo(bladeX + 2, bladeY - 8, bladeX + 4 + Math.sin(time + plot.index + blade) * 1.5, bladeY - 13);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+    ctx.fillStyle = "rgba(213, 190, 123, 0.48)";
+    ctx.beginPath();
+    ctx.moveTo(x + 18, y + h - 54);
+    ctx.quadraticCurveTo(x + 100, y + h - 92, x + 193, y + h - 56);
+    ctx.quadraticCurveTo(x + 262, y + h - 27, x + 332, y + h - 55);
+    ctx.lineWidth = 18;
+    ctx.strokeStyle = "rgba(213, 190, 123, 0.42)";
+    ctx.stroke();
+
     ctx.strokeStyle = "#8b6846";
     ctx.lineWidth = 7;
     ctx.lineJoin = "round";
@@ -1498,6 +1554,34 @@ export class WorldRenderer {
     ctx.fillStyle = "#7a5a3d";
     roundedRect(ctx, x + 20, y + 155, 168, 57, 4);
     ctx.fill();
+    ctx.fillStyle = "#9a704b";
+    ctx.beginPath();
+    ctx.moveTo(x + 12, y + 160);
+    ctx.lineTo(x + 38, y + 133);
+    ctx.lineTo(x + 170, y + 133);
+    ctx.lineTo(x + 196, y + 160);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = "#d8b979";
+    ctx.fillRect(x + 35, y + 138, 133, 5);
+    ctx.fillStyle = "#4f3b2b";
+    ctx.fillRect(x + 35, y + 171, 37, 40);
+    ctx.fillRect(x + 86, y + 171, 37, 40);
+    ctx.fillRect(x + 137, y + 171, 37, 40);
+    ctx.strokeStyle = "#d3b17b";
+    ctx.lineWidth = 2;
+    for (let stall = 0; stall < 4; stall += 1) {
+      ctx.beginPath();
+      ctx.moveTo(x + 34 + stall * 47, y + 166);
+      ctx.lineTo(x + 34 + stall * 47, y + 211);
+      ctx.stroke();
+    }
+    ctx.fillStyle = "#e0c47f";
+    ctx.fillRect(x + 47, y + 148, 90, 9);
+    ctx.fillStyle = "#5b422f";
+    ctx.font = "700 8px 'PingFang SC', sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("牛羊棚 · 饮水与休息", x + 92, y + 155);
     ctx.fillStyle = "#5d442f";
     ctx.strokeStyle = "#d6b77e";
     ctx.lineWidth = 2;
@@ -1520,7 +1604,7 @@ export class WorldRenderer {
     ctx.fillStyle = "#5e4b33";
     ctx.font = "700 12px 'PingFang SC', sans-serif";
     ctx.textAlign = "center";
-    ctx.fillText("三只牲畜", x + w - 97, y + 46);
+    ctx.fillText(`牛羊区 · ${state.animals.length} 位成员`, x + w - 97, y + 46);
     ctx.restore();
 
     ctx.save();
@@ -1535,60 +1619,171 @@ export class WorldRenderer {
     ctx.font = "700 8px 'PingFang SC', sans-serif";
     ctx.textAlign = "center";
     ctx.fillText("饲料", feedX + 16, y + 187);
+    ctx.fillStyle = "#87a95e";
+    ctx.fillRect(feedX + 34, y + 12, 44, 11);
+    ctx.fillStyle = "#b8d17c";
+    for (let blade = 0; blade < 5; blade += 1) {
+      ctx.beginPath();
+      ctx.moveTo(feedX + 38 + blade * 8, y + 21);
+      ctx.lineTo(feedX + 40 + blade * 8, y + 7 + Math.sin(time + blade) * 2);
+      ctx.stroke();
+    }
+    ctx.fillStyle = "#d9bd79";
+    ctx.fillRect(feedX + 34, y + 31, 44, 8);
+    ctx.fillStyle = "#5a432f";
+    ctx.font = "700 7px 'PingFang SC', sans-serif";
+    ctx.fillText("干草与饮水", feedX + 56, y + 38);
     ctx.restore();
   }
 
   drawPastureAnimals(ctx, state, time, drawables) {
+    const pasture = WORLD.pasture;
     const positions = {
-      chicken: { x: 868, y: 218, scale: 0.86 },
-      sheep: { x: 979, y: 246, scale: 0.9 },
-      cow: { x: 1090, y: 225, scale: 1 },
+      chicken: { x: pasture.x + pasture.w * 0.22, y: pasture.y + pasture.h * 0.48, scale: 0.86 },
+      duck: { x: pasture.x + pasture.w * 0.34, y: pasture.y + pasture.h * 0.34, scale: 0.82 },
+      sheep: { x: pasture.x + pasture.w * 0.5, y: pasture.y + pasture.h * 0.58, scale: 0.9 },
+      cow: { x: pasture.x + pasture.w * 0.76, y: pasture.y + pasture.h * 0.46, scale: 1 },
     };
+    const herdSlots = [
+      { x: pasture.x + pasture.w * 0.2, y: pasture.y + pasture.h * 0.34, scale: 0.78 },
+      { x: pasture.x + pasture.w * 0.38, y: pasture.y + pasture.h * 0.7, scale: 0.82 },
+      { x: pasture.x + pasture.w * 0.58, y: pasture.y + pasture.h * 0.32, scale: 0.86 },
+      { x: pasture.x + pasture.w * 0.78, y: pasture.y + pasture.h * 0.7, scale: 0.8 },
+      { x: pasture.x + pasture.w * 0.9, y: pasture.y + pasture.h * 0.34, scale: 0.72 },
+    ];
     for (let index = 0; index < state.animals.length; index += 1) {
       const animal = state.animals[index];
-      const pos = positions[animal.id];
+      const pos = index < 4 && positions[animal.id]
+        ? positions[animal.id]
+        : herdSlots[index % herdSlots.length];
       if (!pos) continue;
-      const wanderX = Math.sin(time * 0.38 + index * 2.1) * 11;
-      const wanderY = Math.cos(time * 0.27 + index * 1.4) * 4;
-      const x = pos.x + wanderX;
-      const y = pos.y + wanderY;
+      const motion = this.getAnimalMotion(animal, index, time, pasture, pos);
       drawables.push({
-        y,
+        y: motion.y,
         draw: () => {
-          if (animal.id === "chicken") this.drawChicken(ctx, x, y, pos.scale, time);
-          if (animal.id === "sheep") this.drawSheep(ctx, x, y, pos.scale, time);
-          if (animal.id === "cow") this.drawCow(ctx, x, y, pos.scale, time);
-          if (!animal.fed) this.drawFoodBubble(ctx, x, y - 62, time);
-          if (animal.fed) this.drawHeart(ctx, x + 31, y - 58, time);
+          if (animal.id === "chicken") this.drawChicken(ctx, motion.x, motion.y, pos.scale, time, motion.facing);
+          if (animal.id === "duck") this.drawDuck(ctx, motion.x, motion.y, pos.scale, time, motion.facing);
+          if (animal.id === "sheep") this.drawSheep(ctx, motion.x, motion.y, pos.scale, time, motion.facing);
+          if (animal.id === "cow") this.drawCow(ctx, motion.x, motion.y, pos.scale, time, motion.facing);
+          this.drawAnimalMovementEffect(ctx, motion, animal, time);
+          if (!animal.fed) this.drawFoodBubble(ctx, motion.x, motion.y - 62, time);
+          if (animal.fed) this.drawHeart(ctx, motion.x + 31, motion.y - 58, time);
         },
       });
     }
-    // The expanded pasture also has a few young animals in the shared herd.
-    // They are decorative until the player expands the livestock roster, so
-    // they do not create duplicate feeding records in legacy saves.
-    const youngHerd = [
-      { type: "sheep", x: 832, y: 292, scale: 0.66 },
-      { type: "cow", x: 1048, y: 294, scale: 0.72 },
-      { type: "chicken", x: 1145, y: 274, scale: 0.62 },
-    ];
-    youngHerd.forEach((animal, index) => {
-      const x = animal.x + Math.sin(time * 0.34 + index) * 8;
-      const y = animal.y + Math.cos(time * 0.27 + index) * 3;
-      drawables.push({
-        y,
-        draw: () => {
-          if (animal.type === "chicken") this.drawChicken(ctx, x, y, animal.scale, time);
-          if (animal.type === "sheep") this.drawSheep(ctx, x, y, animal.scale, time);
-          if (animal.type === "cow") this.drawCow(ctx, x, y, animal.scale, time);
-        },
-      });
-    });
   }
 
-  drawChicken(ctx, x, y, scale, time) {
+  getAnimalMotion(animal, index, time, pasture, position) {
+    const seed = [...String(animal?.id || index)].reduce(
+      (sum, character, offset) => sum + character.charCodeAt(0) * (offset + 3),
+      index * 41 + 17,
+    );
+    const active = animal?.inBarn !== true;
+    const pace = active ? 0.22 + (seed % 5) * 0.018 : 0.1;
+    const phase = time * pace + seed * 0.021;
+    const left = pasture.x + 44;
+    const right = pasture.x + pasture.w - 38;
+    const top = pasture.y + 66;
+    const bottom = pasture.y + pasture.h - 34;
+    const width = Math.max(40, right - left);
+    const height = Math.max(30, bottom - top);
+    const normalizedX = (Math.sin(phase) * 0.5 + 0.5);
+    const normalizedY = (Math.sin(phase * 0.71 + seed) * 0.5 + 0.5);
+    const x = left + normalizedX * width;
+    const y = top + normalizedY * height;
+    const nextX = left + (Math.sin(phase + 0.08) * 0.5 + 0.5) * width;
+    const moving = Math.abs(nextX - x) > 1.5;
+    const runBurst = active && Math.sin(phase * 1.7 + seed) > 0.72 && animal?.id !== "chicken";
+    const canGraze = animal?.id === "sheep" || animal?.id === "cow";
+    const grazing = canGraze && !runBurst && Math.sin(phase * 1.3 + seed * 0.7) > -0.35;
+    return {
+      x,
+      y,
+      facing: nextX >= x ? 1 : -1,
+      moving,
+      running: runBurst,
+      grazing,
+      walkPhase: time * (runBurst ? 11 : 5) + seed,
+      seed,
+      homeX: position.x,
+      homeY: position.y,
+    };
+  }
+
+  drawAnimalMovementEffect(ctx, motion, animal, time) {
+    if (motion.grazing) {
+      ctx.save();
+      ctx.globalAlpha = 0.68;
+      ctx.strokeStyle = animal?.id === "cow" ? "#d6ec9a" : "#b9d883";
+      ctx.lineWidth = 1.5;
+      const nibble = Math.sin(time * 5 + motion.seed) * 2;
+      ctx.beginPath();
+      ctx.moveTo(motion.x - 9, motion.y + 4);
+      ctx.quadraticCurveTo(motion.x - 5, motion.y - 2 + nibble, motion.x - 2, motion.y + 4);
+      ctx.moveTo(motion.x + 1, motion.y + 5);
+      ctx.quadraticCurveTo(motion.x + 5, motion.y - 1 - nibble, motion.x + 8, motion.y + 4);
+      ctx.stroke();
+      ctx.restore();
+    }
+    if (motion.running) {
+      ctx.save();
+      ctx.globalAlpha = 0.34;
+      ctx.fillStyle = "#e1c98f";
+      for (let index = 0; index < 3; index += 1) {
+        const dustPhase = (time * 2.1 + index * 0.22 + motion.seed * 0.02) % 1;
+        ctx.beginPath();
+        ctx.arc(motion.x - motion.facing * (12 + dustPhase * 12), motion.y + 5 - dustPhase * 3, 2 + dustPhase * 2, 0, TAU);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+  }
+
+  drawDuck(ctx, x, y, scale, time, facing = 1) {
     ctx.save();
     ctx.translate(x, y);
-    ctx.scale(scale, scale);
+    ctx.scale(scale * facing, scale);
+    const gait = Math.sin(time * 7 + x * 0.02) * 1.5;
+    ellipse(ctx, 0, 3, 22, 7, "rgba(45, 62, 34, 0.2)");
+    ctx.fillStyle = "#e4d6a6";
+    ctx.beginPath();
+    ctx.ellipse(0, -13, 16, 17, -0.08, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = "#f0dfb6";
+    ctx.beginPath();
+    ctx.arc(10, -25, 9, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = "#6c9b86";
+    ctx.beginPath();
+    ctx.arc(8, -31, 8, Math.PI, 0);
+    ctx.fill();
+    ctx.fillStyle = "#d78243";
+    ctx.beginPath();
+    ctx.moveTo(17, -24);
+    ctx.lineTo(27, -21);
+    ctx.lineTo(17, -18);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = "#2d2922";
+    ctx.beginPath();
+    ctx.arc(13, -27, 1.7, 0, TAU);
+    ctx.fill();
+    ctx.strokeStyle = "#d78243";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(-6, 3);
+    ctx.lineTo(-7, 8 + gait);
+    ctx.moveTo(5, 3);
+    ctx.lineTo(6, 8 - gait);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  drawChicken(ctx, x, y, scale, time, facing = 1) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(scale * facing, scale);
+    const gait = Math.sin(time * 7 + x * 0.02) * 1.5;
     ellipse(ctx, 0, 2, 22, 7, "rgba(45, 62, 34, 0.2)");
     ctx.fillStyle = "#d88645";
     ctx.beginPath();
@@ -1620,17 +1815,18 @@ export class WorldRenderer {
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(-6, 3);
-    ctx.lineTo(-7, 8);
+    ctx.lineTo(-7, 8 + gait);
     ctx.moveTo(5, 3);
-    ctx.lineTo(6, 8);
+    ctx.lineTo(6, 8 - gait);
     ctx.stroke();
     ctx.restore();
   }
 
-  drawSheep(ctx, x, y, scale, time) {
+  drawSheep(ctx, x, y, scale, time, facing = 1) {
     ctx.save();
     ctx.translate(x, y);
-    ctx.scale(scale, scale);
+    ctx.scale(scale * facing, scale);
+    const gait = Math.sin(time * 5.5 + x * 0.02) * 1.8;
     ellipse(ctx, 0, 3, 29, 8, "rgba(45, 62, 34, 0.2)");
     ctx.fillStyle = "#e9e2d2";
     for (let index = 0; index < 7; index += 1) {
@@ -1658,17 +1854,18 @@ export class WorldRenderer {
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(-12, 1);
-    ctx.lineTo(-13, 7);
+    ctx.lineTo(-13, 7 + gait);
     ctx.moveTo(2, 1);
-    ctx.lineTo(2, 7);
+    ctx.lineTo(2, 7 - gait);
     ctx.stroke();
     ctx.restore();
   }
 
-  drawCow(ctx, x, y, scale, time) {
+  drawCow(ctx, x, y, scale, time, facing = 1) {
     ctx.save();
     ctx.translate(x, y);
-    ctx.scale(scale, scale);
+    ctx.scale(scale * facing, scale);
+    const gait = Math.sin(time * 4.6 + x * 0.02) * 2;
     ellipse(ctx, 0, 4, 40, 10, "rgba(45, 62, 34, 0.2)");
     ctx.fillStyle = "#736255";
     ctx.beginPath();
@@ -1707,9 +1904,9 @@ export class WorldRenderer {
     ctx.lineWidth = 5;
     ctx.beginPath();
     ctx.moveTo(-23, 0);
-    ctx.lineTo(-22, 8);
+    ctx.lineTo(-22, 8 + gait);
     ctx.moveTo(19, 0);
-    ctx.lineTo(20, 8);
+    ctx.lineTo(20, 8 - gait);
     ctx.stroke();
     ctx.strokeStyle = "#5f5146";
     ctx.lineWidth = 2;

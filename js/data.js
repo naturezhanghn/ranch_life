@@ -9,6 +9,7 @@ export const REAL_SECONDS_PER_GAME_MINUTE = 0.22;
 export const SEASONS = ["春", "夏", "秋", "冬"];
 export const SEASON_DAYS = 28;
 export const SEASONAL_CROP_CALENDAR = {
+  grass: { seasons: ["春", "夏", "秋", "冬"], regrowDays: 2, note: "牛羊可以在成熟草地上放牧" },
   turnip: { seasons: ["春", "秋"], regrowDays: 0, note: "凉爽季节作物" },
   potato: { seasons: ["春", "秋"], regrowDays: 0, note: "地下块茎" },
   strawberry: { seasons: ["春"], regrowDays: 3, note: "收获后 3 天再次结果" },
@@ -53,6 +54,11 @@ export const FORAGE_NODE_DEFS = [
 export const HOUSE_UPGRADES = [
   { level: 1, cost: 260, title: "增筑小屋", features: ["冰箱", "储物柜"], description: "解锁冰箱与额外储物空间。" },
   { level: 2, cost: 520, title: "厨房扩建", features: ["厨房", "料理台"], description: "解锁厨房料理，料理可恢复体力并提高关系。" },
+];
+
+export const BARN_UPGRADES = [
+  { level: 1, capacity: 6, cost: 220, title: "新建牛羊棚", description: "扩大牛羊活动区，最多容纳 6 只牲畜。" },
+  { level: 2, capacity: 10, cost: 480, title: "扩建牛羊棚", description: "增加通风棚舍和饮水槽，最多容纳 10 只牲畜。" },
 ];
 
 export const HOME_RECIPES = [
@@ -181,10 +187,10 @@ export const WORLD = {
   width: 1280,
   height: 720,
   bounds: { left: 62, top: 72, right: 1218, bottom: 698 },
-  field: { x: 300, y: 300, cols: 8, rows: 4, tile: 56 },
+  field: { x: 260, y: 300, cols: 8, rows: 4, tile: 56 },
   house: { x: 90, y: 50, w: 250, h: 175 },
   aiShed: { x: 355, y: 68, w: 170, h: 132 },
-  pasture: { x: 760, y: 55, w: 450, h: 285 },
+  pasture: { x: 735, y: 28, w: 495, h: 360 },
   pond: { x: 1010, y: 620, rx: 205, ry: 88 },
   villageShop: { x: 92, y: 540, w: 185, h: 103 },
   archive: { x: 326, y: 540, w: 169, h: 103 },
@@ -1442,6 +1448,19 @@ export const TOOL_UPGRADE_LEVELS = {
 };
 
 export const CROPS = {
+  grass: {
+    id: "grass",
+    name: "牧草",
+    seedName: "牧草种子",
+    icon: "♧",
+    color: "#86b85f",
+    leaf: "#3e8c4d",
+    days: 2,
+    seedPrice: 12,
+    sellPrice: 0,
+    isGrass: true,
+    description: "成熟后可供牛羊在扩大的草场上自由觅食。",
+  },
   turnip: {
     id: "turnip",
     name: "白萝卜",
@@ -1613,6 +1632,7 @@ export const CROPS = {
 };
 
 export const PRODUCTS = {
+  grass: { id: "grass", name: "牧草", icon: "♧", sellPrice: 0, kind: "grass" },
   turnip: { id: "turnip", name: "白萝卜", icon: "◒", sellPrice: 52, kind: "crop" },
   potato: { id: "potato", name: "土豆", icon: "◉", sellPrice: 84, kind: "crop" },
   strawberry: { id: "strawberry", name: "草莓", icon: "♥", sellPrice: 142, kind: "crop" },
@@ -2304,9 +2324,22 @@ export const ANIMAL_DEFS = [
     product: "egg",
     productEvery: 1,
     productText: "一枚温热的鸡蛋",
+    canGraze: false,
     color: "#d88645",
     accent: "#f3c577",
     line: "小橘把脑袋歪向一边，像是在确认你今天有没有忘记什么。",
+  },
+  {
+    id: "duck",
+    name: "小灰",
+    species: "鸭",
+    product: "egg",
+    productEvery: 1,
+    productText: "一枚带着水汽的鸭蛋",
+    canGraze: false,
+    color: "#9aa69a",
+    accent: "#e4c477",
+    line: "小灰摇摇摆摆地走向水槽，叫声把草叶上的露水都惊动了。",
   },
   {
     id: "sheep",
@@ -2315,6 +2348,7 @@ export const ANIMAL_DEFS = [
     product: "wool",
     productEvery: 2,
     productText: "一团蓬松的羊毛",
+    canGraze: true,
     color: "#e6dfce",
     accent: "#b6a88d",
     line: "云朵安静地靠过来，身上的毛沾着一点干燥的草屑。",
@@ -2326,6 +2360,7 @@ export const ANIMAL_DEFS = [
     product: "milk",
     productEvery: 1,
     productText: "一桶新鲜牛奶",
+    canGraze: true,
     color: "#665447",
     accent: "#efe5cf",
     line: "栗子慢吞吞地甩了甩尾巴，似乎在催你快一点。",

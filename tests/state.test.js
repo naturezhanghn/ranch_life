@@ -41,6 +41,7 @@ import {
   resolveLongformChoice,
   resolveEnding,
   playHomeGame,
+  plantGrass,
   saveGame,
   startBridgeQuest,
   sellAtMarket,
@@ -53,6 +54,7 @@ import {
   toggleAnimalOutdoor,
   tickAnimalOutdoor,
   upgradeBackpack,
+  upgradeBarn,
   upgradeTool,
   upgradeHouse,
   useToolOnPlot,
@@ -97,10 +99,10 @@ function establishClues(state) {
 test("initial state has the vertical-slice scope", () => {
   const state = freshState();
   assert.equal(state.plots.length, 32);
-  assert.equal(state.animals.length, 3);
+  assert.equal(state.animals.length, 4);
   assert.deepEqual(
     state.animals.map((animal) => animal.id),
-    ["chicken", "sheep", "cow"],
+    ["chicken", "duck", "sheep", "cow"],
   );
   assert.equal(state.coins, 140);
   assert.equal(state.feed, 6);
@@ -212,10 +214,11 @@ test("harvested crops bypass the backpack and enter the shipping bin", () => {
   assert.equal(state.shipping.bin.turnip, 0);
 });
 
-test("feeding all three animals advances chapter-one objective", () => {
+test("feeding all four animals advances chapter-one objective", () => {
   const state = freshState();
   state.story.step = "feedAnimals";
   assert.equal(feedAnimal(state, "chicken").ok, true);
+  assert.equal(feedAnimal(state, "duck").ok, true);
   assert.equal(feedAnimal(state, "sheep").ok, true);
   assert.equal(feedAnimal(state, "cow").ok, true);
   assert.equal(state.story.step, "plantSeeds");
@@ -820,7 +823,7 @@ test("post-game hand-care and dry-season modifiers enforce their constraints", (
 });
 
 test("crop data keeps a meaningful high-investment option", () => {
-  const averageDailyProfit = Object.values(CROPS).map((crop) => ({
+  const averageDailyProfit = Object.values(CROPS).filter((crop) => !crop.isGrass).map((crop) => ({
     id: crop.id,
     value: (crop.sellPrice - crop.seedPrice) / crop.days,
   }));
@@ -1017,7 +1020,25 @@ test("animal employee completes feeding, companionship, grooming, and grazing", 
   assert.equal(state.stats.talkedAnimals, state.animals.length);
   assert.equal(state.stats.brushedAnimals, state.animals.length);
   assert.ok(state.animals.every((animal) => animal.careDays > 0));
+  assert.equal(state.pasture.grassPlots.filter((plot) => plot.crop === "grass").length, 2);
+  assert.equal(state.inventory.seeds.grass, 6);
   assert.ok(report.helperActions.some((entry) => entry.includes("全套牲畜照料")));
+});
+
+test("expanded pasture grows grass, feeds grazing animals, and upgrades the barn", () => {
+  const state = freshState();
+  state.coins = 220;
+  assert.equal(plantGrass(state, 0).ok, true);
+  assert.equal(state.pasture.grassPlots[0].crop, "grass");
+  assert.equal(plantGrass(state, 0).ok, false);
+  state.pasture.grassPlots[0].growth = CROPS.grass.days;
+  state.animals.find((animal) => animal.id === "sheep").outside = true;
+  state.feed = 0;
+  const report = advanceDay(state);
+  assert.equal(state.pasture.grassPlots[0].crop, null);
+  assert.ok(report.helperActions.some((entry) => entry.includes("成熟牧草")));
+  assert.equal(upgradeBarn(state).ok, true);
+  assert.equal(state.barn.capacity, 6);
 });
 
 test("fishing employee returns a daily catch automatically", () => {
@@ -1222,6 +1243,13 @@ test("illegal save numbers are clamped and missing fields get defaults", () => {
     assert.equal(sparse.season, "夏");
     assert.equal(sparse.player.x, createInitialState().player.x);
     assert.ok(sparse.quests && sparse.festival && sparse.weekly);
+
+    const legacyAnimals = createInitialState().animals.filter((animal) => animal.id !== "duck");
+    legacyAnimals[1].health = 61;
+    store[SAVE_KEY] = JSON.stringify({ animals: legacyAnimals });
+    const migratedAnimals = loadGame();
+    assert.equal(migratedAnimals.animals.find((animal) => animal.id === "sheep").health, 61);
+    assert.equal(migratedAnimals.animals.find((animal) => animal.id === "duck").health, createInitialState().animals.find((animal) => animal.id === "duck").health);
 
     store[SAVE_KEY] = JSON.stringify({ fishPond: { stock: 3 } });
     const pondDefaults = loadGame();

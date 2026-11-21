@@ -1,6 +1,7 @@
 import {
   ANIMAL_DEFS,
   BACKPACK_UPGRADES,
+  BARN_UPGRADES,
   BIRTHDAYS,
   BRIDGE_QUEST,
   CANAL_LORE,
@@ -97,6 +98,7 @@ import {
   toggleAnimalOutdoor,
   tickAnimalOutdoor,
   upgradeBackpack,
+  upgradeBarn,
   upgradeTool,
   upgradeHouse,
   getBagUsage,
@@ -115,6 +117,7 @@ import {
   startBridgeQuest,
   saveGame,
   playHomeGame,
+  plantGrass,
   watchHomeTv,
   sellAtMarket,
   selectShippingRoute,
@@ -1578,7 +1581,7 @@ function advanceSisterStory() {
   updateHUD(true);
   saveGame(state);
   audio.play("memory");
-  showToast("牧心已经接入牧场旧传感器。去牲畜棚照料三只动物吧。", {
+  showToast(`牧心已经接入牧场旧传感器。去牲畜棚照料${state.animals.length}只动物吧。`, {
     strong: "第一章开始",
     duration: 4600,
   });
@@ -1694,6 +1697,10 @@ function crossCheckAiSummary() {
 }
 
 function openAnimalPanel(notice = "") {
+  const nextBarn = BARN_UPGRADES.find((upgrade) => upgrade.level === (state.barn?.level || 0) + 1);
+  const grassPlots = state.pasture?.grassPlots || [];
+  const plantedGrass = grassPlots.filter((plot) => plot.crop === "grass");
+  const matureGrass = plantedGrass.filter((plot) => plot.growth >= CROPS.grass.days).length;
   const rows = state.animals
     .map((animal) => {
       const definition = ANIMAL_DEFS.find((entry) => entry.id === animal.id);
@@ -1705,7 +1712,7 @@ function openAnimalPanel(notice = "") {
       return `
         <div class="shop-row">
           <span class="item-swatch" aria-hidden="true">${
-            animal.id === "chicken" ? "♧" : animal.id === "sheep" ? "☁" : "◉"
+            animal.id === "chicken" ? "♧" : animal.id === "duck" ? "◒" : animal.id === "sheep" ? "☁" : "◉"
           }</span>
           <span class="shop-row-copy">
             <strong>${definition.name} · ${definition.species}</strong>
@@ -1718,7 +1725,7 @@ function openAnimalPanel(notice = "") {
     .join("");
 
   openModal({
-    kicker: "牲畜棚 · 三只动物",
+    kicker: `牛羊区 · ${state.animals.length} 位成员`,
     title: "照料不是一项资源调度",
     wide: true,
     body: `
@@ -1726,6 +1733,13 @@ function openAnimalPanel(notice = "") {
         <span>干草饲料</span>
         <strong>${state.feed} 袋</strong>
         <span>村集售价 ${PRODUCTS.feed.buyPrice} 金</span>
+        <button type="button" class="shop-buy" data-action="upgradeBarn" ${!nextBarn || state.coins < nextBarn.cost ? "disabled" : ""}>${nextBarn ? `${nextBarn.title} ✦ ${nextBarn.cost}` : "牛羊棚已满级"}</button>
+      </div>
+      <div class="weather-note" style="margin:0 0 12px">牛羊棚提供饮水、干草和遮雨空间。当前 ${state.animals.filter((animal) => animal.outside).length} 位成员正在放牧，${state.animals.filter((animal) => animal.fed).length} 位已经吃饱。牛羊棚容量 ${state.animals.length}/${state.barn?.capacity || state.animals.length}。</div>
+      <div class="shop-row" style="margin-bottom:12px">
+        <span class="item-swatch" aria-hidden="true">♧</span>
+        <span class="shop-row-copy"><strong>牧草地 · ${plantedGrass.length} 格已播 / ${matureGrass} 格成熟</strong><small>牧草成熟后会被放牧动物自动吃掉，恢复成可再播种的草地。</small></span>
+        <button type="button" class="shop-buy" data-action="plantGrass" ${state.inventory.seeds.grass <= 0 || plantedGrass.length >= grassPlots.length ? "disabled" : ""}>种一格 · ${state.inventory.seeds.grass || 0} 包</button>
       </div>
       ${notice ? `<div class="weather-note" style="margin:0 0 12px">${escapeHtml(notice)}</div>` : ""}
       <div class="shop-grid">
@@ -1737,6 +1751,33 @@ function openAnimalPanel(notice = "") {
     `,
     footer: `<button type="button" class="button button--primary" data-action="close">合上棚门</button>`,
   });
+}
+
+function handleUpgradeBarn() {
+  const result = upgradeBarn(state);
+  if (!result.ok) {
+    audio.play("error");
+    showToast(result.message);
+    return;
+  }
+  audio.play("success");
+  updateHUD(true);
+  saveGame(state);
+  openAnimalPanel(result.message);
+}
+
+function handlePlantGrass() {
+  const result = plantGrass(state);
+  if (!result.ok) {
+    audio.play("error");
+    showToast(result.message, { strong: "牧草" });
+    return;
+  }
+  audio.play("soil");
+  applyTaskCompletions(result.tasks);
+  updateHUD(true);
+  saveGame(state);
+  openAnimalPanel(result.message);
 }
 
 function handleFeedAnimal(animalId) {
@@ -1751,7 +1792,7 @@ function handleFeedAnimal(animalId) {
   updateHUD(true);
   saveGame(state);
   if (state.story.step === "plantSeeds") {
-    showToast("三只动物都照料好了。去田里种下三颗种子。", {
+    showToast(`${state.animals.length}只动物都照料好了。去田里种下三颗种子。`, {
       strong: "第一章",
       duration: 4200,
     });
@@ -1846,7 +1887,7 @@ function openShop(notice = "") {
         <span class="item-swatch" aria-hidden="true">≋</span>
         <span class="shop-row-copy">
           <strong>干草饲料</strong>
-          <small>供三只动物一天的口粮 · 已有 ${state.feed} 袋</small>
+          <small>供${state.animals.length}只动物一天的口粮 · 已有 ${state.feed} 袋</small>
         </span>
         <button type="button" class="shop-buy" data-action="buyFeed" ${
           state.coins < PRODUCTS.feed.buyPrice ? "disabled" : ""
@@ -3012,7 +3053,7 @@ function openSleepDialog(auto = false) {
           ? `<div class="weather-note">${unfed
               .map((animal) => ANIMAL_DEFS.find((entry) => entry.id === animal.id).name)
               .join("、")} 今天还没有进食。现在还可以去牲畜棚看看。</div>`
-          : `<div class="weather-note">三只动物都吃饱了，牧心把今天标记为“稳定的一天”。</div>`
+          : `<div class="weather-note">${state.animals.length}只动物都吃饱了，牧心把今天标记为“稳定的一天”。</div>`
       }
       ${special ? `<div class="clue-verification">${special}</div>` : ""}
       ${helperNote ? `<div class="weather-note">${helperNote}</div>` : ""}
@@ -3584,6 +3625,12 @@ function handleModalClick(event) {
       break;
     case "feedAnimal":
       handleFeedAnimal(value);
+      break;
+    case "upgradeBarn":
+      handleUpgradeBarn();
+      break;
+    case "plantGrass":
+      handlePlantGrass();
       break;
     case "talkAnimal":
     case "brushAnimal":

@@ -1,6 +1,7 @@
 import {
   ANIMAL_DEFS,
   BACKPACK_UPGRADES,
+  BARN_UPGRADES,
   BIRTHDAYS,
   BRIDGE_QUEST,
   CITY_PROJECTS,
@@ -89,6 +90,19 @@ function createPlots() {
   }));
 }
 
+function createGrassPlots() {
+  const cols = 12;
+  const rows = 6;
+  return Array.from({ length: cols * rows }, (_, index) => ({
+    index,
+    col: index % cols,
+    row: Math.floor(index / cols),
+    state: "wild",
+    growth: 0,
+    crop: null,
+  }));
+}
+
 function createAnimals() {
   return ANIMAL_DEFS.map((definition) => ({
     id: definition.id,
@@ -109,6 +123,8 @@ function createAnimals() {
     productCounter: 0,
     outdoorMinutes: 0,
     totalOutdoorMinutes: 0,
+    grazed: false,
+    fedByGrass: false,
   }));
 }
 
@@ -292,6 +308,7 @@ export function createInitialState() {
     selectedSeed: "turnip",
     inventory: {
       seeds: {
+        grass: 8,
         turnip: 5,
         potato: 2,
         strawberry: 0,
@@ -425,6 +442,16 @@ export function createInitialState() {
     },
     town: { eventsSeen: [], birthdayGifts: {}, festivalBonus: 0 },
     plots: createPlots(),
+    pasture: {
+      grassPlots: createGrassPlots(),
+      grazingDays: 0,
+      lastGrazingDay: 0,
+    },
+    barn: {
+      level: 0,
+      capacity: 4,
+      name: "新牛羊棚",
+    },
     animals: createAnimals(),
     fishPond: {
       stock: 2,
@@ -1410,7 +1437,7 @@ export function feedAnimal(state, animalId) {
 
   if (state.story.step === "feedAnimals" && state.animals.every((entry) => entry.fed)) {
     state.story.step = "plantSeeds";
-    addMemory(state, "三只动物都被照料了。你似乎把它们的作息排在自己的事情前面。", "pattern", 3);
+    addMemory(state, `${state.animals.length} 只动物都被照料了。你似乎把它们的作息排在自己的事情前面。`, "pattern", 3);
   }
 
   return {
@@ -1469,6 +1496,9 @@ export function useToolOnPlot(state, toolId) {
       return { ok: false, message: "这块地已经有作物了。" };
     }
     const crop = CROPS[state.selectedSeed];
+    if (crop?.isGrass) {
+      return { ok: false, message: "牧草请在牛羊区种植，成熟后留给动物放牧。" };
+    }
     const calendar = SEASONAL_CROP_CALENDAR[state.selectedSeed];
     if (calendar && !calendar.seasons.includes(state.season)) return { ok: false, message: `${crop.name}只适合${calendar.seasons.join("、")}季。` };
     const count = state.inventory.seeds[state.selectedSeed] || 0;
@@ -1680,6 +1710,47 @@ export function shipProduce(state, routeId = state.shipping.selectedRoute) {
     arrivalDay: trip.arrivalDay,
     tasks: checkDailyTasks(state),
   };
+}
+
+export function plantGrass(state, grassIndex = null) {
+  const grassPlots = state.pasture?.grassPlots || [];
+  const targetIndex = Number.isInteger(grassIndex)
+    ? grassIndex
+    : grassPlots.findIndex((entry) => !entry.crop);
+  const plot = grassPlots[targetIndex];
+  if (!plot) return { ok: false, message: "牛羊区没有这块草地。" };
+  if (plot.crop === "grass") {
+    return {
+      ok: false,
+      message: plot.growth >= CROPS.grass.days
+        ? "这块牧草已经成熟，先让牛羊来吃吧。"
+        : "这块牧草还在生长，等它成熟后再补种。",
+    };
+  }
+  if ((state.inventory.seeds.grass || 0) <= 0) return { ok: false, message: "牧草种子用完了。" };
+  state.inventory.seeds.grass -= 1;
+  plot.state = "tilled";
+  plot.crop = "grass";
+  plot.growth = 0;
+  bumpCounter(state, "tilled");
+  bumpCounter(state, "planted");
+  return {
+    ok: true,
+    message: "牧草种下了，成熟后牛羊可以在这里觅食。",
+    tasks: checkDailyTasks(state),
+  };
+}
+
+export function upgradeBarn(state) {
+  const upgrade = BARN_UPGRADES.find((entry) => entry.level === (state.barn?.level || 0) + 1);
+  if (!upgrade) return { ok: false, message: "牛羊棚已经扩建到最大。" };
+  if (state.coins < upgrade.cost) return { ok: false, message: `还差 ${upgrade.cost - state.coins} 金才能${upgrade.title}。` };
+  state.coins -= upgrade.cost;
+  state.barn.level = upgrade.level;
+  state.barn.capacity = upgrade.capacity;
+  state.barn.name = upgrade.title;
+  addMemory(state, `${upgrade.title}完成。牛羊有了更宽的活动和休息空间。`, "care", 3);
+  return { ok: true, message: `${upgrade.title}完成，容量提高到 ${upgrade.capacity} 只。` };
 }
 
 export function buySeed(state, cropId) {
@@ -2512,14 +2583,14 @@ export function resolveEnding(state) {
 function plantingSeedForSeason(state) {
   const seasonal = Object.values(CROPS).filter((crop) => {
     const seasons = SEASONAL_CROP_CALENDAR[crop.id]?.seasons || [];
-    return !seasons.length || seasons.includes(state.season);
+    return !crop.isGrass && (!seasons.length || seasons.includes(state.season));
   });
   return (
     seasonal.find((crop) => crop.id === state.selectedSeed && (state.inventory.seeds[crop.id] || 0) > 0)?.id
     || seasonal.find((crop) => (state.inventory.seeds[crop.id] || 0) > 0)?.id
     || seasonal.find((crop) => crop.id === state.selectedSeed)?.id
     || seasonal[0]?.id
-    || state.selectedSeed
+    || null
   );
 }
 
@@ -2750,6 +2821,18 @@ function applyWorkerAssignments(state, report) {
     let talked = 0;
     let brushed = 0;
     let grazed = 0;
+    // The livestock specialist opens the pasture before handling feed. This
+    // lets mature grass satisfy hungry animals and prevents a needless feed
+    // purchase when a grazing meal is available.
+    for (const animal of state.animals) animal.outside = true;
+    let seededGrass = 0;
+    for (const plot of state.pasture?.grassPlots || []) {
+      if (seededGrass >= 2 || (state.inventory.seeds.grass || 0) <= 0) break;
+      if (plot.crop) continue;
+      if (plantGrass(state, plot.index).ok) seededGrass += 1;
+    }
+    if (seededGrass) report.helperActions.push(`${animalWorker?.name || "牲畜员工"}播种了 ${seededGrass} 格牧草`);
+    grazePasture(state, report);
     const missingFeed = state.animals.filter((animal) => !animal.fed).length;
     const feedPrice = PRODUCTS.feed.buyPrice;
     const feedToBuy = Math.max(0, Math.min(missingFeed - state.feed, Math.floor(state.coins / feedPrice)));
@@ -2783,7 +2866,6 @@ function applyWorkerAssignments(state, report) {
         state.stats.brushedAnimals += 1;
         brushed += 1;
       }
-      animal.outside = true;
       animal.outdoorMinutes = Math.min(511, animal.outdoorMinutes + 60);
       animal.totalOutdoorMinutes = Math.min(65535, animal.totalOutdoorMinutes + 60);
       animal.careDays += 1;
@@ -2844,6 +2926,42 @@ function restoreOvernightWeeds(state, report) {
   if (regrown) {
     report.helperActions.push(`夜间有 ${regrown} 块空地恢复了杂草状态，员工会重新翻土`);
     addMemory(state, `${regrown} 块没有作物的田垄长回了杂草。牧心把它标记为需要重新开垦的土地。`, "risk", 1);
+  }
+}
+
+function grazePasture(state, report) {
+  const grassPlots = state.pasture?.grassPlots || [];
+  const grazers = state.animals.filter((animal) => animal.outside && animalDefinition(animal.id)?.canGraze);
+  let meals = 0;
+  for (const animal of grazers) {
+    if (animal.fed) continue;
+    const grass = grassPlots.find((plot) => plot.crop === "grass" && plot.growth >= CROPS.grass.days);
+    if (!grass) break;
+    grass.crop = null;
+    grass.state = "wild";
+    grass.growth = 0;
+    animal.fed = true;
+    animal.fedByGrass = true;
+    animal.grazed = true;
+    animal.mood = Math.min(100, animal.mood + 5);
+    animal.affection = Math.min(100, animal.affection + 1);
+    animal.health = bounded(animal.health + 2);
+    animal.unhappy = false;
+    bumpCounter(state, "fed");
+    meals += 1;
+  }
+  if (meals) {
+    state.pasture.grazingDays = (state.pasture.grazingDays || 0) + 1;
+    state.pasture.lastGrazingDay = state.day;
+    report.helperActions.push(`牛羊区有 ${meals} 只动物吃到了成熟牧草`);
+  }
+}
+
+function growPastureGrass(state) {
+  for (const plot of state.pasture?.grassPlots || []) {
+    if (plot.crop !== "grass") continue;
+    plot.growth = Math.min(CROPS.grass.days, plot.growth + 1);
+    plot.state = plot.growth >= CROPS.grass.days ? "ready" : "growing";
   }
 }
 
@@ -3395,6 +3513,9 @@ export function advanceDay(state) {
 
   restoreOvernightWeeds(state, report);
   applySpriteAssignments(state, report);
+  // Animals already released to the pasture graze before paid staff handle
+  // feed. The livestock specialist releases the remaining animals below.
+  grazePasture(state, report);
   applyWorkerAssignments(state, report);
   checkDailyTasks(state);
 
@@ -3460,6 +3581,8 @@ export function advanceDay(state) {
       outdoorMinutes: animal.outdoorMinutes,
     });
     animal.fed = false;
+    animal.fedByGrass = false;
+    animal.grazed = false;
     animal.talked = false;
     animal.brushed = false;
     animal.outdoorMinutes = 0;
@@ -3475,6 +3598,7 @@ export function advanceDay(state) {
     }
     plot.watered = false;
   }
+  growPastureGrass(state);
 
   report.dailyTasks = summarizeDailyTasks(state);
   const completedText = report.dailyTasks.completed.length
@@ -3748,6 +3872,12 @@ export function loadGame() {
       },
       house: { ...base.house, ...(parsed.house || {}), upgrades: { ...base.house.upgrades, ...(parsed.house?.upgrades || {}) }, fridge: { ...base.house.fridge, ...(parsed.house?.fridge || {}) } },
       home: { ...base.home, ...(parsed.home || {}) },
+      barn: { ...base.barn, ...(parsed.barn || {}) },
+      pasture: {
+        ...base.pasture,
+        ...(parsed.pasture || {}),
+        grassPlots: Array.isArray(parsed.pasture?.grassPlots) ? parsed.pasture.grassPlots : base.pasture.grassPlots,
+      },
       forage: {
         ...base.forage,
         ...(parsed.forage || {}),
@@ -4020,6 +4150,26 @@ export function loadGame() {
     merged.fishPond.health = Number.isFinite(Number(merged.fishPond.health))
       ? Math.max(0, Math.min(100, Number(merged.fishPond.health)))
       : base.fishPond.health;
+    merged.barn.level = Number.isFinite(Number(merged.barn.level)) ? Math.max(0, Math.floor(Number(merged.barn.level))) : base.barn.level;
+    merged.barn.capacity = Number.isFinite(Number(merged.barn.capacity))
+      ? Math.max(ANIMAL_DEFS.length, Math.floor(Number(merged.barn.capacity)))
+      : base.barn.capacity;
+    merged.barn.name = typeof merged.barn.name === "string" ? merged.barn.name : base.barn.name;
+    merged.pasture.grassPlots = base.pasture.grassPlots.map((plot, index) => {
+      const source = merged.pasture.grassPlots[index] && typeof merged.pasture.grassPlots[index] === "object"
+        ? merged.pasture.grassPlots[index]
+        : {};
+      const crop = source.crop === "grass" ? "grass" : null;
+      const rawGrowth = Number(source.growth);
+      return {
+        ...plot,
+        state: crop ? (rawGrowth >= CROPS.grass.days ? "ready" : "growing") : "wild",
+        crop,
+        growth: crop && Number.isFinite(rawGrowth) ? Math.max(0, Math.min(CROPS.grass.days, Math.floor(rawGrowth))) : 0,
+      };
+    });
+    merged.pasture.grazingDays = Number.isFinite(Number(merged.pasture.grazingDays)) ? Math.max(0, Math.floor(Number(merged.pasture.grazingDays))) : 0;
+    merged.pasture.lastGrazingDay = Number.isFinite(Number(merged.pasture.lastGrazingDay)) ? Math.max(0, Math.floor(Number(merged.pasture.lastGrazingDay))) : 0;
     merged.maxWater = Number.isFinite(Number(merged.maxWater)) ? Math.max(1, Math.floor(Number(merged.maxWater))) : base.maxWater;
     merged.water = Number.isFinite(Number(merged.water))
       ? Math.max(0, Math.min(merged.maxWater, Number(merged.water)))
@@ -4052,8 +4202,14 @@ export function loadGame() {
       };
     });
     const legacyAnimals = Array.isArray(merged.animals) ? merged.animals : [];
+    const knownAnimalIds = new Set(ANIMAL_DEFS.map((definition) => definition.id));
+    const hasRecognizedAnimalIds = legacyAnimals.some(
+      (source) => source && typeof source === "object" && knownAnimalIds.has(source.id),
+    );
     merged.animals = base.animals.map((animal, index) => {
-      const source = legacyAnimals[index] && typeof legacyAnimals[index] === "object" ? legacyAnimals[index] : {};
+      const source = hasRecognizedAnimalIds
+        ? legacyAnimals.find((entry) => entry && typeof entry === "object" && entry.id === animal.id) || {}
+        : legacyAnimals[index] && typeof legacyAnimals[index] === "object" ? legacyAnimals[index] : {};
       const finite = (key, min, max) => {
         const value = Number(source[key]);
         return Number.isFinite(value) ? Math.max(min, Math.min(max, Math.floor(value))) : animal[key];
@@ -4064,6 +4220,8 @@ export function loadGame() {
         talked: source.talked === true,
         brushed: source.brushed === true,
         outside: source.outside === true,
+        grazed: source.grazed === true,
+        fedByGrass: source.fedByGrass === true,
         age: finite("age", 1, 999),
         daysFed: finite("daysFed", 0, 999),
         mood: finite("mood", 0, 100),
