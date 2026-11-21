@@ -2576,7 +2576,10 @@ function applySpriteAssignments(state, report) {
         bumpCounter(state, "watered");
       }
     }
-    if (watered) report.helperActions.push(`芽芽替你留下了 ${watered} 格露水${efficiency < 1 ? "（跨岗效率较低）" : ""}`);
+    if (watered) {
+      const spriteName = SPRITE_DEFS[assignments.watering]?.name || "小精灵";
+      report.helperActions.push(`${spriteName}替你留下了 ${watered} 格露水${efficiency < 1 ? "（跨岗效率较低）" : ""}`);
+    }
   }
 
   if (assignments.animals && state.feed > 0) {
@@ -2631,7 +2634,8 @@ function applySpriteAssignments(state, report) {
   if (assignments.trade) {
     const efficiency = state.sprites.assignmentEfficiency?.trade || 1;
     state.market.reputation += state.government.policies.spriteCommons ? (efficiency >= 1 ? 2 : 1) : efficiency >= 1 ? 1 : 0;
-    report.helperActions.push(`小精灵整理了贸易账本${efficiency < 1 ? "（跨岗效率较低）" : ""}`);
+    const spriteName = SPRITE_DEFS[assignments.trade]?.name || "小精灵";
+    report.helperActions.push(`${spriteName}整理了贸易账本${efficiency < 1 ? "（跨岗效率较低）" : ""}`);
   }
 
   if (assignments.island && state.world.unlockedRegions.includes("island")) {
@@ -2640,7 +2644,9 @@ function applySpriteAssignments(state, report) {
     if (efficiency >= 1) {
       state.inventory.resources[resourceId] += 1;
       state.stats.islandFinds += 1;
-      report.helperActions.push(`潮潮带回了 1 份${MARKET_GOODS[resourceId].name}`);
+      bumpCounter(state, "explored");
+      const spriteName = SPRITE_DEFS[assignments.island]?.name || "小精灵";
+      report.helperActions.push(`${spriteName}带回了 1 份${MARKET_GOODS[resourceId].name}`);
     } else {
       report.helperActions.push("小精灵跨岗探索失败，潮汐路线需要更熟练的伙伴");
     }
@@ -2810,6 +2816,15 @@ function applyWorkerAssignments(state, report) {
     } else {
       report.helperActions.push(`${nameForRole("fishery")}给鱼塘投喂了鱼苗`);
     }
+  }
+  if (workforce.assignments?.island
+    && assigned.has(workforce.assignments.island)
+    && state.world.unlockedRegions.includes("island")) {
+    const resourceId = state.government.policies.islandSanctuary ? "coconut" : "seaweed";
+    state.inventory.resources[resourceId] = (state.inventory.resources[resourceId] || 0) + 1;
+    state.stats.islandFinds += 1;
+    bumpCounter(state, "explored");
+    report.helperActions.push(`${nameForRole("island")}带回了 1 份${MARKET_GOODS[resourceId].name}`);
   }
   if (workforce.assignments?.trade) {
     state.market.reputation += 1;

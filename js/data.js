@@ -2084,6 +2084,7 @@ export const SPRITE_DEFS = {
     cost: 0,
     talent: "每天悄悄给两块田留下露水。",
     unlockText: "初次进入小精灵工坊即可遇见。",
+    visual: { skin: "#f3c99e", hair: "#6a4938", hairStyle: "leaf", outfit: "#8ab56b", accent: "#e9d58c", face: "bright", badge: "滴" },
   },
   sprout: {
     id: "sprout",
@@ -2094,6 +2095,7 @@ export const SPRITE_DEFS = {
     cost: 85,
     talent: "每天替你播下两颗当季种子，也会提醒哪块田还空着。",
     unlockText: "进入小精灵工坊后即可邀请。",
+    visual: { skin: "#efbf8f", hair: "#8d5f35", hairStyle: "sprout", outfit: "#d2ad57", accent: "#6a8f58", face: "kind", badge: "芽" },
   },
   tide: {
     id: "tide",
@@ -2104,6 +2106,7 @@ export const SPRITE_DEFS = {
     cost: 70,
     talent: "每天从潮间带带回一份海岛资源。",
     unlockText: "修好蓝潮渡轮后出现。",
+    visual: { skin: "#d99d7b", hair: "#2f6370", hairStyle: "wave", outfit: "#5fa4b2", accent: "#d8f0dd", face: "calm", badge: "潮" },
   },
   angler: {
     id: "angler",
@@ -2114,6 +2117,7 @@ export const SPRITE_DEFS = {
     cost: 95,
     talent: "每天沿潮汐路线钓回一条鱼。",
     unlockText: "修好蓝潮渡轮后出现。",
+    visual: { skin: "#f0c59b", hair: "#47636b", hairStyle: "wave", outfit: "#6b9fb0", accent: "#f0cf7a", face: "focused", badge: "钩" },
   },
   pondling: {
     id: "pondling",
@@ -2124,6 +2128,7 @@ export const SPRITE_DEFS = {
     cost: 110,
     talent: "照看牧场鱼塘，让鱼苗长大并留下鲜鱼。",
     unlockText: "修好蓝潮渡轮后出现。",
+    visual: { skin: "#e5ad89", hair: "#4c7e68", hairStyle: "bubble", outfit: "#78b99e", accent: "#dbf2dc", face: "bright", badge: "鱼" },
   },
   golden: {
     id: "golden",
@@ -2134,6 +2139,7 @@ export const SPRITE_DEFS = {
     cost: 100,
     talent: "贸易订单声誉与售价小幅提高。",
     unlockText: "港口市场建成后出现。",
+    visual: { skin: "#f2c49b", hair: "#6c4c31", hairStyle: "crown", outfit: "#d9a852", accent: "#fff0ae", face: "sharp", badge: "金" },
   },
   ember: {
     id: "ember",
@@ -2144,6 +2150,7 @@ export const SPRITE_DEFS = {
     cost: 90,
     talent: "每天替你照料全部牲畜，优先照顾心情最低的那只。",
     unlockText: "完成 3 份贸易订单后出现。",
+    visual: { skin: "#d99b78", hair: "#6c3d35", hairStyle: "ember", outfit: "#c86f5c", accent: "#f4c47c", face: "kind", badge: "护" },
   },
 };
 
@@ -2154,7 +2161,11 @@ export const WORKER_DEFS = {
     role: "planting",
     wage: 14,
     hireCost: 120,
-    talent: "熟悉轮作和节气，负责播种与田垄整理。",
+    talent: "每天尝试收获2格成熟作物、播种2格、浇水2格并照料牲畜，专长是按季节补种。",
+    visual: {
+      skin: "#d9a77d", hair: "#4b3428", hairStyle: "side", outfit: "#b8664d", accent: "#e7c37d",
+      pants: "#405348", shoes: "#5a3e32", headwear: "straw", face: "freckles", badge: "✦",
+    },
   },
   herder: {
     id: "herder",
@@ -2162,7 +2173,11 @@ export const WORKER_DEFS = {
     role: "animals",
     wage: 16,
     hireCost: 140,
-    talent: "懂得照看牛羊鸡，会在清晨检查饲料和健康。",
+    talent: "每天参与收获、播种、浇水和基础喂养，分配到牲畜岗位后会陪伴、刷毛并放牧全部动物。",
+    visual: {
+      skin: "#c98f6d", hair: "#2f2525", hairStyle: "curly", outfit: "#718758", accent: "#d9b56b",
+      pants: "#51483d", shoes: "#4a382f", headwear: "wool", face: "smile", badge: "♣",
+    },
   },
   animalCaretaker: {
     id: "animalCaretaker",
@@ -2170,7 +2185,11 @@ export const WORKER_DEFS = {
     role: "animals",
     wage: 15,
     hireCost: 130,
-    talent: "专门负责动物的喂养、陪伴、刷毛、放牧和健康记录。",
+    talent: "每天参与农场基础劳动，分配到牲畜岗位后会采购饲料并完成喂养、陪伴、刷毛、放牧和健康记录。",
+    visual: {
+      skin: "#e4b58e", hair: "#6b3d35", hairStyle: "braid", outfit: "#8c6f82", accent: "#f0c982",
+      pants: "#43566a", shoes: "#594238", headwear: "ribbon", face: "kind", badge: "♥",
+    },
   },
   fisher: {
     id: "fisher",
@@ -2178,7 +2197,11 @@ export const WORKER_DEFS = {
     role: "fishing",
     wage: 18,
     hireCost: 160,
-    talent: "熟悉潮汐和鱼群，会钓鱼也会维护鱼塘。",
+    talent: "每天参与农场基础劳动，分配到钓鱼岗位后会带回1条潮汐银鱼，也可改派鱼塘岗位。",
+    visual: {
+      skin: "#d39a73", hair: "#223b48", hairStyle: "short", outfit: "#3e7281", accent: "#b7dfe0",
+      pants: "#314b58", shoes: "#3e3734", headwear: "beanie", face: "freckles", badge: "≈",
+    },
   },
   irrigator: {
     id: "irrigator",
@@ -2186,7 +2209,11 @@ export const WORKER_DEFS = {
     role: "watering",
     wage: 13,
     hireCost: 105,
-    talent: "每天检查水罐和田垄，为作物补上关键的水分。",
+    talent: "每天尝试收获2格成熟作物、播种2格、浇水2格并照料牲畜，专长是稳定检查水罐和田垄。",
+    visual: {
+      skin: "#e0ad82", hair: "#3d3028", hairStyle: "ponytail", outfit: "#4e8790", accent: "#f0d27c",
+      pants: "#3e5f59", shoes: "#5a4033", headwear: "bandana", face: "bright", badge: "◒",
+    },
   },
   pondkeeper: {
     id: "pondkeeper",
@@ -2194,7 +2221,11 @@ export const WORKER_DEFS = {
     role: "fishery",
     wage: 15,
     hireCost: 125,
-    talent: "会配鱼食、修鱼网，让鱼塘保持清洁。",
+    talent: "每天参与农场基础劳动，分配到养鱼岗位后鱼塘成长2条，存鱼达到3条时收获1条鲜鱼。",
+    visual: {
+      skin: "#c98f70", hair: "#49322d", hairStyle: "bob", outfit: "#65a58d", accent: "#d9e9be",
+      pants: "#3d5b57", shoes: "#4d3c35", headwear: "cap", face: "glasses", badge: "◌",
+    },
   },
   trader: {
     id: "trader",
@@ -2202,7 +2233,11 @@ export const WORKER_DEFS = {
     role: "trade",
     wage: 17,
     hireCost: 135,
-    talent: "整理订单和出货箱，减少贸易日结的遗漏。",
+    talent: "每天参与农场基础劳动，分配到贸易岗位后整理订单并让航线声誉每日提高1点。",
+    visual: {
+      skin: "#d7a77f", hair: "#492d46", hairStyle: "slick", outfit: "#81556c", accent: "#f0c96f",
+      pants: "#40394d", shoes: "#46313d", headwear: "ribbon", face: "sharp", badge: "▤",
+    },
   },
   ranger: {
     id: "ranger",
@@ -2210,7 +2245,11 @@ export const WORKER_DEFS = {
     role: "island",
     wage: 16,
     hireCost: 150,
-    talent: "熟悉海岛路线，替你照看潮汐资源。",
+    talent: "每天参与农场基础劳动，分配到海岛岗位后带回1份海岛资源，保育区政策下带回椰子。",
+    visual: {
+      skin: "#c88e6c", hair: "#2b3930", hairStyle: "braid", outfit: "#6f9464", accent: "#d3a95f",
+      pants: "#394e42", shoes: "#4a382d", headwear: "hood", face: "calm", badge: "⌁",
+    },
   },
 };
 

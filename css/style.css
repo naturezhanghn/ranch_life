@@ -3961,12 +3961,45 @@ body.region-switching .app-shell {
 
 .sprite-roster { display: grid; gap: 8px; }
 .worker-roster { margin-bottom: 16px; }
-.sprite-card { min-height: 75px; padding: 10px; border: 1px solid rgba(31, 67, 56, 0.1); border-radius: 11px; display: grid; grid-template-columns: 37px minmax(0, 1fr) auto; gap: 10px; align-items: center; background: rgba(255, 252, 240, 0.46); }
+.sprite-card { min-height: 75px; padding: 10px; border: 1px solid rgba(31, 67, 56, 0.1); border-radius: 11px; display: grid; grid-template-columns: 54px minmax(0, 1fr) auto; gap: 10px; align-items: center; background: rgba(255, 252, 240, 0.46); }
 .sprite-card.is-locked { opacity: 0.62; }
 .sprite-card.is-unlocked { border-color: color-mix(in srgb, var(--sprite-color) 34%, transparent); }
 .sprite-avatar { width: 37px; height: 37px; display: grid; place-items: center; border-radius: 13px; color: var(--sprite-color); background: color-mix(in srgb, var(--sprite-color) 22%, white); box-shadow: 0 0 15px color-mix(in srgb, var(--sprite-color) 22%, transparent); font-size: 19px; }
 .worker-card { --sprite-color: #b67a55; }
 .worker-avatar { color: #f6e4b2; background: linear-gradient(145deg, #9e664c, #5c453d); }
+.character-portrait { position: relative; width: 54px; height: 60px; align-self: start; overflow: hidden; border: 1px solid color-mix(in srgb, var(--portrait-accent) 42%, transparent); border-radius: 16px 16px 12px 12px; background: linear-gradient(160deg, color-mix(in srgb, var(--portrait-outfit) 28%, white), rgba(255, 250, 230, 0.8)); box-shadow: inset 0 -10px 0 color-mix(in srgb, var(--portrait-outfit) 30%, transparent), 0 5px 12px rgba(55, 77, 61, 0.12); }
+.character-portrait--sprite { width: 48px; height: 54px; border-radius: 15px; }
+.portrait-face { position: absolute; z-index: 3; left: 13px; top: 14px; width: 28px; height: 26px; border-radius: 46% 46% 43% 43%; background: var(--portrait-skin); box-shadow: inset 0 -3px 0 rgba(120, 65, 45, 0.08); }
+.character-portrait--sprite .portrait-face { left: 11px; top: 12px; width: 25px; height: 24px; }
+.portrait-hair { position: absolute; z-index: 4; left: 9px; top: 7px; width: 36px; height: 20px; border-radius: 55% 55% 36% 36%; background: var(--portrait-hair); }
+.character-portrait--sprite .portrait-hair { left: 8px; top: 5px; width: 33px; height: 19px; }
+.portrait-hair--bob { border-radius: 55% 55% 44% 44%; box-shadow: -4px 8px 0 -1px var(--portrait-hair), 4px 8px 0 -1px var(--portrait-hair); }
+.portrait-hair--braid { border-radius: 58% 58% 38% 38%; box-shadow: -5px 8px 0 -1px var(--portrait-hair), 5px 10px 0 -1px var(--portrait-hair); }
+.portrait-hair--side { border-radius: 65% 40% 30% 58%; box-shadow: 7px 7px 0 -1px var(--portrait-hair); }
+.portrait-hair--curly { border-radius: 50%; box-shadow: -9px 4px 0 -2px var(--portrait-hair), 9px 4px 0 -2px var(--portrait-hair), 0 -5px 0 -2px var(--portrait-hair); }
+.portrait-hair--ponytail { box-shadow: 10px 5px 0 -1px var(--portrait-hair); }
+.portrait-hair--slick { border-radius: 70% 70% 30% 30%; transform: skewX(-8deg); }
+.portrait-hair--leaf, .portrait-hair--sprout, .portrait-hair--crown { box-shadow: -7px -5px 0 -2px var(--portrait-accent), 7px -5px 0 -2px var(--portrait-accent); }
+.portrait-hair--wave { border-radius: 50% 50% 28% 28%; box-shadow: 0 6px 0 -1px var(--portrait-accent); }
+.portrait-hair--bubble { box-shadow: -8px 4px 0 -2px var(--portrait-accent), 8px 4px 0 -2px var(--portrait-accent); }
+.portrait-hair--ember { box-shadow: 0 -7px 0 -2px var(--portrait-accent); }
+.portrait-hair--short { height: 16px; border-radius: 60% 60% 32% 32%; }
+.portrait-hair--bun { box-shadow: 9px -4px 0 -1px var(--portrait-hair); }
+.portrait-hair--hat { height: 11px; top: 8px; border-radius: 50% 50% 18% 18%; box-shadow: 0 -4px 0 -1px var(--portrait-accent); }
+.portrait-hair--cap { height: 12px; top: 8px; border-radius: 55% 55% 18% 18%; box-shadow: 0 -4px 0 -1px var(--portrait-accent); }
+.portrait-face::before, .portrait-face::after { content: ""; position: absolute; top: 13px; width: 3px; height: 3px; border-radius: 50%; background: var(--portrait-eye); }
+.portrait-face::before { left: 6px; }
+.portrait-face::after { right: 6px; }
+.portrait-eye { display: none; }
+.portrait-mouth { position: absolute; left: 10px; bottom: 5px; width: 8px; height: 3px; border-bottom: 1px solid rgba(116, 60, 47, 0.72); border-radius: 50%; }
+.portrait-face--bright .portrait-mouth { border-bottom-width: 2px; }
+.portrait-face--focused .portrait-mouth { width: 6px; left: 11px; border-radius: 0; }
+.portrait-body { position: absolute; z-index: 2; left: 8px; bottom: 0; width: 38px; height: 30px; border-radius: 17px 17px 7px 7px; background: var(--portrait-outfit); }
+.character-portrait--sprite .portrait-body { left: 7px; width: 34px; height: 27px; border-radius: 16px 16px 8px 8px; }
+.portrait-body::before { content: ""; position: absolute; left: 5px; top: 8px; width: 28px; height: 4px; border-radius: 4px; background: var(--portrait-accent); opacity: 0.9; }
+.portrait-body b { position: absolute; left: 7px; top: 16px; width: 9px; height: 10px; border-radius: 3px; background: color-mix(in srgb, var(--portrait-accent) 72%, white); }
+.portrait-body em { position: absolute; right: 7px; top: 16px; width: 9px; height: 10px; border-radius: 3px; background: color-mix(in srgb, var(--portrait-accent) 72%, white); }
+.portrait-accessory { position: absolute; z-index: 5; right: 2px; top: 1px; color: var(--portrait-accent); font-size: 14px; filter: drop-shadow(0 1px 1px rgba(55, 58, 43, 0.2)); }
 .sprite-copy { min-width: 0; }
 .sprite-copy strong, .sprite-copy span, .sprite-copy small { display: block; }
 .sprite-copy strong { color: #385949; font-size: 10px; }
@@ -3974,7 +4007,8 @@ body.region-switching .app-shell {
 .sprite-copy small { margin-top: 4px; color: #9a855f; font-size: 7px; }
 .sprite-roles { max-width: 150px; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; }
 .sprite-role { min-height: 24px; padding: 0 7px; border: 1px solid rgba(54, 93, 74, 0.16); border-radius: 7px; color: #60766a; background: rgba(255, 255, 255, 0.42); cursor: pointer; font-size: 8px; }
-.sprite-role:hover, .sprite-role.is-active { color: #fff8df; border-color: #315e4f; background: #315e4f; }
+.sprite-role:disabled { color: #a5aaa0; border-color: rgba(99, 106, 96, 0.12); background: rgba(220, 222, 211, 0.35); cursor: not-allowed; }
+.sprite-role:not(:disabled):hover, .sprite-role.is-active { color: #fff8df; border-color: #315e4f; background: #315e4f; }
 
 .animal-actions {
   display: flex;
@@ -3997,7 +4031,7 @@ body.region-switching .app-shell {
   .scene-switch-button { min-width: 92px; min-height: 44px; }
   .region-card-grid, .contract-grid { grid-template-columns: 1fr; }
   .market-row { grid-template-columns: 27px minmax(0, 1fr) 66px 35px 47px; gap: 6px; }
-  .sprite-card { grid-template-columns: 37px minmax(0, 1fr); }
+  .sprite-card { grid-template-columns: 54px minmax(0, 1fr); }
   .sprite-card > .shop-buy, .sprite-roles { grid-column: 2; justify-self: start; }
 }
 

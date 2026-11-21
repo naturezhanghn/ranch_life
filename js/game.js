@@ -2142,6 +2142,38 @@ function renderGovernmentPanel() {
   `;
 }
 
+const ROLE_BENEFITS = {
+  watering: "每天补水 2 格作物，优先照顾未浇水的地块。",
+  planting: "每天开垦并播种最多 2 格，自动使用当季种子。",
+  animals: "每天喂养牲畜，并提升心情、亲密度和健康。",
+  trade: "每天整理贸易账本，提升航线声誉。",
+  island: "每天从海岛带回 1 份季节资源。",
+  fishing: "每天沿潮汐路线带回 1 条鱼。",
+  fishery: "每天补充鱼塘鱼群，成熟后收获鲜鱼。",
+};
+
+function characterPortrait(character, kind = "worker") {
+  const appearance = character.visual || character.appearance || {};
+  const skin = appearance.skin || (kind === "sprite" ? "#f0c79b" : "#d8a47c");
+  const hair = appearance.hair || (kind === "sprite" ? character.color || "#6f584b" : "#4b3934");
+  const outfit = appearance.outfit || (kind === "sprite" ? character.color || "#7aa875" : "#6d806b");
+  const accent = appearance.accent || (kind === "sprite" ? "#f1d28a" : "#c79855");
+  const eye = appearance.eye || "#2b302d";
+  const hairStyle = appearance.hairStyle || "cap";
+  const accessory = appearance.accessory || appearance.badge || "";
+  const face = appearance.face || "calm";
+  return `<div class="character-portrait character-portrait--${kind}" style="--portrait-skin:${skin};--portrait-hair:${hair};--portrait-outfit:${outfit};--portrait-accent:${accent};--portrait-eye:${eye}" aria-label="${character.name}角色肖像">
+    <span class="portrait-hair portrait-hair--${hairStyle}"></span>
+    <span class="portrait-face portrait-face--${face}"><i class="portrait-eye portrait-eye--left"></i><i class="portrait-eye portrait-eye--right"></i><i class="portrait-mouth"></i></span>
+    <span class="portrait-body"><b></b><em></em></span>
+    ${accessory ? `<span class="portrait-accessory">${accessory}</span>` : ""}
+  </div>`;
+}
+
+function roleBenefit(role, fallback = "按日结参与牧场工作") {
+  return ROLE_BENEFITS[role] || fallback;
+}
+
 function renderSpritesPanel() {
   const roleLabels = {
     watering: "浇水",
@@ -2157,7 +2189,8 @@ function renderSpritesPanel() {
     .map(([role, label]) => {
       const primary = SPRITE_DEFS[spriteId].role === role;
       const efficiency = primary ? 100 : 55;
-      return `<button type="button" class="sprite-role ${assignments[role] === spriteId ? "is-active" : ""}" data-action="spriteAssign" data-value="${spriteId}|${role}">${label} ${efficiency}%</button>`;
+      const ferryLocked = (role === "island" || role === "fishing") && !state.world.unlockedRegions.includes("island");
+      return `<button type="button" class="sprite-role ${assignments[role] === spriteId ? "is-active" : ""}" title="${ferryLocked ? "修好蓝潮渡轮后开放" : roleBenefit(role)}" data-action="spriteAssign" data-value="${spriteId}|${role}" ${ferryLocked ? "disabled" : ""}>${ferryLocked ? "需渡轮" : `${label} ${efficiency}%`}</button>`;
     })
     .join("");
   const roster = Object.values(SPRITE_DEFS)
@@ -2166,8 +2199,8 @@ function renderSpritesPanel() {
       const available = state.sprites.available.includes(sprite.id);
       return `
         <article class="sprite-card ${unlocked ? "is-unlocked" : available ? "is-available" : "is-locked"}" style="--sprite-color:${sprite.color}">
-          <div class="sprite-avatar" aria-hidden="true">${sprite.icon}</div>
-          <div class="sprite-copy"><strong>${sprite.name}</strong><span>${sprite.talent}</span><small>${unlocked ? `已招募 · 友好度 ${state.sprites.friendship[sprite.id] || 0}` : available ? `可招募 · ${sprite.cost ? `需要 ${sprite.cost} 金` : "无需花费"}` : `尚未出现 · ${sprite.unlockText}`}</small></div>
+          ${characterPortrait(sprite, "sprite")}
+          <div class="sprite-copy"><strong>${sprite.name}</strong><span>${sprite.talent}</span><small>${unlocked ? `已招募 · 友好度 ${state.sprites.friendship[sprite.id] || 0} · ${roleBenefit(sprite.role)}` : available ? `可招募 · ${sprite.cost ? `需要 ${sprite.cost} 金` : "无需花费"} · ${roleBenefit(sprite.role)}` : `尚未出现 · ${sprite.unlockText}`}</small></div>
           ${unlocked ? `<div class="sprite-roles">${roleButtons(sprite.id)}</div>` : available ? `<button type="button" class="shop-buy" data-action="spriteRecruit" data-value="${sprite.id}" ${state.coins < sprite.cost ? "disabled" : ""}>${sprite.cost ? `邀请 ✦ ${sprite.cost}` : "遇见"}</button>` : `<span class="clue-status">待解锁</span>`}
         </article>
       `;
@@ -2177,12 +2210,12 @@ function renderSpritesPanel() {
     const hired = state.workers?.hired?.includes(worker.id);
     const assignedRole = Object.entries(state.workers?.assignments || {}).find(([, workerId]) => workerId === worker.id)?.[0];
     const roleButtons = Object.entries(roleLabels).map(([role, label]) => `
-      <button type="button" class="sprite-role ${assignedRole === role ? "is-active" : ""}" data-action="workerAssign" data-value="${worker.id}|${role}">${label}</button>
+      <button type="button" class="sprite-role ${assignedRole === role ? "is-active" : ""}" title="${((role === "island" || role === "fishing") && !state.world.unlockedRegions.includes("island")) ? "修好蓝潮渡轮后开放" : roleBenefit(role)}" data-action="workerAssign" data-value="${worker.id}|${role}" ${((role === "island" || role === "fishing") && !state.world.unlockedRegions.includes("island")) ? "disabled" : ""}>${((role === "island" || role === "fishing") && !state.world.unlockedRegions.includes("island")) ? "需渡轮" : label}</button>
     `).join("");
     const blockedByFerry = worker.id === "fisher" && !state.world.unlockedRegions.includes("island");
-    return `<article class="sprite-card worker-card ${hired ? "is-unlocked" : "is-available"}">
-      <div class="sprite-avatar worker-avatar" aria-hidden="true">♙</div>
-      <div class="sprite-copy"><strong>${worker.name}</strong><span>${worker.talent}</span><small>${hired ? `已雇用 · 日薪 ${worker.wage} 金` : `雇用费 ${worker.hireCost} 金 · 日薪 ${worker.wage} 金`}</small></div>
+    return `<article class="sprite-card worker-card ${hired ? "is-unlocked" : "is-available"}" style="--sprite-color:${worker.visual?.outfit || worker.appearance?.outfit || "#b67a55"}">
+      ${characterPortrait(worker, "worker")}
+      <div class="sprite-copy"><strong>${worker.name}</strong><span>${worker.talent}</span><small>${hired ? `已雇用 · 日薪 ${worker.wage} 金 · ${roleBenefit(assignedRole || worker.role)}` : `雇用费 ${worker.hireCost} 金 · 日薪 ${worker.wage} 金 · ${roleBenefit(worker.role)}`}</small></div>
       ${hired ? `<div class="sprite-roles">${roleButtons}</div>` : `<button type="button" class="shop-buy" data-action="workerHire" data-value="${worker.id}" ${blockedByFerry || state.coins < worker.hireCost ? "disabled" : ""}>${blockedByFerry ? "需渡轮" : `雇用 ✦ ${worker.hireCost}`}</button>`}
     </article>`;
   }).join("");
@@ -3160,7 +3193,7 @@ function showDaySummary(report, nextEvent = null, auto = false) {
       }
       ${
         report.helperActions?.length
-          ? `<div class="day-report-card day-report-card--helpers"><strong>小精灵日结</strong><span>${report.helperActions.join("；")}。</span></div>`
+          ? `<div class="day-report-card day-report-card--helpers"><strong>员工与小精灵日结</strong><span>${report.helperActions.join("；")}。</span></div>`
           : ""
       }
       ${

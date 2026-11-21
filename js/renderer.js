@@ -7,6 +7,7 @@ import {
   SCENE_FINDS,
   SCENE_INTERACTIONS,
   SCENE_SEASON_VARIANTS,
+  SPRITE_DEFS,
   WORKER_DEFS,
   scheduledNpcPositions,
   TOOLS,
@@ -179,6 +180,18 @@ export class WorldRenderer {
         draw: () => this.drawFarmEmployee(ctx, motion.x, motion.y, worker, "休息", time, motion),
       });
     });
+
+    const assignedSprites = new Set();
+    for (const [role, spriteId] of Object.entries(state.sprites?.assignments || {})) {
+      const sprite = SPRITE_DEFS[spriteId];
+      if (!sprite || !FARM_EMPLOYEE_ROUTES[role] || assignedSprites.has(spriteId)) continue;
+      assignedSprites.add(spriteId);
+      const motion = this.getFarmSpriteMotion(role, spriteId, time);
+      drawables.push({
+        y: motion.y - 8,
+        draw: () => this.drawFarmSprite(ctx, motion.x, motion.y, sprite, role, time, motion),
+      });
+    }
 
     if (this.shouldShowInvestor(state)) {
       drawables.push({
@@ -2470,6 +2483,141 @@ export class WorldRenderer {
     };
   }
 
+  getFarmSpriteMotion(role, spriteId, time) {
+    const motion = this.getFarmEmployeeMotion(role, spriteId, time);
+    return {
+      ...motion,
+      y: motion.y - 19,
+      walkPhase: motion.walkPhase * 1.2,
+      actionPhase: motion.actionPhase * 1.15,
+    };
+  }
+
+  drawFarmSprite(ctx, x, y, sprite, role, time, motion = null) {
+    const spriteMotion = motion || this.getFarmSpriteMotion(role, sprite?.id, time);
+    const visual = sprite?.visual || {};
+    const skin = visual.skin || "#f0c79b";
+    const hair = visual.hair || sprite?.color || "#6f584b";
+    const outfit = visual.outfit || sprite?.color || "#7aa875";
+    const accent = visual.accent || "#f1d28a";
+    const facing = spriteMotion.facing || 1;
+    const bob = Math.sin(time * 3.1 + spriteMotion.seed) * 2;
+    const action = spriteMotion.working ? Math.sin(spriteMotion.actionPhase) * 5 : 0;
+    this.drawShadow(ctx, x, y + 4, 12, 4);
+    ctx.save();
+    ctx.translate(x, y + bob);
+    ctx.fillStyle = outfit;
+    roundedRect(ctx, -9, -19, 18, 17, 6);
+    ctx.fill();
+    ctx.fillStyle = accent;
+    ctx.fillRect(-7, -17, 14, 3);
+    ctx.fillStyle = skin;
+    ctx.beginPath();
+    ctx.arc(0, -25, 8, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = hair;
+    ctx.beginPath();
+    ctx.arc(0, -29, 9, Math.PI, 0);
+    ctx.fill();
+    ctx.fillStyle = "#2c312d";
+    ctx.beginPath();
+    ctx.arc(-3, -25, 1, 0, TAU);
+    ctx.arc(3, -25, 1, 0, TAU);
+    ctx.fill();
+    ctx.strokeStyle = "rgba(116, 60, 47, 0.8)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(0, -22, 2.2, 0.1, Math.PI - 0.1);
+    ctx.stroke();
+    if (["leaf", "sprout", "crown"].includes(visual.hairStyle)) {
+      ctx.fillStyle = accent;
+      ctx.beginPath();
+      ctx.ellipse(-4, -37, 3, 6, -0.4, 0, TAU);
+      ctx.ellipse(4, -37, 3, 6, 0.4, 0, TAU);
+      ctx.fill();
+    } else if (visual.hairStyle === "wave") {
+      ctx.strokeStyle = accent;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(0, -30, 11, Math.PI * 1.08, Math.PI * 1.92);
+      ctx.stroke();
+    } else if (visual.hairStyle === "bubble") {
+      ctx.fillStyle = accent;
+      ctx.beginPath();
+      ctx.arc(-7, -32, 3, 0, TAU);
+      ctx.arc(7, -32, 3, 0, TAU);
+      ctx.fill();
+    } else if (visual.hairStyle === "ember") {
+      ctx.fillStyle = accent;
+      ctx.beginPath();
+      ctx.moveTo(-4, -36);
+      ctx.lineTo(0, -43);
+      ctx.lineTo(4, -36);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.fillStyle = accent;
+    ctx.font = "700 7px 'PingFang SC', sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(visual.badge || sprite.icon || "✦", 0, -11);
+    this.drawSpriteTool(ctx, role, facing, action, spriteMotion.working);
+    ctx.fillStyle = "rgba(255, 247, 218, 0.96)";
+    ctx.font = "700 7px 'PingFang SC', sans-serif";
+    ctx.fillText(sprite.name, 0, -44);
+    ctx.restore();
+  }
+
+  drawSpriteTool(ctx, role, facing, action, working) {
+    if (role === "watering") {
+      ctx.strokeStyle = "#bce9e2";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(facing * 8, -12);
+      ctx.lineTo(facing * 22, -7 + action);
+      ctx.stroke();
+      if (working) ellipse(ctx, facing * 25, -4 + action, 2, 2, "#bce9e2");
+    } else if (role === "planting") {
+      ctx.strokeStyle = "#dbb66b";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(facing * 7, -11);
+      ctx.lineTo(facing * (18 + action), 1);
+      ctx.stroke();
+      if (working) ellipse(ctx, facing * 20, 2, 2, 1, "#9dbc73");
+    } else if (role === "fishing") {
+      ctx.strokeStyle = "#c89b66";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(facing * 7, -12);
+      ctx.lineTo(facing * 27, -29 + action);
+      ctx.stroke();
+      ctx.strokeStyle = "#e6f1d5";
+      ctx.beginPath();
+      ctx.moveTo(facing * 27, -29 + action);
+      ctx.lineTo(facing * 25, -5);
+      ctx.stroke();
+    } else if (role === "fishery") {
+      ctx.strokeStyle = "#d5c88d";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(facing * 14, -21, 7, 0, TAU);
+      ctx.stroke();
+      if (working) ellipse(ctx, facing * 18, -4 + action, 2, 1.5, "#f1d381");
+    } else if (role === "animals") {
+      ellipse(ctx, facing * 15, -7, 4, 3, "#ead393");
+      if (working) ellipse(ctx, facing * 21, -3 + action, 1.5, 1.5, "#ead393");
+    } else if (role === "trade") {
+      ctx.fillStyle = "#b9864e";
+      ctx.fillRect(facing * 12 - 4, -13, 8, 7);
+      ctx.strokeStyle = "#734d37";
+      ctx.strokeRect(facing * 12 - 4, -13, 8, 7);
+    } else if (role === "island") {
+      ctx.fillStyle = "#9d704c";
+      roundedRect(ctx, facing * 12 - 5, -14, 10, 8, 2);
+      ctx.fill();
+    }
+  }
+
   drawFarmEmployee(ctx, x, y, worker, role, time, motion = null) {
     const employeeMotion = motion || this.getFarmEmployeeMotion(role, worker?.id, time);
     const bob = employeeMotion.moving
@@ -2486,7 +2634,11 @@ export class WorldRenderer {
       island: "#6f9464",
       休息: "#89705f",
     };
-    const bodyColor = colors[role] || "#7c6d5c";
+    const visual = worker?.visual || {};
+    const bodyColor = visual.outfit || colors[role] || "#7c6d5c";
+    const accentColor = visual.accent || "#c8a36e";
+    const skinColor = visual.skin || "#d8ad86";
+    const hairColor = visual.hair || (role === "fishing" || role === "fishery" ? "#315e6b" : "#4f443c");
     const legSwing = employeeMotion.moving ? Math.sin(employeeMotion.walkPhase) * 3 : 0;
     const armSwing = employeeMotion.moving ? Math.sin(employeeMotion.walkPhase + Math.PI) * 3 : 0;
     const handX = employeeMotion.facing * 13;
@@ -2494,23 +2646,129 @@ export class WorldRenderer {
 
     ctx.save();
     ctx.translate(x, y + bob);
+    ctx.fillStyle = visual.pants || "#3f493f";
+    ctx.fillRect(-10 + legSwing, -8, 7, 9);
+    ctx.fillRect(3 - legSwing, -8, 7, 9);
+    ctx.fillStyle = visual.shoes || "#4a3a32";
+    ctx.fillRect(-12 + legSwing, -1, 10, 3);
+    ctx.fillRect(2 - legSwing, -1, 10, 3);
     ctx.fillStyle = bodyColor;
-    ctx.fillRect(-13, -38, 26, 30);
-    ctx.fillStyle = "#d8ad86";
+    roundedRect(ctx, -13, -38, 26, 30, 4);
+    ctx.fill();
+    ctx.fillStyle = accentColor;
+    ctx.fillRect(-13, -36, 26, 4);
+    ctx.fillStyle = "rgba(255, 240, 194, 0.45)";
+    ctx.fillRect(-2, -32, 4, 21);
+    ctx.strokeStyle = accentColor;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(-9, -20);
+    ctx.lineTo(-4, -20);
+    ctx.moveTo(4, -20);
+    ctx.lineTo(9, -20);
+    ctx.stroke();
+    ctx.fillStyle = skinColor;
     ctx.beginPath();
     ctx.arc(0, -49, 10, 0, TAU);
     ctx.fill();
-    ctx.fillStyle = role === "fishing" || role === "fishery" ? "#315e6b" : "#4f443c";
+    ctx.fillStyle = hairColor;
     ctx.beginPath();
     ctx.arc(0, -54, 12, Math.PI, 0);
     ctx.fill();
-    ctx.fillRect(-14, -55, 28, 4);
+    if (visual.hairStyle === "curly" || visual.hairStyle === "bob") {
+      ctx.beginPath();
+      ctx.arc(-10, -50, 5, 0, TAU);
+      ctx.arc(10, -50, 5, 0, TAU);
+      ctx.fill();
+    } else if (visual.hairStyle === "braid" || visual.hairStyle === "ponytail") {
+      ctx.beginPath();
+      ctx.arc(employeeMotion.facing * -12, -48, 5, 0, TAU);
+      ctx.fill();
+      ctx.strokeStyle = hairColor;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(employeeMotion.facing * -10, -48);
+      ctx.lineTo(employeeMotion.facing * -15, -36);
+      ctx.stroke();
+    }
+    ctx.fillStyle = "#342c2b";
+    ctx.beginPath();
+    ctx.arc(employeeMotion.facing * 4, -51, 1.3, 0, TAU);
+    ctx.arc(employeeMotion.facing * 9, -51, 1.3, 0, TAU);
+    ctx.fill();
+    ctx.strokeStyle = "rgba(107, 56, 51, 0.8)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(employeeMotion.facing * 6.5, -47, 2.5, 0.1, Math.PI - 0.1);
+    ctx.stroke();
+    if (visual.face === "freckles") {
+      ctx.fillStyle = "rgba(143, 84, 62, 0.52)";
+      ctx.beginPath();
+      ctx.arc(employeeMotion.facing * 1, -47, 0.8, 0, TAU);
+      ctx.arc(employeeMotion.facing * 5, -46, 0.8, 0, TAU);
+      ctx.fill();
+    } else if (visual.face === "glasses") {
+      ctx.strokeStyle = "#4a5250";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(employeeMotion.facing * 1, -54, 5, 4);
+      ctx.strokeRect(employeeMotion.facing * 7, -54, 5, 4);
+      ctx.beginPath();
+      ctx.moveTo(employeeMotion.facing * 6, -52);
+      ctx.lineTo(employeeMotion.facing * 7, -52);
+      ctx.stroke();
+    }
+    if (visual.headwear === "straw") {
+      ctx.fillStyle = "#e3bb69";
+      ctx.beginPath();
+      ctx.ellipse(0, -58, 17, 4, 0, 0, TAU);
+      ctx.fill();
+      ctx.fillRect(-10, -66, 20, 8);
+    } else if (visual.headwear === "wool" || visual.headwear === "beanie") {
+      ctx.fillStyle = visual.headwear === "beanie" ? "#2e5666" : "#8c665c";
+      ctx.beginPath();
+      ctx.arc(0, -58, 14, Math.PI, 0);
+      ctx.fill();
+      ctx.fillRect(-13, -58, 26, 4);
+    } else if (visual.headwear === "bandana") {
+      ctx.fillStyle = "#d77655";
+      ctx.fillRect(-12, -59, 24, 4);
+      ctx.beginPath();
+      ctx.moveTo(employeeMotion.facing * 10, -57);
+      ctx.lineTo(employeeMotion.facing * 17, -51);
+      ctx.lineTo(employeeMotion.facing * 10, -51);
+      ctx.closePath();
+      ctx.fill();
+    } else if (visual.headwear === "cap") {
+      ctx.fillStyle = "#5d8d82";
+      ctx.beginPath();
+      ctx.arc(0, -58, 13, Math.PI, 0);
+      ctx.fill();
+      ctx.fillRect(-15, -57, 19, 3);
+    } else if (visual.headwear === "hood") {
+      ctx.strokeStyle = "#536d57";
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.arc(0, -52, 15, Math.PI * 1.02, Math.PI * 1.98);
+      ctx.stroke();
+    } else if (visual.headwear === "ribbon") {
+      ctx.fillStyle = "#e0a56d";
+      ctx.beginPath();
+      ctx.arc(employeeMotion.facing * -11, -56, 3, 0, TAU);
+      ctx.moveTo(employeeMotion.facing * -11, -56);
+      ctx.lineTo(employeeMotion.facing * -17, -61);
+      ctx.lineTo(employeeMotion.facing * -16, -52);
+      ctx.closePath();
+      ctx.fill();
+    }
+    if (visual.badge) {
+      ctx.fillStyle = accentColor;
+      ctx.font = "700 7px 'PingFang SC', sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText(visual.badge, 0, -24);
+    }
 
     // A small stride and arm swing keeps walking employees readable at the
     // same scale as the rest of the ranch cast.
-    ctx.fillStyle = "#3f493f";
-    ctx.fillRect(-10 + legSwing, -8, 7, 9);
-    ctx.fillRect(3 - legSwing, -8, 7, 9);
     ctx.strokeStyle = bodyColor;
     ctx.lineWidth = 4;
     ctx.lineCap = "round";

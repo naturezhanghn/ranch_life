@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { BRIDGE_QUEST, CROPS, DAY_START_MINUTES, POST_GAME_MODIFIERS, SAVE_BACKUP_KEY, SAVE_KEY, SEASONAL_CROP_CALENDAR, SHOP_SEEDS, TRADE_CONTRACTS, WORLD } from "../js/data.js";
+import { BRIDGE_QUEST, CROPS, DAY_START_MINUTES, POST_GAME_MODIFIERS, SAVE_BACKUP_KEY, SAVE_KEY, SEASONAL_CROP_CALENDAR, SHOP_SEEDS, SPRITE_DEFS, TRADE_CONTRACTS, WORKER_DEFS, WORLD } from "../js/data.js";
 import {
   advanceDay,
   advanceBridgeQuest,
@@ -105,6 +105,16 @@ test("initial state has the vertical-slice scope", () => {
   assert.equal(state.coins, 140);
   assert.equal(state.feed, 6);
   assert.equal(state.story.step, "meetSister");
+});
+
+test("every task role has a visual identity and a stated daily function", () => {
+  for (const character of [...Object.values(WORKER_DEFS), ...Object.values(SPRITE_DEFS)]) {
+    assert.ok(character.visual?.skin);
+    assert.ok(character.visual?.hair);
+    assert.ok(character.visual?.outfit);
+    assert.ok(character.visual?.accent);
+    assert.ok(character.talent && character.talent.length > 12);
+  }
 });
 
 test("longform story offers one daily choice and records it once", () => {
@@ -930,6 +940,18 @@ test("government policies and sprite assignments create daily automation", () =>
   assert.equal(state.plots[0].growth, 1);
 });
 
+test("sprite daily feedback names the assigned sprite", () => {
+  const state = freshState();
+  assert.equal(recruitSprite(state, "sprout").ok, true);
+  assert.equal(assignSprite(state, "sprout", "watering").ok, true);
+  standAtPlot(state, 0, 0);
+  useToolOnPlot(state, "hoe");
+  useToolOnPlot(state, "seed");
+  const report = advanceDay(state);
+  assert.ok(report.helperActions.some((entry) => entry.includes("穗穗") && entry.includes("露水")));
+  assert.equal(report.helperActions.some((entry) => entry.startsWith("芽芽替你")), false);
+});
+
 test("workforce can plant crops, care for livestock, fish, and raise fish", () => {
   const state = freshState();
   state.coins = 600;
@@ -1008,6 +1030,22 @@ test("fishing employee returns a daily catch automatically", () => {
   assert.equal(state.stats.fishCaught, 1);
   assert.equal(state.inventory.resources.tidefish, 1);
   assert.ok(report.helperActions.some((entry) => entry.includes("江岚") && entry.includes("钓回")));
+});
+
+test("island employee returns a visible daily resource", () => {
+  const state = freshState();
+  state.coins = 500;
+  state.world.unlockedRegions.push("island");
+  state.daily.tasks = [{ id: "island", counter: "explored", target: 1, reward: 26, done: false, rewarded: false }];
+  state.daily.counters.explored = 0;
+  assert.equal(hireWorker(state, "ranger").ok, true);
+  assert.equal(assignWorker(state, "ranger", "island").ok, true);
+  const before = state.inventory.resources.seaweed;
+  const report = advanceDay(state);
+  assert.equal(state.inventory.resources.seaweed, before + 1);
+  assert.equal(state.stats.islandFinds, 1);
+  assert.equal(report.dailyTasks.completed[0].id, "island");
+  assert.ok(report.helperActions.some((entry) => entry.includes("叶青") && entry.includes("带回")));
 });
 
 test("sleep returns the player to the farm scene and spawn", () => {
