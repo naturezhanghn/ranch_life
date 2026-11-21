@@ -272,6 +272,7 @@ export class WorldRenderer {
 
     if (sceneId === "wilderness") {
       this.drawWildernessScene(ctx, state, time);
+      if (!this.isWorkShift(state)) this.drawOffShiftWildernessResidents(ctx, state, time);
     } else {
       this.drawSceneGround(ctx, sceneId, time);
       this.drawSeasonalRoute(ctx, state, sceneId, seasonVariant, time);
@@ -831,6 +832,52 @@ export class WorldRenderer {
     ctx.fillText("员工房间", 305, 312);
     ctx.fillText("小精灵房间", 795, 312);
     ctx.restore();
+  }
+
+  drawOffShiftWildernessResidents(ctx, state, time) {
+    const residents = [
+      ...(state.workers?.hired || []).slice(0, 2).map((id) => ({ kind: "worker", character: WORKER_DEFS[id] })),
+      ...(state.sprites?.unlocked || []).slice(0, 2).map((id) => ({ kind: "sprite", character: SPRITE_DEFS[id] })),
+    ].filter((entry) => entry.character);
+    const routes = [
+      [{ x: 330, y: 448 }, { x: 430, y: 390 }, { x: 520, y: 438 }, { x: 438, y: 520 }],
+      [{ x: 720, y: 540 }, { x: 820, y: 470 }, { x: 932, y: 512 }, { x: 850, y: 604 }],
+      [{ x: 1050, y: 286 }, { x: 1140, y: 330 }, { x: 1080, y: 402 }, { x: 980, y: 354 }],
+      [{ x: 1260, y: 620 }, { x: 1360, y: 564 }, { x: 1450, y: 628 }, { x: 1368, y: 694 }],
+    ];
+    residents.forEach(({ kind, character }, index) => {
+      const route = routes[index % routes.length];
+      const seed = [...String(character.id)].reduce((sum, value, valueIndex) => sum + value.charCodeAt(0) * (valueIndex + 1), 0);
+      const progress = (time * (0.12 + (seed % 3) * 0.018) + index * 0.7) % route.length;
+      const segment = Math.floor(progress);
+      const phase = progress - segment;
+      const from = route[segment];
+      const to = route[(segment + 1) % route.length];
+      const eased = phase * phase * (3 - 2 * phase);
+      const motion = {
+        x: from.x + (to.x - from.x) * eased,
+        y: from.y + (to.y - from.y) * eased,
+        facing: to.x >= from.x ? 1 : -1,
+        moving: phase < 0.82,
+        working: false,
+        seed,
+        walkPhase: time * 7 + seed * 0.05,
+        actionPhase: time * 1.2 + seed * 0.04,
+      };
+      if (kind === "worker") {
+        this.drawFarmEmployee(ctx, motion.x, motion.y, character, "休息", time, motion);
+      } else {
+        this.drawFarmSprite(ctx, motion.x, motion.y - 19, character, "休息", time, { ...motion, y: motion.y - 19 });
+      }
+    });
+    if (residents.length) {
+      ctx.save();
+      ctx.fillStyle = "rgba(255, 247, 218, 0.72)";
+      ctx.font = "700 10px 'PingFang SC', sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText("下班后 · 森林散步", 820, 690);
+      ctx.restore();
+    }
   }
 
   drawDetailedStructure(ctx, x, y, w, h, label, roof, time) {
