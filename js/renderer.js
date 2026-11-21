@@ -2819,6 +2819,8 @@ export class WorldRenderer {
       ctx.restore();
     }
 
+    this.drawWorkerFieldActivity(ctx, state, time);
+
     ctx.fillStyle = "#6d4b32";
     ctx.fillRect(field.x - 31, field.y + 1, 4, 44);
     ctx.fillStyle = "#e4c98e";
@@ -2829,6 +2831,70 @@ export class WorldRenderer {
     ctx.textAlign = "center";
     ctx.fillText("田垄", field.x - 24, field.y + 2);
     ctx.restore();
+  }
+
+  drawWorkerFieldActivity(ctx, state, time) {
+    const activity = state.workerActivity;
+    if (!activity || activity.day !== state.day || state.minutes < 10 * 60 || state.minutes >= 18 * 60) return;
+    const field = WORLD.field;
+    const actions = [
+      ...(activity.harvesting || []).map((entry) => ({ ...entry, type: "harvest" })),
+      ...(activity.planting || []).map((entry) => ({ ...entry, type: "plant" })),
+      ...(activity.watering || []).map((entry) => ({ ...entry, type: "water" })),
+    ];
+    if (!actions.length) return;
+    const elapsed = state.minutes - 10 * 60;
+    const actionSpan = 24;
+    const currentIndex = Math.floor(elapsed / actionSpan);
+    const progress = (elapsed % actionSpan) / actionSpan;
+    const drawTileMark = (entry, phase, active) => {
+      const plot = state.plots.find((candidate) => candidate.index === entry.index);
+      if (!plot) return;
+      const x = field.x + plot.col * field.tile;
+      const y = field.y + plot.row * field.tile;
+      ctx.save();
+      const pulse = active ? 1 + Math.sin(time * 5.5 + entry.index) * 0.08 : 1;
+      ctx.globalAlpha = active ? 0.84 : 0.42;
+      ctx.strokeStyle = entry.type === "water" ? "#c7eee5" : entry.type === "harvest" ? "#f4d17e" : "#cbe79a";
+      ctx.lineWidth = active ? 2.5 : 1.5;
+      roundedRect(ctx, x + 5 - (pulse - 1) * 2, y + 5 - (pulse - 1) * 2, field.tile - 10 + (pulse - 1) * 4, field.tile - 10 + (pulse - 1) * 4, 7);
+      ctx.stroke();
+      if (entry.type === "water") {
+        ctx.globalAlpha = active ? 0.2 : 0.08;
+        ctx.fillStyle = "#5fa7a0";
+        roundedRect(ctx, x + 8, y + 8, field.tile - 16, field.tile - 16, 6);
+        ctx.fill();
+        ctx.globalAlpha = active ? 0.84 : 0.25;
+        ctx.fillStyle = "#c8f0e5";
+        for (let drop = 0; drop < 4; drop += 1) {
+          const dropPhase = (phase + drop * 0.17) % 1;
+          ctx.globalAlpha = active ? 0.82 - dropPhase * 0.45 : 0.25;
+          ctx.beginPath();
+          ctx.arc(x + 15 + drop * 9, y + 12 + dropPhase * 24, 2, 0, TAU);
+          ctx.fill();
+        }
+      } else if (entry.type === "harvest") {
+        ctx.fillStyle = "#ffe5a1";
+        ctx.font = "800 18px sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText("✿", x + field.tile / 2, y + 23 - phase * 10);
+        ctx.globalAlpha = active ? 0.7 : 0.22;
+        ctx.strokeStyle = "#fff0b5";
+        ctx.beginPath();
+        ctx.arc(x + field.tile / 2, y + field.tile / 2, 10 + phase * 12, 0, TAU);
+        ctx.stroke();
+      } else {
+        ctx.fillStyle = "#e7d38b";
+        ctx.font = "800 15px sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText("·", x + field.tile / 2, y + field.tile / 2 + 5);
+      }
+      ctx.restore();
+    };
+    actions.forEach((entry, index) => {
+      if (index < currentIndex) drawTileMark(entry, 1, false);
+      else if (index === currentIndex) drawTileMark(entry, progress, true);
+    });
   }
 
   drawCrop(ctx, plot, x, y, time) {

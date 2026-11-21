@@ -476,6 +476,12 @@ export function createInitialState() {
       lastPayrollDay: 0,
       dispatches: 0,
     },
+    workerActivity: {
+      day: 0,
+      harvesting: [],
+      planting: [],
+      watering: [],
+    },
     player: {
       x: PLAYER_START.x,
       y: PLAYER_START.y,
@@ -2832,6 +2838,12 @@ function applySpriteAssignments(state, report) {
 function applyWorkerAssignments(state, report) {
   const workforce = state.workers;
   if (!workforce?.hired?.length) return;
+  state.workerActivity = {
+    day: state.day + 1,
+    harvesting: [],
+    planting: [],
+    watering: [],
+  };
   const payroll = workforce.hired.reduce((sum, workerId) => sum + (WORKER_DEFS[workerId]?.wage || 0), 0);
   if (state.coins < payroll) {
     report.helperActions.push(`员工工资需要 ${payroll} 金，当前余额不足，今天暂停工作`);
@@ -2857,6 +2869,7 @@ function applyWorkerAssignments(state, report) {
       if (harvested >= 2 || !plot.crop || plot.growth < CROPS[plot.crop].days) continue;
       const harvestCrop = CROPS[plot.crop];
       const amount = plot.wateredDays >= harvestCrop.days ? 2 : 1;
+      state.workerActivity.harvesting.push({ index: plot.index, crop: harvestCrop.id, amount, workerId });
       state.shipping.bin[harvestCrop.id] = (state.shipping.bin[harvestCrop.id] || 0) + amount;
       plot.crop = null;
       plot.growth = 0;
@@ -2877,6 +2890,7 @@ function applyWorkerAssignments(state, report) {
         plot.wateredDays = 0;
         state.inventory.seeds[cropId] -= 1;
         planted += 1;
+        state.workerActivity.planting.push({ index: plot.index, crop: cropId, workerId });
         bumpCounter(state, "tilled");
         bumpCounter(state, "planted");
       }
@@ -2890,6 +2904,7 @@ function applyWorkerAssignments(state, report) {
         plot.wateredDays += 1;
         state.water -= 1;
         watered += 1;
+        state.workerActivity.watering.push({ index: plot.index, workerId });
         bumpCounter(state, "watered");
       }
     }
@@ -4061,6 +4076,13 @@ export function loadGame() {
         hired: Array.isArray(parsed.workers?.hired) ? Array.from(new Set(parsed.workers.hired)) : base.workers.hired,
         assignments: { ...base.workers.assignments, ...(parsed.workers?.assignments || {}) },
       },
+      workerActivity: {
+        ...base.workerActivity,
+        ...(parsed.workerActivity || {}),
+        harvesting: Array.isArray(parsed.workerActivity?.harvesting) ? parsed.workerActivity.harvesting : base.workerActivity.harvesting,
+        planting: Array.isArray(parsed.workerActivity?.planting) ? parsed.workerActivity.planting : base.workerActivity.planting,
+        watering: Array.isArray(parsed.workerActivity?.watering) ? parsed.workerActivity.watering : base.workerActivity.watering,
+      },
       stats: { ...base.stats, ...(parsed.stats || {}) },
       ai: {
         ...base.ai,
@@ -4252,6 +4274,9 @@ export function loadGame() {
       merged.shipping.trip = null;
     }
     merged.day = Number.isFinite(Number(merged.day)) ? Math.max(1, Math.floor(Number(merged.day))) : base.day;
+    merged.workerActivity.day = Number.isFinite(Number(merged.workerActivity.day))
+      ? Math.max(0, Math.floor(Number(merged.workerActivity.day)))
+      : base.workerActivity.day;
     merged.seasonDay = Number.isFinite(Number(merged.seasonDay))
       ? Math.max(1, Math.min(SEASON_DAYS, Math.floor(Number(merged.seasonDay))))
       : base.seasonDay;
