@@ -2373,7 +2373,9 @@ export const SHOP_SEEDS = Object.values(CROPS).map((crop) => ({
   price: crop.seedPrice,
   icon: crop.icon,
   seasons: SEASONAL_CROP_CALENDAR[crop.id]?.seasons || [],
-  description: `${crop.days} 天成熟 · 售价 ${crop.sellPrice} 金 · ${(SEASONAL_CROP_CALENDAR[crop.id]?.seasons || []).join("、")}季可播`,
+  description: crop.isGrass
+    ? `${crop.days} 天成熟 · 成熟后供牛羊放牧 · ${(SEASONAL_CROP_CALENDAR[crop.id]?.seasons || []).join("、")}季可播`
+    : `${crop.days} 天成熟 · 售价 ${crop.sellPrice} 金 · ${(SEASONAL_CROP_CALENDAR[crop.id]?.seasons || []).join("、")}季可播`,
   kind: "seed",
 }));
 

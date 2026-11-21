@@ -1941,6 +1941,7 @@ function openShop(notice = "") {
 
 function openSeedPouch() {
   const rows = Object.values(CROPS)
+    .filter((crop) => !crop.isGrass)
     .map((crop) => {
       const seed = SHOP_SEEDS.find((entry) => entry.id === crop.id);
       const count = state.inventory.seeds[crop.id] || 0;
@@ -3740,6 +3741,7 @@ function handleModalClick(event) {
       doShipping();
       break;
     case "selectSeed":
+      if (!CROPS[value] || CROPS[value].isGrass) break;
       state.selectedSeed = value;
       state.selectedTool = "seed";
       closeModal();

@@ -4083,7 +4083,9 @@ export function loadGame() {
     merged.inventory.cooked = normalizeDynamicCounts(merged.inventory.cooked);
 
     merged.season = SEASONS.includes(merged.season) ? merged.season : base.season;
-    merged.selectedSeed = CROPS[merged.selectedSeed] ? merged.selectedSeed : base.selectedSeed;
+    merged.selectedSeed = CROPS[merged.selectedSeed] && !CROPS[merged.selectedSeed].isGrass
+      ? merged.selectedSeed
+      : base.selectedSeed;
     merged.shipping.bin = Object.fromEntries(
       Object.entries(merged.shipping.bin || {})
         .filter(([itemId, count]) => CROPS[itemId] && Number.isFinite(Number(count)) && Number(count) > 0)
