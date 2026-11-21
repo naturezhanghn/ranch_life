@@ -92,6 +92,13 @@ const FARM_EMPLOYEE_ROUTES = {
     { x: 1178, y: 590 },
     { x: 948, y: 592 },
   ],
+  hunting: [
+    { x: 1088, y: 392 },
+    { x: 1188, y: 414 },
+    { x: 1178, y: 510 },
+    { x: 1064, y: 548 },
+    { x: 1002, y: 474 },
+  ],
   rest: [
     { x: 670, y: 642 },
     { x: 730, y: 628 },
@@ -115,6 +122,7 @@ export class WorldRenderer {
     const time = this.time;
     const ctx = this.ctx;
     const { player } = state;
+    const workShift = this.isWorkShift(state);
 
     if (state.world?.scene && state.world.scene !== "farm") {
       this.renderScene(ctx, state, runtime, time, delta);
@@ -125,8 +133,9 @@ export class WorldRenderer {
     ctx.clearRect(0, 0, WORLD.width, WORLD.height);
     this.drawGround(ctx, state, time);
     this.drawPaths(ctx, time);
-    this.drawSeasonalRoute(ctx, state, "farm", farmSeasonVariant, time);
     this.drawCanal(ctx, state, time);
+    this.drawRanchFence(ctx, time);
+    this.drawSeasonalRoute(ctx, state, "farm", farmSeasonVariant, time);
     this.drawField(ctx, state, time, runtime);
     this.drawPasture(ctx, state, time);
     this.drawVillageBase(ctx, time);
@@ -165,10 +174,12 @@ export class WorldRenderer {
       const worker = WORKER_DEFS[workerId];
       if (!worker || !FARM_EMPLOYEE_ROUTES[role] || assignedWorkers.has(workerId)) continue;
       assignedWorkers.add(workerId);
-      const motion = this.getFarmEmployeeMotion(role, workerId, time);
+      const visibleRole = workShift ? role : "休息";
+      const motion = this.getFarmEmployeeMotion(visibleRole, workerId, time);
+      motion.working = workShift;
       drawables.push({
         y: motion.y,
-        draw: () => this.drawFarmEmployee(ctx, motion.x, motion.y, worker, role, time, motion),
+        draw: () => this.drawFarmEmployee(ctx, motion.x, motion.y, worker, visibleRole, time, motion),
       });
     }
     const unassignedWorkers = (state.workers?.hired || [])
@@ -176,10 +187,13 @@ export class WorldRenderer {
       .map((workerId) => WORKER_DEFS[workerId])
       .filter(Boolean);
     unassignedWorkers.forEach((worker, index) => {
-      const motion = this.getFarmEmployeeMotion("休息", worker.id, time, index);
+      const defaultRole = ["planting", "watering", "animals"][index % 3];
+      const visibleRole = workShift ? defaultRole : "休息";
+      const motion = this.getFarmEmployeeMotion(visibleRole, worker.id, time, index);
+      motion.working = workShift;
       drawables.push({
         y: motion.y,
-        draw: () => this.drawFarmEmployee(ctx, motion.x, motion.y, worker, "休息", time, motion),
+        draw: () => this.drawFarmEmployee(ctx, motion.x, motion.y, worker, visibleRole, time, motion),
       });
     });
 
@@ -188,10 +202,12 @@ export class WorldRenderer {
       const sprite = SPRITE_DEFS[spriteId];
       if (!sprite || !FARM_EMPLOYEE_ROUTES[role] || assignedSprites.has(spriteId)) continue;
       assignedSprites.add(spriteId);
-      const motion = this.getFarmSpriteMotion(role, spriteId, time);
+      const visibleRole = workShift ? role : "休息";
+      const motion = this.getFarmSpriteMotion(visibleRole, spriteId, time);
+      motion.working = workShift;
       drawables.push({
         y: motion.y - 8,
-        draw: () => this.drawFarmSprite(ctx, motion.x, motion.y, sprite, role, time, motion),
+        draw: () => this.drawFarmSprite(ctx, motion.x, motion.y, sprite, visibleRole, time, motion),
       });
     }
 
@@ -236,6 +252,11 @@ export class WorldRenderer {
     this.drawDebugVignette(ctx);
   }
 
+  isWorkShift(state) {
+    const minutes = Number(state?.minutes);
+    return Number.isFinite(minutes) && minutes >= 10 * 60 && minutes < 18 * 60;
+  }
+
   renderScene(ctx, state, runtime, time, delta) {
     const sceneId = state.world.scene;
     const scene = SCENE_DEFS[sceneId] || SCENE_DEFS.city;
@@ -248,10 +269,14 @@ export class WorldRenderer {
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, WORLD.width, WORLD.height);
 
-    this.drawSceneGround(ctx, sceneId, time);
-    this.drawSeasonalRoute(ctx, state, sceneId, seasonVariant, time);
-    this.drawSceneStructures(ctx, sceneId, time);
-    this.drawSceneSignature(ctx, state, sceneId, time);
+    if (sceneId === "wilderness") {
+      this.drawWildernessScene(ctx, state, time);
+    } else {
+      this.drawSceneGround(ctx, sceneId, time);
+      this.drawSeasonalRoute(ctx, state, sceneId, seasonVariant, time);
+      this.drawSceneStructures(ctx, sceneId, time);
+      this.drawSceneSignature(ctx, state, sceneId, time);
+    }
     this.drawSeasonalBlockers(ctx, state, seasonVariant, time);
     this.drawScenePortals(ctx, scene, time);
     this.drawSceneLandmarks(ctx, state, sceneId, time);
@@ -285,6 +310,242 @@ export class WorldRenderer {
     this.drawLighting(ctx, state, time);
     this.drawEffects(ctx, runtime, time, delta);
     this.drawDebugVignette(ctx);
+  }
+
+  drawWildernessScene(ctx, state, time) {
+    const gradient = ctx.createLinearGradient(0, 0, WORLD.width, WORLD.height);
+    gradient.addColorStop(0, "#456d4d");
+    gradient.addColorStop(0.48, "#315b45");
+    gradient.addColorStop(1, "#203f38");
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, WORLD.width, WORLD.height);
+
+    ctx.save();
+    ctx.globalAlpha = 0.2;
+    for (let row = 0; row < 18; row += 1) {
+      for (let col = 0; col < 32; col += 1) {
+        const x = 20 + col * 51 + hash01(row * 19 + col) * 22;
+        const y = 20 + row * 49 + hash01(row * 31 + col * 7) * 20;
+        ctx.strokeStyle = row % 3 === 0 ? "#b8d18b" : "#85ad78";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(x, y + 8);
+        ctx.quadraticCurveTo(x - 4, y - 3, x - 8, y - 10);
+        ctx.moveTo(x, y + 8);
+        ctx.quadraticCurveTo(x + 3, y - 2, x + 9, y - 9);
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+    ctx.save();
+    ctx.strokeStyle = "rgba(220, 190, 123, 0.35)";
+    ctx.lineWidth = 78;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(80, 650);
+    ctx.bezierCurveTo(360, 610, 640, 520, 950, 470);
+    ctx.bezierCurveTo(1120, 442, 1210, 443, 1295, 443);
+    ctx.stroke();
+    ctx.strokeStyle = "#d1ae73";
+    ctx.lineWidth = 64;
+    ctx.stroke();
+    ctx.restore();
+    const trees = [
+      [130, 120, 1.15], [330, 220, 0.9], [690, 130, 1.2], [910, 220, 0.96],
+      [1160, 130, 1.08], [1390, 170, 1.2], [1510, 430, 0.9], [1220, 690, 1.15],
+      [780, 760, 1.1], [340, 820, 1.25], [70, 430, 0.9], [1480, 780, 1.3],
+    ];
+    for (const [x, y, scale] of trees) this.drawTree(ctx, x, y, scale, time);
+    this.drawWildernessBerryTree(ctx, 520, 300, time, "北林野果");
+    this.drawWildernessBerryTree(ctx, 1450, 300, time, "深林野果");
+    const beasts = [
+      { kind: "deer", x: 350, y: 420, scale: 1.08, speed: 0.22, seed: 0.4 },
+      { kind: "boar", x: 760, y: 650, scale: 1.04, speed: 0.18, seed: 1.9 },
+      { kind: "fox", x: 1160, y: 300, scale: 0.92, speed: 0.26, seed: 3.1 },
+      { kind: "rabbit", x: 1370, y: 520, scale: 0.8, speed: 0.34, seed: 4.8 },
+      { kind: "deer", x: 1460, y: 740, scale: 0.9, speed: 0.16, seed: 6.2 },
+    ];
+    for (const beast of beasts) {
+      const driftX = Math.sin(time * beast.speed + beast.seed) * 24;
+      const driftY = Math.cos(time * beast.speed * 0.7 + beast.seed) * 9;
+      const facing = Math.cos(time * beast.speed + beast.seed) >= 0 ? 1 : -1;
+      this.drawWildBeast(ctx, beast.x + driftX, beast.y + driftY, beast.kind, beast.scale, time, facing);
+    }
+    for (const [x, y] of [[980, 430], [1400, 620]]) {
+      ctx.save();
+      ctx.fillStyle = "rgba(218, 188, 118, 0.22)";
+      ctx.beginPath();
+      ctx.ellipse(x, y, 112, 68, -0.12, 0, TAU);
+      ctx.fill();
+      ctx.strokeStyle = "rgba(244, 226, 165, 0.78)";
+      ctx.lineWidth = 3;
+      ctx.setLineDash([8, 10]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = "#f3dfaa";
+      ctx.font = "700 14px 'PingFang SC', sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText("猎场 · 追踪足迹", x, y + 5);
+      ctx.restore();
+    }
+    ctx.save();
+    ctx.fillStyle = "#ead69b";
+    ctx.font = "700 15px 'PingFang SC', sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("护栏入口 · 进入广阔野外", 1295, 415);
+    ctx.fillText("野果林", 1450, 245);
+    ctx.restore();
+  }
+
+  drawWildernessBerryTree(ctx, x, y, time, label) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.fillStyle = "rgba(15, 31, 25, 0.32)";
+    ctx.beginPath();
+    ctx.ellipse(0, 45, 72, 17, 0, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = "#6b4a31";
+    ctx.fillRect(-8, -6, 16, 58);
+    ctx.fillStyle = "#4d8b57";
+    for (let leaf = 0; leaf < 8; leaf += 1) {
+      ctx.beginPath();
+      ctx.arc(-46 + (leaf % 4) * 30, -25 + Math.floor(leaf / 4) * 26, 32, 0, TAU);
+      ctx.fill();
+    }
+    ctx.fillStyle = "#c85056";
+    for (let berry = 0; berry < 9; berry += 1) {
+      ctx.beginPath();
+      ctx.arc(-34 + (berry % 5) * 17, -23 + (berry % 3) * 18 + Math.sin(time * 1.5 + berry) * 2, 4, 0, TAU);
+      ctx.fill();
+    }
+    ctx.fillStyle = "#f2dda6";
+    ctx.font = "700 12px 'PingFang SC', sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(label, 0, 72);
+    ctx.restore();
+  }
+
+  drawWildBeast(ctx, x, y, kind, scale, time, facing) {
+    ctx.save();
+    ctx.translate(x, y + Math.sin(time * 2.2 + x * 0.01) * 1.5);
+    ctx.scale(scale * facing, scale);
+    this.drawShadow(ctx, 0, 8, kind === "rabbit" ? 12 : 22, 5);
+    const step = Math.sin(time * 8 + x * 0.03) * 2.5;
+    if (kind === "deer") {
+      ctx.fillStyle = "#9b6949";
+      ctx.beginPath();
+      ctx.ellipse(0, -7, 22, 11, 0, 0, TAU);
+      ctx.fill();
+      ctx.fillRect(13, -31, 7, 24);
+      ctx.beginPath();
+      ctx.ellipse(21, -34, 9, 6, -0.12, 0, TAU);
+      ctx.fill();
+      ctx.strokeStyle = "#704936";
+      ctx.lineWidth = 3;
+      for (const leg of [-13, -3, 8, 16]) {
+        ctx.beginPath();
+        ctx.moveTo(leg, 0);
+        ctx.lineTo(leg + (leg % 2 ? -step : step), 13);
+        ctx.stroke();
+      }
+      ctx.strokeStyle = "#d6b17a";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(20, -38);
+      ctx.lineTo(16, -51);
+      ctx.moveTo(25, -38);
+      ctx.lineTo(30, -50);
+      ctx.stroke();
+      ctx.fillStyle = "#f2d89b";
+      ctx.beginPath();
+      ctx.arc(24, -35, 1.4, 0, TAU);
+      ctx.fill();
+    } else if (kind === "boar") {
+      ctx.fillStyle = "#6f4d3d";
+      ctx.beginPath();
+      ctx.ellipse(0, -5, 24, 13, 0, 0, TAU);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(23, -7, 11, 9, 0, 0, TAU);
+      ctx.fill();
+      ctx.fillStyle = "#e1b788";
+      ctx.beginPath();
+      ctx.ellipse(31, -5, 5, 4, 0, 0, TAU);
+      ctx.fill();
+      ctx.strokeStyle = "#4f392f";
+      ctx.lineWidth = 4;
+      for (const leg of [-14, -3, 10, 17]) {
+        ctx.beginPath();
+        ctx.moveTo(leg, 3);
+        ctx.lineTo(leg + (leg % 2 ? -step : step), 13);
+        ctx.stroke();
+      }
+      ctx.fillStyle = "#261f1d";
+      ctx.beginPath();
+      ctx.arc(27, -9, 1.5, 0, TAU);
+      ctx.fill();
+    } else if (kind === "fox") {
+      ctx.fillStyle = "#c36f3e";
+      ctx.beginPath();
+      ctx.ellipse(0, -7, 19, 10, 0, 0, TAU);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(13, -12);
+      ctx.lineTo(31, -4);
+      ctx.lineTo(15, 2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = "#f0c18b";
+      ctx.beginPath();
+      ctx.ellipse(27, -5, 7, 4, 0, 0, TAU);
+      ctx.fill();
+      ctx.fillStyle = "#c36f3e";
+      ctx.beginPath();
+      ctx.moveTo(18, -14);
+      ctx.lineTo(24, -28);
+      ctx.lineTo(28, -13);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = "#7d4b35";
+      ctx.lineWidth = 3;
+      for (const leg of [-12, 2, 12]) {
+        ctx.beginPath();
+        ctx.moveTo(leg, 0);
+        ctx.lineTo(leg + (leg % 2 ? -step : step), 11);
+        ctx.stroke();
+      }
+      ctx.fillStyle = "#35241f";
+      ctx.beginPath();
+      ctx.arc(28, -7, 1.4, 0, TAU);
+      ctx.fill();
+    } else {
+      ctx.fillStyle = "#c7b8a0";
+      ctx.beginPath();
+      ctx.ellipse(0, -7, 13, 10, 0, 0, TAU);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(12, -15, 8, 0, TAU);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(8, -21);
+      ctx.lineTo(8, -33);
+      ctx.lineTo(13, -23);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = "#827666";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(-7, 1);
+      ctx.lineTo(-10 - step, 10);
+      ctx.moveTo(6, 1);
+      ctx.lineTo(9 + step, 10);
+      ctx.stroke();
+      ctx.fillStyle = "#352b28";
+      ctx.beginPath();
+      ctx.arc(14, -16, 1.3, 0, TAU);
+      ctx.fill();
+    }
+    ctx.restore();
   }
 
   drawSceneGround(ctx, sceneId, time) {
@@ -1097,6 +1358,17 @@ export class WorldRenderer {
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, WORLD.width, WORLD.height);
 
+    // The ranch fence encloses the settled core. The eastern and southern
+    // bands use a deeper woodland palette to make the outer hunting grounds
+    // read as a separate, much larger region.
+    const fence = WORLD.ranchFence || { right: 1250, bottom: 754 };
+    ctx.fillStyle = "rgba(42, 76, 48, 0.16)";
+    ctx.fillRect(fence.right, 0, WORLD.width - fence.right, WORLD.height);
+    ctx.fillRect(0, fence.bottom, WORLD.width, WORLD.height - fence.bottom);
+    ctx.fillStyle = "rgba(197, 169, 103, 0.12)";
+    ctx.fillRect(fence.right, fence.rightGate?.top || 428, WORLD.width - fence.right, 9);
+    ctx.fillRect(fence.bottomGate?.left || 620, fence.bottom, (fence.bottomGate?.right || 704) - (fence.bottomGate?.left || 620), WORLD.height - fence.bottom);
+
     ctx.save();
     ctx.globalAlpha = state.weather === "drought" ? 0.27 : 0.18;
     for (let row = 0; row < Math.ceil(WORLD.height / 58) + 1; row += 1) {
@@ -1207,6 +1479,76 @@ export class WorldRenderer {
       ctx.globalAlpha = 0.16;
       ellipse(ctx, x, y, 1.3 + (index % 3) * 0.35, 0.8, "#6f583a");
     }
+    ctx.restore();
+  }
+
+  drawRanchFence(ctx, time) {
+    const fence = WORLD.ranchFence || {};
+    const left = fence.left ?? 42;
+    const top = fence.top ?? 24;
+    const right = fence.right ?? 1250;
+    const bottom = fence.bottom ?? 754;
+    const rightGateTop = fence.rightGate?.top ?? 408;
+    const rightGateBottom = fence.rightGate?.bottom ?? 478;
+    const bottomGateLeft = fence.bottomGate?.left ?? 620;
+    const bottomGateRight = fence.bottomGate?.right ?? 704;
+    ctx.save();
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.strokeStyle = "rgba(66, 55, 38, 0.28)";
+    ctx.lineWidth = 9;
+    const drawRail = (x1, y1, x2, y2) => {
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.stroke();
+    };
+    drawRail(left, top, right, top);
+    drawRail(left, bottom, bottomGateLeft, bottom);
+    drawRail(bottomGateRight, bottom, right, bottom);
+    drawRail(left, top, left, bottom);
+    drawRail(right, top, right, rightGateTop);
+    drawRail(right, rightGateBottom, right, bottom);
+    ctx.strokeStyle = "#a47b4e";
+    ctx.lineWidth = 4;
+    drawRail(left, top - 2, right, top - 2);
+    drawRail(left, bottom - 2, bottomGateLeft, bottom - 2);
+    drawRail(bottomGateRight, bottom - 2, right, bottom - 2);
+    drawRail(left - 1, top, left - 1, bottom);
+    drawRail(right - 1, top, right - 1, rightGateTop);
+    drawRail(right - 1, rightGateBottom, right - 1, bottom);
+    ctx.fillStyle = "#705238";
+    const posts = [];
+    for (let x = left; x <= right; x += 52) posts.push([x, top]);
+    for (let x = left; x <= right; x += 52) posts.push([x, bottom]);
+    for (let y = top + 42; y < bottom; y += 52) {
+      posts.push([left, y]);
+      if (y < rightGateTop || y > rightGateBottom) posts.push([right, y]);
+    }
+    for (const [x, y] of posts) {
+      ctx.fillRect(x - 4, y - 9, 8, 22);
+      ctx.fillStyle = "#c29a62";
+      ctx.fillRect(x - 2, y - 8, 4, 18);
+      ctx.fillStyle = "#705238";
+    }
+    ctx.fillStyle = "rgba(255, 238, 181, 0.92)";
+    ctx.font = "700 13px 'PingFang SC', sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("月溪牧场", 642, top + 19);
+    ctx.fillStyle = "#d7b977";
+    ctx.fillRect(right - 4, rightGateTop, 8, rightGateBottom - rightGateTop);
+    ctx.fillRect(bottomGateLeft, bottom - 4, bottomGateRight - bottomGateLeft, 8);
+    ctx.fillStyle = "#5d4932";
+    ctx.font = "700 11px 'PingFang SC', sans-serif";
+    ctx.fillText("野外入口", right - 58, rightGateTop - 12);
+    ctx.fillText("南林道", (bottomGateLeft + bottomGateRight) / 2, bottom - 14);
+    ctx.globalAlpha = 0.28 + Math.sin(time * 1.8) * 0.06;
+    ctx.strokeStyle = "#f3d98f";
+    ctx.lineWidth = 2;
+    ctx.setLineDash([7, 8]);
+    drawRail(right + 18, rightGateTop + 35, right + 80, rightGateTop + 35);
+    drawRail(bottomGateLeft + 42, bottom + 18, bottomGateLeft + 42, bottom + 62);
+    ctx.setLineDash([]);
     ctx.restore();
   }
 
@@ -2440,6 +2782,47 @@ export class WorldRenderer {
       ctx.ellipse(x, y, 9 + (rock % 3) * 3, 5 + (rock % 2) * 2, angle, 0, TAU);
       ctx.fill();
     }
+    // A narrow river continues beyond the fish pond and opens into the
+    // forest outside the ranch fence. Its animated current gives the pond
+    // workers a visible downstream destination.
+    ctx.fillStyle = "#6b8655";
+    ctx.beginPath();
+    ctx.moveTo(1232, 554);
+    ctx.bezierCurveTo(1284, 560, 1302, 594, 1286, 632);
+    ctx.bezierCurveTo(1268, 677, 1310, 706, 1380, 722);
+    ctx.bezierCurveTo(1450, 738, 1514, 724, WORLD.width + 18, 704);
+    ctx.lineTo(WORLD.width + 18, 816);
+    ctx.bezierCurveTo(1504, 824, 1428, 840, 1352, 816);
+    ctx.bezierCurveTo(1280, 794, 1220, 742, 1238, 690);
+    ctx.bezierCurveTo(1252, 650, 1238, 604, 1198, 588);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = "#4c8994";
+    ctx.beginPath();
+    ctx.moveTo(1244, 570);
+    ctx.bezierCurveTo(1288, 578, 1294, 602, 1278, 640);
+    ctx.bezierCurveTo(1260, 682, 1308, 720, 1384, 735);
+    ctx.bezierCurveTo(1454, 749, 1518, 736, WORLD.width + 18, 718);
+    ctx.lineTo(WORLD.width + 18, 798);
+    ctx.bezierCurveTo(1500, 810, 1430, 824, 1360, 801);
+    ctx.bezierCurveTo(1298, 780, 1244, 736, 1254, 692);
+    ctx.bezierCurveTo(1264, 648, 1248, 616, 1215, 596);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = "rgba(220, 244, 225, 0.45)";
+    ctx.lineWidth = 2;
+    for (let wave = 0; wave < 6; wave += 1) {
+      const waveX = 1292 + wave * 42 + Math.sin(time * 0.8 + wave) * 5;
+      const waveY = 650 + wave * 23;
+      ctx.beginPath();
+      ctx.moveTo(waveX, waveY);
+      ctx.quadraticCurveTo(waveX + 18, waveY - 5, waveX + 34, waveY);
+      ctx.stroke();
+    }
+    ctx.fillStyle = "rgba(236, 222, 169, 0.9)";
+    ctx.font = "700 12px 'PingFang SC', sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("鱼池外河谷 · 可垂钓", 1370, 690);
     ctx.restore();
   }
 
@@ -2835,6 +3218,17 @@ export class WorldRenderer {
       ctx.fillStyle = "#9d704c";
       roundedRect(ctx, facing * 12 - 5, -14, 10, 8, 2);
       ctx.fill();
+    } else if (role === "hunting") {
+      ctx.strokeStyle = "#5a4434";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(facing * 8, -13);
+      ctx.lineTo(facing * 26, -25 + action);
+      ctx.stroke();
+      ctx.fillStyle = "#d8bd79";
+      ctx.beginPath();
+      ctx.arc(facing * 28, -26 + action, 2, 0, TAU);
+      ctx.fill();
     }
   }
 
@@ -2850,6 +3244,7 @@ export class WorldRenderer {
       animals: "#8c7655",
       fishing: "#4c8692",
       fishery: "#65a58d",
+      hunting: "#9b7256",
       trade: "#a27b52",
       island: "#6f9464",
       休息: "#89705f",
@@ -3123,6 +3518,25 @@ export class WorldRenderer {
       ctx.moveTo(bagX - 5, -19);
       ctx.quadraticCurveTo(bagX, -27, bagX + 5, -19);
       ctx.stroke();
+    } else if (role === "hunting") {
+      const toolX = employeeMotion.facing * 20;
+      ctx.strokeStyle = "#5a4434";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(handX, -16);
+      ctx.lineTo(toolX, -32 + (employeeMotion.working ? actionSwing : 0));
+      ctx.stroke();
+      ctx.fillStyle = "#e4c982";
+      ctx.beginPath();
+      ctx.arc(toolX, -33 + (employeeMotion.working ? actionSwing : 0), 3, 0, TAU);
+      ctx.fill();
+      if (employeeMotion.working) {
+        ctx.strokeStyle = "rgba(240, 220, 145, 0.78)";
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(employeeMotion.facing * 30, -35, 7 + Math.sin(employeeMotion.actionPhase) * 2, 0, TAU);
+        ctx.stroke();
+      }
     }
 
     ctx.fillStyle = "rgba(255, 247, 218, 0.94)";

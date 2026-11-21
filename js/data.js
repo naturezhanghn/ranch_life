@@ -26,10 +26,22 @@ export const SEASONAL_CROP_CALENDAR = {
   leek: { seasons: ["冬"], regrowDays: 0, note: "雪前葱香" },
 };
 export const FORAGE_TABLE = {
-  春: [{ id: "spring_herb", name: "春芽草", icon: "❋", price: 28, chance: 0.7 }],
-  夏: [{ id: "summer_berry", name: "夏莓", icon: "●", price: 42, chance: 0.65 }],
-  秋: [{ id: "autumn_mushroom", name: "秋野菇", icon: "◉", price: 68, chance: 0.58 }],
-  冬: [{ id: "winter_root", name: "雪下根", icon: "◇", price: 82, chance: 0.45 }],
+  春: [
+    { id: "spring_herb", name: "春芽草", icon: "❋", price: 28, chance: 0.7 },
+    { id: "wild_strawberry", name: "林间野莓", icon: "●", price: 54, chance: 0.76, scene: "wilderness" },
+  ],
+  夏: [
+    { id: "summer_berry", name: "夏莓", icon: "●", price: 42, chance: 0.65 },
+    { id: "wild_plum", name: "野李子", icon: "◆", price: 62, chance: 0.7, scene: "wilderness" },
+  ],
+  秋: [
+    { id: "autumn_mushroom", name: "秋野菇", icon: "◉", price: 68, chance: 0.58 },
+    { id: "acorn", name: "橡果", icon: "◇", price: 48, chance: 0.72, scene: "wilderness" },
+  ],
+  冬: [
+    { id: "winter_root", name: "雪下根", icon: "◇", price: 82, chance: 0.45 },
+    { id: "pine_cone", name: "松塔", icon: "✦", price: 56, chance: 0.62, scene: "wilderness" },
+  ],
 };
 export const FORAGE_NODE_DEFS = [
   {
@@ -49,6 +61,24 @@ export const FORAGE_NODE_DEFS = [
     y: 520,
     radius: 58,
     label: "寻找村口山货",
+  },
+  {
+    id: "wilderness_fruit_grove",
+    interactionId: "wilderness_forage",
+    scene: "wilderness",
+    x: 560,
+    y: 370,
+    radius: 64,
+    label: "摘取林间野果",
+  },
+  {
+    id: "wilderness_deep_grove",
+    interactionId: "wilderness_forage_deep",
+    scene: "wilderness",
+    x: 1110,
+    y: 600,
+    radius: 64,
+    label: "寻找深林果实",
   },
 ];
 export const HOUSE_UPGRADES = [
@@ -124,6 +154,7 @@ export const SCENE_REGION_MAP = {
   ),
   quarry: "city",
   house: "farm",
+  wilderness: "farm",
 };
 
 export const REGIONS = {
@@ -187,6 +218,14 @@ export const WORLD = {
   width: 1600,
   height: 900,
   bounds: { left: 62, top: 72, right: 1538, bottom: 878 },
+  ranchFence: {
+    left: 42,
+    top: 24,
+    right: 1250,
+    bottom: 754,
+    rightGate: { top: 408, bottom: 478 },
+    bottomGate: { left: 620, right: 704 },
+  },
   field: { x: 260, y: 300, cols: 8, rows: 4, tile: 56 },
   house: { x: 90, y: 50, w: 250, h: 175 },
   aiShed: { x: 355, y: 68, w: 170, h: 132 },
@@ -209,6 +248,18 @@ export const SCENE_DEFS = {
     portals: [
       { id: "portal_city", x: 652, y: 458, radius: 42, target: "city", label: "沿路去村庄" },
       { id: "portal_port", x: 824, y: 555, radius: 42, target: "port", label: "去码头" },
+      { id: "portal_wilderness", x: 1295, y: 443, radius: 50, target: "wilderness", label: "穿过护栏去野外" },
+    ],
+  },
+  wilderness: {
+    id: "wilderness",
+    name: "围栏外·十倍森林",
+    subtitle: "可以探索的森林、野果、河谷与野兽猎场",
+    palette: ["#577c5c", "#263f36"],
+    spawn: { x: 120, y: 443, facing: "right" },
+    blockers: [],
+    portals: [
+      { id: "portal_farm", x: 80, y: 443, radius: 50, target: "farm", label: "回到牧场护栏" },
     ],
   },
   house: {
@@ -778,23 +829,27 @@ export const SCENE_INTERACTIONS = {
     { id: "house_tv", x: 640, y: 300, radius: 58, label: "打开电视", keycap: "E" },
     { id: "house_game", x: 1030, y: 300, radius: 58, label: "玩掌机游戏", keycap: "E" },
     { id: "house_bed", x: 1030, y: 570, radius: 62, label: "上床休息", keycap: "E" },
+    { id: "house_facility", x: 470, y: 520, radius: 64, label: "进入家务与生活室", keycap: "E", facilityId: "house" },
   ],
   city: [
     { id: "city_market", x: 430, y: 275, radius: 62, label: "进入城市建设处", keycap: "E" },
     { id: "city_mayor", x: 474, y: 526, radius: 58, label: "和市政官聊聊", keycap: "E" },
     { id: "city_forage", x: 310, y: 520, radius: 58, label: "寻找村口山货", keycap: "E", forageNode: true },
     { id: "city_weekly", x: 700, y: 560, radius: 54, label: "查看本周公共请求", keycap: "E" },
+    { id: "city_facility", x: 950, y: 430, radius: 64, label: "进入市民居所", keycap: "E", facilityId: "city" },
   ],
   council: [
     { id: "council_government", x: 380, y: 364, radius: 64, label: "打开共同议政", keycap: "E" },
     { id: "council_water", x: 860, y: 366, radius: 64, label: "查看水章档案", keycap: "E" },
     { id: "council_clerk", x: 600, y: 566, radius: 54, label: "和议事员聊聊", keycap: "E" },
     { id: "council_weekly", x: 520, y: 620, radius: 54, label: "查看公共请求盖章台", keycap: "E" },
+    { id: "council_facility", x: 1040, y: 500, radius: 64, label: "进入议事厅后屋", keycap: "E", facilityId: "council" },
   ],
   workshop: [
     { id: "workshop_sprites", x: 234, y: 318, radius: 64, label: "打开小精灵工坊", keycap: "E" },
     { id: "workshop_garden", x: 640, y: 318, radius: 64, label: "查看精灵花园", keycap: "E" },
     { id: "workshop_keeper", x: 760, y: 566, radius: 54, label: "和精灵看守聊聊", keycap: "E" },
+    { id: "workshop_facility", x: 1040, y: 510, radius: 64, label: "进入精灵工坊生活间", keycap: "E", facilityId: "workshop" },
   ],
   island: [
     { id: "island_tidePool", x: 372, y: 342, radius: 60, label: "探索潮声湾", keycap: "E", spot: "tidePool" },
@@ -803,6 +858,7 @@ export const SCENE_INTERACTIONS = {
     { id: "island_redGarden", x: 590, y: 590, radius: 60, label: "探索赤潮花园", keycap: "E", spot: "redGarden" },
     { id: "island_patrol", x: 930, y: 500, radius: 58, label: "湿地巡护", keycap: "E", minigame: "hunt" },
     { id: "island_fishing", x: 1120, y: 570, radius: 58, label: "潮汐垂钓", keycap: "E", minigame: "fishing" },
+    { id: "island_facility", x: 1040, y: 650, radius: 64, label: "进入蓝潮岛民居", keycap: "E", facilityId: "island" },
   ],
   port: [
     { id: "port_trade", x: 490, y: 275, radius: 62, label: "查看贸易航线", keycap: "E" },
@@ -811,10 +867,151 @@ export const SCENE_INTERACTIONS = {
     { id: "port_sailor", x: 500, y: 542, radius: 54, label: "和渡轮长聊聊", keycap: "E" },
     { id: "port_delivery_run", x: 760, y: 520, radius: 58, label: "限时运货", keycap: "E", minigame: "delivery" },
     { id: "port_weekly", x: 900, y: 600, radius: 54, label: "查看本周收货牌", keycap: "E" },
+    { id: "port_facility", x: 1040, y: 430, radius: 64, label: "进入港口值班屋", keycap: "E", facilityId: "port" },
   ],
   quarry: [
     { id: "quarry_vein", x: 620, y: 330, radius: 64, label: "旧矿脉采样", keycap: "E", minigame: "mining" },
+    { id: "quarry_facility", x: 1010, y: 470, radius: 64, label: "进入旧矿工棚", keycap: "E", facilityId: "quarry" },
   ],
+  wilderness: [
+    { id: "wilderness_forage", x: 560, y: 370, radius: 64, label: "摘取林间野果", keycap: "E", forageNode: true },
+    { id: "wilderness_forage_deep", x: 1110, y: 600, radius: 64, label: "寻找深林果实", keycap: "E", forageNode: true },
+    { id: "wilderness_hunt", x: 980, y: 430, radius: 72, label: "装备猎枪或猎刀进入猎场", keycap: "E", minigame: "hunt" },
+    { id: "wilderness_hunt_deep", x: 1400, y: 620, radius: 72, label: "追踪远林野兽", keycap: "E", minigame: "hunt" },
+    { id: "wilderness_camp", x: 760, y: 190, radius: 64, label: "进入森林营地", keycap: "E", facilityId: "wilderness" },
+  ],
+};
+
+const FACILITY_ACTIONS = [
+  { id: "rest", action: "rest" },
+  { id: "forecast", action: "forecast" },
+  { id: "water", action: "water" },
+  { id: "staff", action: "staff" },
+  { id: "market", action: "market" },
+  { id: "archive", action: "archive" },
+  { id: "collection", action: "collection" },
+  { id: "fish", action: "fish" },
+  { id: "journal", action: "journal" },
+  { id: "storage", action: "storage" },
+];
+
+function buildFacility(title, subtitle, labels) {
+  return {
+    title,
+    subtitle,
+    functions: FACILITY_ACTIONS.map((entry, index) => ({ ...entry, label: labels[index] })),
+  };
+}
+
+export const SCENE_FACILITY_FUNCTIONS = {
+  farm: buildFacility("牧场综合作业屋", "十项功能把农务、员工和出货安排集中在一张值班台上。", [
+    "安排今日休息",
+    "查看天气与河流",
+    "补充公共水罐",
+    "查看员工排班",
+    "打开季节商店",
+    "查看牧场档案",
+    "整理牧场收藏",
+    "查看鱼塘与河钓",
+    "写下今日农务日志",
+    "查看仓储与出货",
+  ]),
+  house: buildFacility("家·生活功能室", "厨房、娱乐、储物和每日安排都可以在这里完成。", [
+    "小憩十五分钟",
+    "看天气预报",
+    "给水罐补水",
+    "安排员工与小精灵",
+    "打开商店清单",
+    "翻阅地方档案",
+    "整理收藏图鉴",
+    "查看鱼塘与河钓",
+    "写生活日志",
+    "查看冰箱与储物柜",
+  ]),
+  city: buildFacility("河港市民居", "市民居所兼作公共服务站，处理物资、关系和城市记录。", [
+    "在门廊休息",
+    "听城市天气",
+    "领取公共饮水",
+    "查看居民员工",
+    "查看季节种子",
+    "查阅城市档案",
+    "整理城市收藏",
+    "查看河港鱼讯",
+    "记录市民见闻",
+    "查看城市仓单",
+  ]),
+  port: buildFacility("港口值班屋", "港口值班屋连接订单、河流、鱼货和船期。", [
+    "休息并核对船期",
+    "查看潮汐天气",
+    "领取码头饮水",
+    "安排港口员工",
+    "查看港口货价",
+    "查看航线档案",
+    "整理贸易收藏",
+    "查看河口鱼讯",
+    "记录今日船讯",
+    "查看待运货物",
+  ]),
+  council: buildFacility("议事厅后屋", "后屋保存水章、公民记录和公共工程的十项日常功能。", [
+    "静坐恢复体力",
+    "查看水位预报",
+    "补充议事厅水罐",
+    "查看公共员工",
+    "查看季节物资",
+    "翻阅水章档案",
+    "整理地方志收藏",
+    "查看河道鱼讯",
+    "写下议事记录",
+    "查看公共仓单",
+  ]),
+  workshop: buildFacility("精灵工坊生活间", "工坊生活间让伙伴安排、收藏和生产记录有清晰的交接位置。", [
+    "让精灵轮休",
+    "查看温室天气",
+    "补充工坊水罐",
+    "安排小精灵岗位",
+    "查看种子清单",
+    "查阅工坊档案",
+    "整理工坊收藏",
+    "查看鱼塘与河钓",
+    "写交接日志",
+    "查看材料仓",
+  ]),
+  island: buildFacility("蓝潮岛民居", "岛屋把潮汐、鱼获、档案和返航准备组合成日常站点。", [
+    "在海风里休息",
+    "查看潮汐天气",
+    "补充岛屋水罐",
+    "安排海岛员工",
+    "查看海岛物价",
+    "翻阅潮线档案",
+    "整理潮汐收藏",
+    "开始潮汐垂钓",
+    "写潮线日志",
+    "查看鱼获仓",
+  ]),
+  quarry: buildFacility("旧矿工棚", "矿工棚提供安全、天气、档案和矿产交接功能。", [
+    "在安全屋休息",
+    "查看矿道天气",
+    "补充矿工水罐",
+    "安排矿道员工",
+    "查看季节物资",
+    "翻阅安全档案",
+    "整理矿脉收藏",
+    "查看下游鱼讯",
+    "写安全日志",
+    "查看矿石仓",
+  ]),
+  wilderness: buildFacility("森林护林屋", "护林屋是探索、员工协作和野外资源回收的安全补给点。", [
+    "在营火边休息",
+    "查看森林天气",
+    "补充野外水罐",
+    "呼唤狩猎副手",
+    "查看野外货价",
+    "翻阅森林档案",
+    "整理野外收藏",
+    "查看河谷鱼讯",
+    "记录探索路线",
+    "查看野果与猎获仓",
+  ]),
 };
 
 export const SCENE_NPCS = [
@@ -1289,6 +1486,24 @@ export const SCENE_FINDS = {
       reward: { coins: 22 },
     },
   ],
+  wilderness: [
+    {
+      id: "forest_trail_marker",
+      x: 330,
+      y: 710,
+      label: "记录森林旧路标",
+      lore: "树皮上的箭头指向更深的林地，彤彤留下的记号提醒你：探索要给回来的路留出方向。",
+      reward: { coins: 32 },
+    },
+    {
+      id: "wildlife_waterhole",
+      x: 1240,
+      y: 730,
+      label: "观察野兽饮水处",
+      lore: "河谷边留下鹿、野猪和狐狸交错的足迹。这里是观察野兽的安全距离，也是森林最安静的课堂。",
+      reward: { coins: 40 },
+    },
+  ],
   quarry: [
     {
       id: "safety_ledger",
@@ -1408,6 +1623,22 @@ export const TOOLS = [
     key: "4",
     energy: 2,
     hint: "采收成熟的作物",
+  },
+  {
+    id: "shotgun",
+    name: "猎枪",
+    icon: "⚒",
+    key: "5",
+    energy: 4,
+    hint: "装备后进入护栏外猎场，追踪野兽",
+  },
+  {
+    id: "huntingKnife",
+    name: "猎刀",
+    icon: "†",
+    key: "6",
+    energy: 3,
+    hint: "近身追踪野兽，也可进入护栏外猎场",
   },
 ];
 
@@ -1924,25 +2155,67 @@ export const MARKET_GOODS = {
     volatility: 0.3,
     source: "雨后山货",
   },
+  wild_strawberry: {
+    id: "wild_strawberry",
+    name: "林间野莓",
+    icon: "●",
+    basePrice: 54,
+    minPrice: 30,
+    maxPrice: 96,
+    volatility: 0.3,
+    source: "护栏外荒野",
+  },
+  wild_plum: {
+    id: "wild_plum",
+    name: "野李子",
+    icon: "◆",
+    basePrice: 62,
+    minPrice: 36,
+    maxPrice: 108,
+    volatility: 0.28,
+    source: "护栏外荒野",
+  },
+  acorn: {
+    id: "acorn",
+    name: "橡果",
+    icon: "◇",
+    basePrice: 48,
+    minPrice: 28,
+    maxPrice: 82,
+    volatility: 0.24,
+    source: "护栏外荒野",
+  },
+  pine_cone: {
+    id: "pine_cone",
+    name: "松塔",
+    icon: "✦",
+    basePrice: 56,
+    minPrice: 32,
+    maxPrice: 94,
+    volatility: 0.25,
+    source: "护栏外荒野",
+  },
 };
 
 export const MINIGAME_DEFS = {
   hunt: {
     id: "hunt",
-    title: "湿地巡护",
-    subtitle: "用声波脉冲驱离偷食谷物的斑翅雀，不伤害它们。",
+    title: "狩猎与巡护",
+    subtitle: "在湿地保护候鸟，在护栏外追踪野兽，保持安全距离完成记录。",
     scene: "island",
+    scenes: ["island", "wilderness"],
     energy: 4,
     clockMinutes: 40,
     duration: 15,
-    action: "点击/轻触鸟群；键盘用方向键移动准星，空格发射。金色候鸟稀有且只计入一次。",
-    rewardNote: "普通驱离给补贴；每日最多捕获一次稀有候鸟，稀有收益进入贸易链。",
+    action: "点击/轻触目标；键盘用方向键移动准星，空格执行追踪。金色目标稀有且只计入一次。",
+    rewardNote: "普通追踪给补贴；每日最多记录一次稀有目标，收益进入贸易链。",
   },
   fishing: {
     id: "fishing",
     title: "潮汐垂钓",
     subtitle: "等待鱼咬钩，在指针进入绿区时收线。",
     scene: "island",
+    scenes: ["island", "farm"],
     energy: 3,
     clockMinutes: 35,
     duration: 26,
@@ -2398,6 +2671,15 @@ export const INTERACTIONS = [
     keycap: "E",
   },
   {
+    id: "farm_facility",
+    x: 540,
+    y: 208,
+    radius: 54,
+    label: "进入牧场综合作业屋",
+    keycap: "E",
+    facilityId: "farm",
+  },
+  {
     id: "ai",
     x: 442,
     y: 220,
@@ -2460,6 +2742,15 @@ export const INTERACTIONS = [
     radius: 65,
     label: "查看旧水渠",
     keycap: "E",
+  },
+  {
+    id: "river_fishing",
+    x: 1315,
+    y: 620,
+    radius: 62,
+    label: "在鱼池外的河边垂钓",
+    keycap: "E",
+    minigame: "fishing",
   },
   {
     id: "investor",

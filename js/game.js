@@ -32,6 +32,7 @@ import {
   REGION_SCENE_MAP,
   REAL_SECONDS_PER_GAME_MINUTE,
   SCENE_DEFS,
+  SCENE_FACILITY_FUNCTIONS,
   SCENE_INTERACTIONS,
   SCENE_NPCS,
   SCENE_REGION_MAP,
@@ -904,6 +905,18 @@ function canMoveTo(x, y) {
     return false;
   }
 
+  if (currentSceneId() === "farm" && WORLD.ranchFence) {
+    const fence = WORLD.ranchFence;
+    const wasInside = state.player.x >= fence.left && state.player.x <= fence.right
+      && state.player.y >= fence.top && state.player.y <= fence.bottom;
+    const isInside = x >= fence.left && x <= fence.right && y >= fence.top && y <= fence.bottom;
+    if (wasInside !== isInside) {
+      const throughRightGate = y >= fence.rightGate.top && y <= fence.rightGate.bottom;
+      const throughBottomGate = x >= fence.bottomGate.left && x <= fence.bottomGate.right;
+      if (!throughRightGate && !throughBottomGate) return false;
+    }
+  }
+
   const farmBlockers = [
     WORLD.house,
     WORLD.aiShed,
@@ -950,6 +963,11 @@ function performAction() {
   }
 
   if (currentSceneId() !== "farm") {
+    if (currentSceneId() === "wilderness" && ["shotgun", "huntingKnife"].includes(state.selectedTool)) {
+      audio.play("error");
+      showToast("靠近猎场标记后按行动键，追踪护栏外的野兽。", { strong: state.selectedTool === "shotgun" ? "猎枪" : "猎刀" });
+      return;
+    }
     audio.play("error");
     showToast("这里没有农田工具目标。找到门口、地标或 NPC 后按行动键。", { strong: "场景探索" });
     return;
@@ -1093,7 +1111,16 @@ function handleInteraction(id) {
     openSceneNpcDialogue(sceneInteraction.npcId);
     return;
   }
+  if (sceneInteraction?.facilityId) {
+    openSceneFacility(sceneInteraction.facilityId);
+    return;
+  }
   if (sceneInteraction?.minigame) {
+    if (sceneInteraction.minigame === "hunt" && currentSceneId() === "wilderness" && !["shotgun", "huntingKnife"].includes(state.selectedTool)) {
+      audio.play("error");
+      showToast("先在工具栏装备猎枪或猎刀，再进入护栏外猎场。", { strong: "野外狩猎" });
+      return;
+    }
     startSceneMinigame(sceneInteraction.minigame);
     return;
   }
@@ -1157,7 +1184,9 @@ function handleInteraction(id) {
       openSleepDialog();
       break;
     case "forage":
-    case "city_forage": {
+    case "city_forage":
+    case "wilderness_forage":
+    case "wilderness_forage_deep": {
       const result = collectForage(state, id);
       if (result.ok) { saveGame(state); updateHUD(true); }
       showFeedbackToast(state.feedback?.lastEvent, "季节山货");
@@ -1319,7 +1348,8 @@ function startSceneMinigame(type) {
     showFeedbackToast(event, MINIGAME_DEFS[type].title);
     return;
   }
-  if (availability.def.scene !== currentSceneId()) {
+  const allowedScenes = availability.def.scenes || [availability.def.scene];
+  if (!allowedScenes.includes(currentSceneId())) {
     audio.play("error");
     const event = emitFeedback(state, {
       eventId: "activity_wrong_scene",
@@ -1409,6 +1439,108 @@ function handleIslandSpotInteraction(spotId) {
   } else {
     audio.play("error");
     showToast(result.message, { strong: "潮汐路线" });
+  }
+}
+
+function openSceneFacility(facilityId) {
+  const facility = SCENE_FACILITY_FUNCTIONS[facilityId];
+  if (!facility) {
+    showToast("这栋房屋还没有配置功能。", { strong: "房屋" });
+    return;
+  }
+  const rows = facility.functions.map((entry, index) => `
+    <article class="region-card facility-card">
+      <div class="region-card-icon region-card-icon--ink">${String(index + 1).padStart(2, "0")}</div>
+      <div class="region-card-copy"><strong>${entry.label}</strong><span>${facilityFunctionDescription(entry.action)}</span></div>
+      <button type="button" class="shop-buy" data-action="facilityFunction" data-value="${facilityId}|${entry.action}">执行</button>
+    </article>
+  `).join("");
+  openModal({
+    kicker: "地图房屋 · 十项功能",
+    title: facility.title,
+    wide: true,
+    body: `<p class="story-lead">${facility.subtitle}</p><div class="region-card-grid facility-grid">${rows}</div><div class="weather-note">每张地图的房屋都提供十项可执行功能，时间消耗和产出会写入当前存档。</div>`,
+    footer: `<button type="button" class="button button--primary" data-action="close">离开房屋</button>`,
+  });
+}
+
+function facilityFunctionDescription(action) {
+  return {
+    rest: "恢复 6 点体力并经过 15 分钟。",
+    forecast: "查看当前天气和下一段工作安排。",
+    water: "向公共水罐补充 2 点水量。",
+    staff: "打开员工与小精灵的排班面板。",
+    market: "查看当前季节商品、种子和饲料。",
+    archive: "查看当地档案和地图旧痕迹。",
+    collection: "整理已经发现的地方志收藏。",
+    fish: "从可达水域开始垂钓，鱼获进入资源库存。",
+    journal: "记录一条探索日志，推进牧场见闻。",
+    storage: "查看出货箱、资源和储物空间。",
+  }[action] || "执行这项房屋功能。";
+}
+
+function runFacilityFunction(value) {
+  const [facilityId, action] = String(value || "").split("|");
+  if (!SCENE_FACILITY_FUNCTIONS[facilityId]) return;
+  if (action === "rest") {
+    state.energy = Math.min(state.maxEnergy, state.energy + 6);
+    state.minutes = Math.min(24 * 60, state.minutes + 15);
+    saveGame(state);
+    updateHUD(true);
+    showToast("在房屋里休息了十五分钟，体力恢复 6 点。", { strong: "房屋功能" });
+    openSceneFacility(facilityId);
+    return;
+  }
+  if (action === "water") {
+    state.water = Math.min(state.maxWater, state.water + 2);
+    saveGame(state);
+    updateHUD(true);
+    showToast("公共水罐补充了 2 点水量。", { strong: "房屋功能" });
+    openSceneFacility(facilityId);
+    return;
+  }
+  if (action === "forecast") {
+    showToast(`${state.season}季第 ${state.seasonDay} 天，当前天气是${weatherPresentation[state.weather]?.label || state.weather}。`, { strong: "天气记录" });
+    return;
+  }
+  if (action === "staff") {
+    closeModal();
+    openRegionHub("sprites");
+    return;
+  }
+  if (action === "market") {
+    closeModal();
+    openShop();
+    return;
+  }
+  if (action === "archive") {
+    closeModal();
+    openArchive();
+    return;
+  }
+  if (action === "collection") {
+    closeModal();
+    openCollectionBook();
+    return;
+  }
+  if (action === "fish") {
+    closeModal();
+    if (["farm", "island"].includes(currentSceneId())) startSceneMinigame("fishing");
+    else showToast("先到鱼池外的河边或蓝潮海岛，再开始垂钓。", { strong: "鱼获路线" });
+    return;
+  }
+  if (action === "journal") {
+    state.stats.explored += 1;
+    addMemory(state, `你在${SCENE_DEFS[currentSceneId()]?.name || "当前地图"}房屋里写下了今天的工作日志。`, "activity", 1);
+    saveGame(state);
+    updateHUD(true);
+    showToast("探索日志已保存，见闻计数 +1。", { strong: "房屋功能" });
+    openSceneFacility(facilityId);
+    return;
+  }
+  if (action === "storage") {
+    closeModal();
+    openShippingBin();
   }
 }
 
@@ -2187,6 +2319,7 @@ const ROLE_BENEFITS = {
   island: "每天从海岛带回 1 份季节资源。",
   fishing: "每天沿潮汐路线带回 1 条鱼。",
   fishery: "每天补充鱼塘鱼群，成熟后收获鲜鱼。",
+  hunting: "出发狩猎时自动跟随主人，协助追踪野兽并提升一次命中机会。",
 };
 
 function characterPortrait(character, kind = "worker") {
@@ -2220,6 +2353,7 @@ function renderSpritesPanel() {
     island: "海岛探索",
     fishing: "钓鱼",
     fishery: "养鱼",
+    hunting: "狩猎副手",
   };
   const assignments = state.sprites.assignments || {};
   const roleButtons = (spriteId) => Object.entries(roleLabels)
@@ -2268,11 +2402,11 @@ function renderSpritesPanel() {
       <span>当前分工</span>
       <div>${Object.entries(roleLabels).map(([role, label]) => `<b>${label} · ${assignments[role] ? SPRITE_DEFS[assignments[role]].name : state.workers?.assignments?.[role] ? WORKER_DEFS[state.workers.assignments[role]]?.name : "空缺"}</b>`).join("")}</div>
     </div>
-    <div class="region-section-heading"><span>居民员工</span><small>工资在每天结算时支付</small></div>
+    <div class="region-section-heading"><span>居民员工</span><small>10:00–18:00 上班 · 18:00 后回屋休息 · 工资在日结支付</small></div>
     <div class="sprite-roster worker-roster">${workerRoster}</div>
     <div class="region-section-heading"><span>工坊名册</span><small>点击分工按钮即可重新安排</small></div>
     <div class="sprite-roster">${roster}</div>
-    <div class="region-note">每位居民员工都是全能班组：每天都会尝试收获成熟作物、播种空地、浇水和照料牲畜。岗位按钮用于增加钓鱼、养鱼、贸易等专长。</div>
+    <div class="region-note">每位居民员工都是全能班组：工作时段会在牧场移动并显示对应工具动作，日结时自动收获、开垦、播种、浇水和照料牲畜。岗位按钮还能增加钓鱼、养鱼、狩猎副手和贸易专长。</div>
   `;
 }
 
@@ -3028,6 +3162,7 @@ function openSleepDialog(auto = false) {
     state.sprites.assignments?.animals ? "牲畜员工会照料未进食的动物" : "",
     state.sprites.assignments?.fishing ? "钓鱼员工会沿潮汐路线工作" : "",
     state.sprites.assignments?.fishery ? `养鱼员工会照看鱼塘（${state.fishPond?.stock || 0}/${state.fishPond?.capacity || 0}）` : "",
+    state.workers?.hired?.length ? "居民员工会自动采购当季种子、清理过季作物并把鱼获送入资源库存" : "",
   ].filter(Boolean).join("；");
 
   if (auto) {
@@ -3702,6 +3837,9 @@ function handleModalClick(event) {
       showToast(result.message, { strong: "掌机" });
       break;
     }
+    case "facilityFunction":
+      runFacilityFunction(value);
+      break;
     case "buyFeed": {
       const result = buyFeed(state);
       if (result.ok) {
@@ -4157,7 +4295,7 @@ function handleKeyDown(event) {
     travelToScene("council", "quick");
   } else if (key === "p") {
     travelToScene("workshop", "quick");
-  } else if (["1", "2", "3", "4"].includes(key)) {
+  } else if (["1", "2", "3", "4", "5", "6"].includes(key)) {
     selectTool(TOOLS[Number(key) - 1].id);
   } else if (key === "escape") {
     openMenu();

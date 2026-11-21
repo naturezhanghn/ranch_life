@@ -373,6 +373,8 @@ export function createInitialState() {
       seed: 0,
       water: 0,
       harvest: 0,
+      shotgun: 0,
+      huntingKnife: 0,
     },
     shipping: {
       bin: {},
@@ -601,6 +603,7 @@ export function createInitialState() {
         island: null,
         fishing: null,
         fishery: null,
+        hunting: null,
       },
       assignmentEfficiency: {
         watering: 1,
@@ -610,6 +613,7 @@ export function createInitialState() {
         island: 1,
         fishing: 1,
         fishery: 1,
+        hunting: 1,
       },
       friendship: {
         seedling: 20,
@@ -1952,6 +1956,17 @@ export function switchScene(state, sceneId, mode = "road") {
   state.player.x = scene.spawn.x;
   state.player.y = scene.spawn.y;
   state.player.facing = scene.spawn.facing || "down";
+  if (sceneId === "wilderness") {
+    const existingNodes = Array.isArray(state.forage?.nodes) ? state.forage.nodes : [];
+    const hasWildernessNodes = existingNodes.some((node) => (
+      node.scene === "wilderness" && node.expiresDay === state.day
+    ));
+    if (!hasWildernessNodes) {
+      const wildernessNodes = buildForageNodes(state, false, "wilderness");
+      state.forage.nodes = [...existingNodes.filter((node) => node.scene !== "wilderness"), ...wildernessNodes];
+      state.forage.available = Array.from(new Set(state.forage.nodes.filter((node) => !node.claimed).map((node) => node.itemId)));
+    }
+  }
   if (mode === "quick") state.minutes = Math.min(24 * 60, state.minutes + 4);
   const variant = getSceneSeasonVariant(state, sceneId);
   const noticeKey = `${state.season}:${sceneId}:${state.day}`;
@@ -2101,7 +2116,17 @@ export function hireWorker(state, workerId) {
 
 export function assignWorker(state, workerId, role) {
   const worker = WORKER_DEFS[workerId];
-  const roles = ["watering", "planting", "animals", "trade", "island", "fishing", "fishery"];
+  const roles = ["watering", "planting", "animals", "trade", "island", "fishing", "fishery", "hunting"];
+  const roleNames = {
+    watering: "浇水",
+    planting: "播种",
+    animals: "牲畜",
+    trade: "贸易",
+    island: "海岛探索",
+    fishing: "钓鱼",
+    fishery: "养鱼",
+    hunting: "狩猎副手",
+  };
   if (!worker || !roles.includes(role)) return { ok: false, message: "这个岗位还没有准备好。" };
   if (!state.workers.hired.includes(workerId)) return { ok: false, message: "先雇用这位员工。" };
   if ((role === "island" || role === "fishing") && !state.world.unlockedRegions.includes("island")) {
@@ -2112,13 +2137,13 @@ export function assignWorker(state, workerId, role) {
   }
   state.workers.assignments[role] = workerId;
   state.workers.dispatches = (state.workers.dispatches || 0) + 1;
-  addMemory(state, `${worker.name}现在负责${role === "planting" ? "播种" : role === "animals" ? "牲畜" : role === "fishing" ? "钓鱼" : role === "fishery" ? "养鱼" : role === "watering" ? "浇水" : role === "trade" ? "贸易" : "海岛探索"}。`, "social", 1);
-  return { ok: true, message: `${worker.name}已安排到${role === "planting" ? "播种" : role === "animals" ? "牲畜" : role === "fishing" ? "钓鱼" : role === "fishery" ? "养鱼" : role === "watering" ? "浇水" : role === "trade" ? "贸易" : "海岛探索"}岗位。` };
+  addMemory(state, `${worker.name}现在负责${roleNames[role]}。`, "social", 1);
+  return { ok: true, message: `${worker.name}已安排到${roleNames[role]}岗位。` };
 }
 
 export function assignSprite(state, spriteId, role) {
   const sprite = SPRITE_DEFS[spriteId];
-  const roles = ["watering", "planting", "animals", "trade", "island", "fishing", "fishery"];
+  const roles = ["watering", "planting", "animals", "trade", "island", "fishing", "fishery", "hunting"];
   const roleLabels = {
     watering: "浇水",
     planting: "播种",
@@ -2127,6 +2152,7 @@ export function assignSprite(state, spriteId, role) {
     island: "海岛探索",
     fishing: "钓鱼",
     fishery: "养鱼",
+    hunting: "狩猎副手",
   };
   if (!sprite || !roles.includes(role)) return { ok: false, message: "这个分工还没有准备好。" };
   if (!state.sprites.unlocked.includes(spriteId)) return { ok: false, message: "先邀请这只小精灵。" };
@@ -2192,6 +2218,7 @@ function eligibleDeliveryContract(state) {
 }
 
 function minigameSceneUnlocked(state, def) {
+  if (def.scenes?.includes(state.world?.scene)) return true;
   if (def.scene === "island") return state.world.unlockedRegions.includes("island");
   if (def.scene === "quarry") return state.world.visitedScenes.includes("city");
   return true;
@@ -2232,7 +2259,22 @@ export function beginMinigame(state, type) {
     type,
     day: state.day,
     contractId: availability.contract?.id || null,
+    huntingPartner: type === "hunt"
+      ? state.workers?.assignments?.hunting || state.sprites?.assignments?.hunting || null
+      : null,
+    huntingPartnerKind: type === "hunt" && state.workers?.assignments?.hunting
+      ? "worker"
+      : type === "hunt" && state.sprites?.assignments?.hunting
+        ? "sprite"
+        : null,
   };
+  const partnerId = state.minigames.active.huntingPartner;
+  if (type === "hunt" && partnerId) {
+    const partner = state.minigames.active.huntingPartnerKind === "worker"
+      ? WORKER_DEFS[partnerId]
+      : SPRITE_DEFS[partnerId];
+    if (partner) addMemory(state, `${partner.name}听见召唤，带上追踪包加入了今天的护栏外狩猎。`, "social", 2);
+  }
   addMemory(
     state,
     `你开始了${availability.def.title}。这次行动消耗 ${availability.def.energy} 点体力，结果会写入牧心的长期记忆。`,
@@ -2265,7 +2307,14 @@ export function resolveMinigame(state, type, result = {}) {
   state.minigames.best[type] = Math.max(state.minigames.best[type] || 0, score);
 
   if (type === "hunt") {
-    const hits = Math.max(0, Math.floor(Number(result.hits) || 0));
+    const rawHits = Math.max(0, Math.floor(Number(result.hits) || 0));
+    const partnerId = active.huntingPartner;
+    const partner = partnerId && active.huntingPartnerKind === "worker"
+      ? WORKER_DEFS[partnerId]
+      : partnerId && active.huntingPartnerKind === "sprite"
+        ? SPRITE_DEFS[partnerId]
+        : null;
+    const hits = rawHits + (partner ? 1 : 0);
     const misses = Math.max(0, Math.floor(Number(result.misses) || 0));
     let rareHits = Math.min(1, Math.max(0, Math.floor(Number(result.rareHits) || 0)));
     if (rareHits && state.island?.rareHuntDay === state.day) rareHits = 0;
@@ -2290,7 +2339,7 @@ export function resolveMinigame(state, type, result = {}) {
     bumpCounter(state, "explored");
     addMemory(
       state,
-      `湿地巡护结束：驱离 ${hits} 只偷食鸟${rareHits ? `，安全标记 ${rareHits} 只稀有候鸟` : ""}，获得 ${coins} 金巡护补贴。${rareHits && state.island.rareHuntDay === state.day && state.island.rareHuntCount === rareHits ? "今日稀有捕获额度已使用。" : ""}`,
+      `${partner ? `${partner.name}作为狩猎副手加入了追踪。` : ""}护栏外狩猎结束：追踪 ${hits} 个野兽足迹${rareHits ? `，安全标记 ${rareHits} 个稀有目标` : ""}，获得 ${coins} 金巡护补贴。${rareHits && state.island.rareHuntDay === state.day && state.island.rareHuntCount === rareHits ? "今日稀有捕获额度已使用。" : ""}`,
       "care",
       2,
     );
@@ -2302,7 +2351,8 @@ export function resolveMinigame(state, type, result = {}) {
       rareHits,
       rareValue,
       failPenalty,
-      message: `巡护完成：驱离 ${hits} 只斑翅雀${rareHits ? `，标记 ${rareHits} 只稀有候鸟` : ""}，获得 ${coins} 金${rareHits ? `，并带回价值约 ${rareValue} 金的月光珍珠` : ""}。${failPenalty ? ` 空手而归额外消耗 ${failPenalty} 体力。` : ""}`,
+      partner: partner?.name || null,
+      message: `${partner ? `${partner.name}帮你锁定了一个目标。` : ""}狩猎完成：追踪 ${hits} 个野兽足迹${rareHits ? `，标记 ${rareHits} 个稀有目标` : ""}，获得 ${coins} 金${rareHits ? `，并带回价值约 ${rareValue} 金的月光珍珠` : ""}。${failPenalty ? ` 空手而归额外消耗 ${failPenalty} 体力。` : ""}`,
     };
   }
 
@@ -2594,6 +2644,45 @@ function plantingSeedForSeason(state) {
   );
 }
 
+function prepareSeasonalWorkerSupplies(state, report) {
+  const seasonalCrops = Object.values(CROPS).filter((crop) => {
+    if (crop.isGrass) return false;
+    const calendar = SEASONAL_CROP_CALENDAR[crop.id];
+    return !calendar || calendar.seasons.includes(state.season);
+  });
+  if (!seasonalCrops.length) return;
+
+  let cleared = 0;
+  for (const plot of state.plots) {
+    if (!plot.crop || plot.crop === "grass") continue;
+    const calendar = SEASONAL_CROP_CALENDAR[plot.crop];
+    if (!calendar || calendar.seasons.includes(state.season)) continue;
+    plot.crop = null;
+    plot.growth = 0;
+    plot.watered = false;
+    plot.wateredDays = 0;
+    plot.state = "wild";
+    cleared += 1;
+  }
+  if (cleared) {
+    report.helperActions.push(`员工清理了 ${cleared} 格过季作物，重新整理成可开垦土地`);
+    addMemory(state, `季节更替后，员工清理了 ${cleared} 格过季作物，准备播种新的季节作物。`, "care", 2);
+  }
+
+  const availablePlots = state.plots.filter((plot) => !plot.crop).length;
+  const workerCapacity = Math.max(0, (state.workers?.hired?.length || 0) * 2);
+  const cropId = plantingSeedForSeason(state) || seasonalCrops[0].id;
+  const crop = CROPS[cropId];
+  if (!crop || availablePlots <= 0 || workerCapacity <= 0) return;
+  const currentSeeds = state.inventory.seeds[cropId] || 0;
+  const needed = Math.max(0, Math.min(availablePlots, workerCapacity) - currentSeeds);
+  const affordable = Math.min(needed, Math.floor(state.coins / crop.seedPrice));
+  if (affordable <= 0) return;
+  state.coins -= affordable * crop.seedPrice;
+  state.inventory.seeds[cropId] = currentSeeds + affordable;
+  report.helperActions.push(`员工采购了 ${affordable} 份${crop.seedName}，准备自动播种${state.season}季作物`);
+}
+
 function applySpriteAssignments(state, report) {
   if (getPostGameModifier(state)?.id === "handCare") {
     report.helperActions.push("修正牌「手工周」：小精灵暂停自动工作，照料必须由你亲自完成。");
@@ -2743,6 +2832,7 @@ function applyWorkerAssignments(state, report) {
   state.coins -= payroll;
   workforce.lastPayrollDay = state.day;
   report.helperActions.push(`已支付 ${payroll} 金员工工资`);
+  prepareSeasonalWorkerSupplies(state, report);
   const cropId = plantingSeedForSeason(state);
   const crop = CROPS[cropId];
   const calendar = SEASONAL_CROP_CALENDAR[cropId];
@@ -3133,15 +3223,21 @@ function forageNodeIsActive(state, node) {
   );
 }
 
-function buildForageNodes(state, rainWindow) {
-  const table = FORAGE_TABLE[state.season] || [];
+function buildForageNodes(state, rainWindow, sceneId = state.world?.scene || "farm") {
+  const table = (FORAGE_TABLE[state.season] || []).filter((item) => (
+    sceneId === "wilderness" ? item.scene === "wilderness" : item.scene !== "wilderness"
+  ));
   const nodes = [];
   const weatherDay = rainWindow ? state.day - 1 : 0;
   const expiresMinute = rainWindow ? FORAGE_WINDOW_MINUTES : NIGHT_MINUTES;
   for (const item of table) {
     const guaranteed = rainWindow && nodes.length === 0;
     if (!guaranteed && nextRandom(state) >= item.chance) continue;
-    const definition = FORAGE_NODE_DEFS[Math.floor(nextRandom(state) * FORAGE_NODE_DEFS.length)] || FORAGE_NODE_DEFS[0];
+    const scope = item.scene === "wilderness" ? "wilderness" : "settled";
+    const candidates = FORAGE_NODE_DEFS.filter((entry) => (
+      (entry.scene === "wilderness" ? "wilderness" : "settled") === scope
+    ));
+    const definition = candidates[Math.floor(nextRandom(state) * candidates.length)] || candidates[0] || FORAGE_NODE_DEFS[0];
     nodes.push({
       id: `${state.day}:${definition.id}:${item.id}`,
       interactionId: definition.interactionId,
@@ -3288,7 +3384,7 @@ export function collectForage(state, forageId) {
     "forage",
     itemId,
     item.name,
-    node.scene === "city" ? "村口山货" : "牧场山路",
+    node.scene === "wilderness" ? "护栏外荒野" : node.scene === "city" ? "村口山货" : "牧场山路",
   );
   bumpCounter(state, "foraged");
   state.relations.ecology = bounded(state.relations.ecology + 1);
@@ -3299,7 +3395,7 @@ export function collectForage(state, forageId) {
     message: `采到${item.name}。本次窗口已采 ${state.forage.combo} 份。`,
     dedupeKey: `forage_gathered:${node.id}:${state.day}`,
   });
-  addMemory(state, `你在${node.scene === "city" ? "村口" : "牧场山路"}采到${item.name}，这是本次窗口已采的第 ${state.forage.combo} 份山货。`, "forage", 2);
+  addMemory(state, `你在${node.scene === "wilderness" ? "护栏外荒野" : node.scene === "city" ? "村口" : "牧场山路"}采到${item.name}，这是本次窗口已采的第 ${state.forage.combo} 份山货。`, "forage", 2);
   return { ok: true, message: `采到${item.name}。本次窗口已采 ${state.forage.combo} 份。`, nodeId: node.id, combo: state.forage.combo };
 }
 
