@@ -144,6 +144,7 @@ export class WorldRenderer {
     this.drawAiShed(ctx, state, time);
     this.drawHousingStructures(ctx, state, time);
     this.drawAutomationYard(ctx, state, time);
+    this.drawAutomatedRanch(ctx, state, time);
     this.drawMarket(ctx, time);
     this.drawArchive(ctx, time);
     this.drawNoticeboard(ctx, time);
@@ -3137,6 +3138,111 @@ export class WorldRenderer {
     ctx.fillStyle = "rgba(255, 247, 218, 0.86)";
     ctx.font = "600 8px 'PingFang SC', sans-serif";
     ctx.fillText(automation.level ? "逐格自动作业" : "可扩建自动化", yard.x + yard.w / 2, yard.y + yard.h - 6);
+    ctx.restore();
+  }
+
+  drawAutomatedRanch(ctx, state, time) {
+    const ranch = WORLD.automatedRanch;
+    const automation = state.automatedRanch || { level: 0, name: "待开垦的自动牧场", lastActions: [] };
+    const level = Math.max(0, Number(automation.level) || 0);
+    ctx.save();
+    ctx.fillStyle = "rgba(42, 63, 40, 0.2)";
+    ctx.beginPath();
+    ctx.ellipse(ranch.x + ranch.w / 2, ranch.y + ranch.h + 6, ranch.w * 0.48, 12, 0, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = level ? "#789d5d" : "#71855b";
+    roundedRect(ctx, ranch.x, ranch.y, ranch.w, ranch.h, 10);
+    ctx.fill();
+    ctx.strokeStyle = level ? "#d5bd7d" : "#a99168";
+    ctx.lineWidth = 4;
+    ctx.stroke();
+    ctx.strokeStyle = "rgba(220, 210, 153, 0.75)";
+    ctx.lineWidth = 2;
+    for (let post = 0; post < 8; post += 1) {
+      const px = ranch.x + 14 + post * (ranch.w - 28) / 7;
+      ctx.beginPath();
+      ctx.moveTo(px, ranch.y + ranch.h - 22);
+      ctx.lineTo(px, ranch.y + ranch.h - 4);
+      ctx.stroke();
+    }
+    ctx.fillStyle = "#765337";
+    roundedRect(ctx, ranch.x + 18, ranch.y + 36, 74, 45, 5);
+    ctx.fill();
+    ctx.fillStyle = "#b2814e";
+    ctx.beginPath();
+    ctx.moveTo(ranch.x + 12, ranch.y + 40);
+    ctx.lineTo(ranch.x + 29, ranch.y + 20);
+    ctx.lineTo(ranch.x + 82, ranch.y + 20);
+    ctx.lineTo(ranch.x + 99, ranch.y + 40);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = "#e2c980";
+    ctx.fillRect(ranch.x + 31, ranch.y + 45, 48, 5);
+    ctx.fillStyle = "#3f382c";
+    ctx.fillRect(ranch.x + 31, ranch.y + 56, 18, 25);
+    ctx.fillRect(ranch.x + 57, ranch.y + 56, 18, 25);
+    ctx.fillStyle = "#d4e39a";
+    ctx.fillRect(ranch.x + 110, ranch.y + 42, 46, 12);
+    ctx.fillStyle = "#55773f";
+    ctx.fillRect(ranch.x + 114, ranch.y + 45, 38, 6);
+    ctx.fillStyle = "#cfe7a0";
+    ctx.beginPath();
+    ctx.arc(ranch.x + 134, ranch.y + 71, 10 + Math.sin(time * 2) * 1.5, 0, TAU);
+    ctx.fill();
+    if (level > 0) {
+      const capacity = level >= 3 ? 99 : level >= 2 ? 8 : 4;
+      const animals = (state.animals || []).slice(0, capacity);
+      animals.forEach((animal, index) => {
+        const lane = index % 2;
+        const phase = time * (0.34 + (index % 3) * 0.08) + index * 1.7;
+        const px = ranch.x + 116 + ((index * 31 + Math.sin(phase) * 10) % 92);
+        const py = ranch.y + 63 + lane * 18 + Math.cos(phase * 0.8) * 4;
+        const color = animal.id === "cow" ? "#6a5549" : animal.id === "sheep" ? "#e5dfcf" : animal.id === "duck" ? "#9ca99f" : "#d88748";
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.ellipse(px, py, animal.id === "cow" ? 9 : 6, animal.id === "cow" ? 5 : 4, 0, 0, TAU);
+        ctx.fill();
+        ctx.fillStyle = "#f6e9bf";
+        ctx.beginPath();
+        ctx.arc(px + 5, py - 2, 3, 0, TAU);
+        ctx.fill();
+        if (animal.fed || animal.grazed) {
+          ctx.fillStyle = "#f2d786";
+          ctx.font = "700 7px sans-serif";
+          ctx.textAlign = "center";
+          ctx.fillText("·", px, py - 8);
+        }
+      });
+    }
+    if (level >= 2) {
+      ctx.strokeStyle = "#92d3c0";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(ranch.x + 108, ranch.y + 32);
+      ctx.lineTo(ranch.x + 108, ranch.y + 82);
+      ctx.moveTo(ranch.x + 162, ranch.y + 32);
+      ctx.lineTo(ranch.x + 162, ranch.y + 82);
+      ctx.stroke();
+      ctx.fillStyle = "#b5e4d4";
+      ctx.fillRect(ranch.x + 105, ranch.y + 27, 66, 4);
+    }
+    if (level >= 3) {
+      ctx.fillStyle = "#e8c86e";
+      ctx.beginPath();
+      ctx.arc(ranch.x + ranch.w - 28, ranch.y + 36, 7 + Math.sin(time * 2.5) * 1.5, 0, TAU);
+      ctx.fill();
+      ctx.fillStyle = "#5e4d33";
+      ctx.font = "700 7px 'PingFang SC', sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText("AI", ranch.x + ranch.w - 28, ranch.y + 39);
+    }
+    ctx.fillStyle = "rgba(255, 247, 215, 0.95)";
+    ctx.font = "700 10px 'PingFang SC', sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(level ? `自动养殖牧场 · Lv.${level}` : "左侧自动养殖牧场", ranch.x + ranch.w / 2, ranch.y + 16);
+    ctx.fillStyle = "rgba(255, 247, 215, 0.72)";
+    ctx.font = "600 8px 'PingFang SC', sans-serif";
+    ctx.fillText(level ? "自动喂养 · 放牧 · 健康记录" : "靠近后开通自动化", ranch.x + ranch.w / 2, ranch.y + ranch.h - 8);
     ctx.restore();
   }
 

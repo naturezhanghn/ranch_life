@@ -1,6 +1,7 @@
 import {
   ANIMAL_DEFS,
   AUTOMATION_UPGRADES,
+  AUTOMATED_RANCH_UPGRADES,
   BACKPACK_UPGRADES,
   BARN_UPGRADES,
   WORKER_HOUSING_UPGRADES,
@@ -405,6 +406,12 @@ export function createInitialState() {
       level: 0,
       name: "手工作业区",
       lastUpgradeDay: 0,
+      lastRunDay: 0,
+      lastActions: [],
+    },
+    automatedRanch: {
+      level: 0,
+      name: "待开垦的自动牧场",
       lastRunDay: 0,
       lastActions: [],
     },
@@ -2986,6 +2993,55 @@ function applyAutomationSystem(state, report) {
   if (actions.length) addMemory(state, `自动化农机完成了${actions.length} 格农务，播种、浇灌和收获都按地块记录。`, "care", 2);
 }
 
+function applyAutomatedRanch(state, report) {
+  const ranch = state.automatedRanch;
+  if (!ranch?.level) return;
+  const capacity = AUTOMATED_RANCH_UPGRADES[ranch.level - 1]?.capacity || 0;
+  const actions = [];
+  const feedPrice = MARKET_GOODS.feed?.buyPrice || 12;
+  const animals = state.animals.slice(0, capacity);
+  // Release the animals first so grazing can consume mature pasture grass
+  // before the automatic feeder purchases supplemental feed.
+  for (const animal of animals) animal.outside = true;
+  const grazingBeforeFeed = state.pasture?.grazingDays || 0;
+  grazePasture(state, report);
+  if ((state.pasture?.grazingDays || 0) > grazingBeforeFeed) {
+    for (const animal of animals) {
+      if (animal.grazed) actions.push({ type: "graze", animalId: animal.id });
+    }
+  }
+  for (const animal of animals) {
+    if (animal.fed) continue;
+    if (state.feed <= 0 && state.coins >= feedPrice) {
+      state.coins -= feedPrice;
+      state.feed += 1;
+    }
+    if (state.feed <= 0) continue;
+    state.feed -= 1;
+    animal.fed = true;
+    animal.outside = true;
+    animal.grazed = false;
+    animal.mood = Math.min(100, animal.mood + 5);
+    animal.affection = Math.min(100, animal.affection + 2);
+    animal.health = Math.min(100, animal.health + 3);
+    animal.careDays += 1;
+    animal.unhappy = false;
+    actions.push({ type: "care", animalId: animal.id });
+  }
+  // Level 3 also keeps the water and grass routines active for every animal.
+  if (ranch.level >= 3) {
+    for (const animal of state.animals) animal.outside = true;
+  }
+  ranch.lastRunDay = state.day + 1;
+  ranch.lastActions = actions;
+  if (actions.length) {
+    report.helperActions.push(`自动化养殖牧场喂养并放牧了 ${actions.length} 只牲畜，产出将按健康状态结算`);
+    addMemory(state, `自动化养殖牧场完成了${actions.length}只牲畜的喂养、放牧和健康照料。`, "care", 2);
+  } else {
+    report.helperActions.push("自动化养殖牧场检查了饲料槽和饮水线");
+  }
+}
+
 function applyWorkerAssignments(state, report) {
   const workforce = state.workers;
   if (!workforce?.hired?.length) return;
@@ -3080,7 +3136,7 @@ function applyWorkerAssignments(state, report) {
   }
 
   const animalWorkerId = workforce.assignments?.animals;
-  if (animalWorkerId && assigned.has(animalWorkerId)) {
+  if (animalWorkerId && assigned.has(animalWorkerId) && !state.automatedRanch?.level) {
     const animalWorker = WORKER_DEFS[animalWorkerId];
     let talked = 0;
     let brushed = 0;
@@ -3377,6 +3433,26 @@ export function upgradeAutomation(state) {
   automation.lastUpgradeDay = state.day;
   addMemory(state, `${next.title}完成。${next.description}`, "upgrade", 4);
   return { ok: true, message: `${next.title}完成，左侧自动化农机开始运行。` };
+}
+
+export function upgradeAutomatedRanch(state) {
+  const ranch = state.automatedRanch || {
+    level: 0,
+    name: "待开垦的自动牧场",
+    lastUpgradeDay: 0,
+    lastRunDay: 0,
+    lastActions: [],
+  };
+  state.automatedRanch = ranch;
+  const next = AUTOMATED_RANCH_UPGRADES.find((entry) => entry.level === ranch.level + 1);
+  if (!next) return { ok: false, message: "自动化养殖牧场已经扩建到最高等级。" };
+  if (state.coins < next.cost) return { ok: false, message: `还差 ${next.cost - state.coins} 金才能${next.title}。` };
+  state.coins -= next.cost;
+  ranch.level = next.level;
+  ranch.name = next.title;
+  ranch.lastUpgradeDay = state.day;
+  addMemory(state, `${next.title}完成。${next.description}`, "upgrade", 4);
+  return { ok: true, message: `${next.title}完成，牲畜将由左侧自动牧场照料。` };
 }
 
 export function cookRecipe(state, recipeId) {
@@ -3818,6 +3894,7 @@ export function advanceDay(state) {
 
   restoreOvernightWeeds(state, report);
   applyAutomationSystem(state, report);
+  applyAutomatedRanch(state, report);
   applySpriteAssignments(state, report);
   // Animals already released to the pasture graze before paid staff handle
   // feed. The livestock specialist releases the remaining animals below.
@@ -4186,6 +4263,11 @@ export function loadGame() {
         ...(parsed.automation || {}),
         lastActions: Array.isArray(parsed.automation?.lastActions) ? parsed.automation.lastActions : base.automation.lastActions,
       },
+      automatedRanch: {
+        ...base.automatedRanch,
+        ...(parsed.automatedRanch || {}),
+        lastActions: Array.isArray(parsed.automatedRanch?.lastActions) ? parsed.automatedRanch.lastActions : base.automatedRanch.lastActions,
+      },
       home: { ...base.home, ...(parsed.home || {}) },
       barn: { ...base.barn, ...(parsed.barn || {}) },
       pasture: {
@@ -4523,6 +4605,20 @@ export function loadGame() {
       : base.automation.lastRunDay;
     merged.automation.lastActions = Array.isArray(merged.automation.lastActions)
       ? merged.automation.lastActions.slice(0, 24)
+      : [];
+    const maxAutomatedRanchLevel = AUTOMATED_RANCH_UPGRADES[AUTOMATED_RANCH_UPGRADES.length - 1]?.level || base.automatedRanch.level;
+    merged.automatedRanch.level = Number.isFinite(Number(merged.automatedRanch.level))
+      ? Math.max(0, Math.min(maxAutomatedRanchLevel, Math.floor(Number(merged.automatedRanch.level))))
+      : base.automatedRanch.level;
+    merged.automatedRanch.name = typeof merged.automatedRanch.name === "string" ? merged.automatedRanch.name : base.automatedRanch.name;
+    merged.automatedRanch.lastUpgradeDay = Number.isFinite(Number(merged.automatedRanch.lastUpgradeDay))
+      ? Math.max(0, Math.floor(Number(merged.automatedRanch.lastUpgradeDay)))
+      : 0;
+    merged.automatedRanch.lastRunDay = Number.isFinite(Number(merged.automatedRanch.lastRunDay))
+      ? Math.max(0, Math.floor(Number(merged.automatedRanch.lastRunDay)))
+      : 0;
+    merged.automatedRanch.lastActions = Array.isArray(merged.automatedRanch.lastActions)
+      ? merged.automatedRanch.lastActions.slice(0, 24)
       : [];
     merged.city.research.completed = Array.from(new Set(
       merged.city.research.completed.filter((id) => METROPOLIS_RESEARCH[id]),

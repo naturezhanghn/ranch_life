@@ -124,6 +124,30 @@ export const AUTOMATION_UPGRADES = [
   },
 ];
 
+export const AUTOMATED_RANCH_UPGRADES = [
+  {
+    level: 1,
+    cost: 360,
+    title: "开通自动养殖牧场",
+    description: "左侧围栏接入饲料槽，自动喂养并放牧现有牲畜，每天最多照料 4 只。",
+    capacity: 4,
+  },
+  {
+    level: 2,
+    cost: 620,
+    title: "扩建自动牧场",
+    description: "增加草料转运带和饮水线，每天自动照料最多 8 只牲畜。",
+    capacity: 8,
+  },
+  {
+    level: 3,
+    cost: 960,
+    title: "安装繁育监控台",
+    description: "监控健康、亲密度和产出，自动牧场每天可以照料全部牲畜。",
+    capacity: 99,
+  },
+];
+
 export const HOME_RECIPES = [
   {
     id: "farm_stew",
@@ -266,6 +290,7 @@ export const WORLD = {
   aiShed: { x: 355, y: 68, w: 170, h: 132 },
   workerHousing: { x: 548, y: 68, w: 150, h: 132 },
   automationYard: { x: 74, y: 300, w: 148, h: 194 },
+  automatedRanch: { x: 58, y: 648, w: 238, h: 104 },
   pasture: { x: 735, y: 28, w: 495, h: 360 },
   pond: { x: 1010, y: 620, rx: 205, ry: 88 },
   villageShop: { x: 92, y: 540, w: 185, h: 103 },
@@ -2965,6 +2990,14 @@ export const INTERACTIONS = [
     y: 388,
     radius: 58,
     label: "管理自动化农机",
+    keycap: "E",
+  },
+  {
+    id: "automated_ranch",
+    x: 322,
+    y: 700,
+    radius: 52,
+    label: "管理自动化养殖牧场",
     keycap: "E",
   },
   {

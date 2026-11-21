@@ -1,6 +1,7 @@
 import {
   ANIMAL_DEFS,
   AUTOMATION_UPGRADES,
+  AUTOMATED_RANCH_UPGRADES,
   BACKPACK_UPGRADES,
   BARN_UPGRADES,
   BIRTHDAYS,
@@ -111,6 +112,7 @@ import {
   upgradeHouse,
   upgradeWorkerHousing,
   upgradeAutomation,
+  upgradeAutomatedRanch,
   getBagUsage,
   getBridgeQuestStep,
   recordClue,
@@ -930,6 +932,7 @@ function canMoveTo(x, y) {
     WORLD.house,
     WORLD.aiShed,
     WORLD.workerHousing,
+    WORLD.automatedRanch,
     WORLD.villageShop,
     WORLD.archive,
     WORLD.noticeboard,
@@ -1217,6 +1220,9 @@ function handleInteraction(id) {
       break;
     case "automation_machine":
       openAutomationPanel();
+      break;
+    case "automated_ranch":
+      openAutomatedRanchPanel();
       break;
     case "house_bed":
       openSleepDialog();
@@ -1626,6 +1632,31 @@ function openAutomationPanel() {
       ${next ? `<div class="region-card-grid"><article class="region-card facility-card"><div class="region-card-icon region-card-icon--ink">⚙</div><div class="region-card-copy"><strong>${next.title} · ✦ ${next.cost}</strong><span>${next.description}</span><small>安装后解锁${next.machine}，每天最多处理 ${next.capacity} 格。</small></div></article></div>` : '<div class="weather-note">三套农机已经全部安装，左侧扩建区进入稳定运行。</div>'}
     `,
     footer: `<button type="button" class="button button--ghost" data-action="close">返回牧场</button>${next ? `<button type="button" class="button button--primary" data-action="upgradeAutomation" ${state.coins < next.cost ? "disabled" : ""}>${next.title} · ✦ ${next.cost}</button>` : ""}`,
+  });
+}
+
+function openAutomatedRanchPanel() {
+  const ranch = state.automatedRanch || { level: 0, name: "待开垦的自动牧场", lastRunDay: 0, lastActions: [] };
+  const next = AUTOMATED_RANCH_UPGRADES.find((entry) => entry.level === ranch.level + 1);
+  const actionNames = { care: "喂养与放牧" };
+  const recent = ranch.lastRunDay === state.day && ranch.lastActions?.length
+    ? ranch.lastActions.map((action) => actionNames[action.type] || action.type).join("、")
+    : "今天还没有运行记录";
+  openModal({
+    kicker: "牧场左侧 · 自动养殖区",
+    title: ranch.name,
+    wide: true,
+    body: `
+      <div class="day-summary-grid">
+        <div class="summary-tile"><strong>Lv.${ranch.level}</strong><span>养殖等级</span></div>
+        <div class="summary-tile"><strong>${ranch.lastActions?.length || 0}</strong><span>最近照料数</span></div>
+        <div class="summary-tile"><strong>${ranch.lastRunDay === state.day ? "已运行" : "待运行"}</strong><span>今日状态</span></div>
+      </div>
+      <p class="story-lead">左侧新牧场会在每天结算时自动采购饲料、喂养牲畜、打开围栏放牧，并记录健康、亲密度和产出状态。自动养殖不会占用主人当天体力。</p>
+      <div class="weather-note">最近一次记录 · ${recent}。当前牲畜 ${state.animals.length} 只，库存饲料 ${state.feed} 袋。</div>
+      ${next ? `<div class="region-card-grid"><article class="region-card facility-card"><div class="region-card-icon region-card-icon--leaf">♜</div><div class="region-card-copy"><strong>${next.title} · ✦ ${next.cost}</strong><span>${next.description}</span><small>升级后每天最多自动照料 ${next.capacity >= 99 ? "全部" : next.capacity} 只牲畜。</small></div></article></div>` : '<div class="weather-note">自动养殖牧场已经完成三级建设，会照料全部牲畜。</div>'}
+    `,
+    footer: `<button type="button" class="button button--ghost" data-action="close">返回牧场</button>${next ? `<button type="button" class="button button--primary" data-action="upgradeAutomatedRanch" ${state.coins < next.cost ? "disabled" : ""}>${next.title} · ✦ ${next.cost}</button>` : ""}`,
   });
 }
 
@@ -2569,6 +2600,9 @@ function renderSpritesPanel() {
   const automation = state.automation || { level: 0, name: "手工作业区", lastRunDay: 0 };
   const nextAutomation = AUTOMATION_UPGRADES.find((entry) => entry.level === automation.level + 1);
   const automationCard = `<article class="region-card housing-card"><div class="region-card-icon region-card-icon--ink">⚙</div><div class="region-card-copy"><strong>${automation.name} · Lv.${automation.level}</strong><span>牧场左侧自动播种、滴灌和收获机器${automation.lastRunDay === state.day ? " · 今日已运行" : ""}</span><small>${nextAutomation ? `${nextAutomation.title} · ${nextAutomation.description}` : "自动化农机已经全部安装。"}</small></div><button type="button" class="shop-buy" data-action="upgradeAutomation" ${!nextAutomation || state.coins < nextAutomation.cost ? "disabled" : ""}>${nextAutomation ? `扩建 ✦ ${nextAutomation.cost}` : "已满级"}</button></article>`;
+  const automatedRanch = state.automatedRanch || { level: 0, name: "待开垦的自动牧场", lastRunDay: 0, lastActions: [] };
+  const nextAutomatedRanch = AUTOMATED_RANCH_UPGRADES.find((entry) => entry.level === automatedRanch.level + 1);
+  const automatedRanchCard = `<article class="region-card housing-card"><div class="region-card-icon region-card-icon--ink">♜</div><div class="region-card-copy"><strong>${automatedRanch.name} · Lv.${automatedRanch.level}</strong><span>自动采购饲料、喂养、放牧和健康维护${automatedRanch.lastRunDay === state.day ? " · 今日已运行" : ""}</span><small>${nextAutomatedRanch ? `${nextAutomatedRanch.title} · ${nextAutomatedRanch.description}` : "自动化养殖牧场已经全部安装。"}</small></div><button type="button" class="shop-buy" data-action="upgradeAutomatedRanch" ${!nextAutomatedRanch || state.coins < nextAutomatedRanch.cost ? "disabled" : ""}>${nextAutomatedRanch ? `扩建 ✦ ${nextAutomatedRanch.cost}` : "已满级"}</button></article>`;
   const roleButtons = (spriteId) => Object.entries(roleLabels)
     .map(([role, label]) => {
       const primary = SPRITE_DEFS[spriteId].role === role;
@@ -2615,6 +2649,8 @@ function renderSpritesPanel() {
     <div class="region-card-grid">${housingCard}</div>
     <div class="region-section-heading"><span>左侧自动化农机</span><small>花钱扩建后，机器会在每天的工作时段按地块运行</small></div>
     <div class="region-card-grid">${automationCard}</div>
+    <div class="region-section-heading"><span>左下自动化养殖牧场</span><small>每天自动喂养、放牧并维护牲畜，产出照常进入结算</small></div>
+    <div class="region-card-grid">${automatedRanchCard}</div>
     <div class="sprite-workboard">
       <span>当前分工</span>
       <div>${Object.entries(roleLabels).map(([role, label]) => `<b>${label} · ${assignments[role] ? SPRITE_DEFS[assignments[role]].name : state.workers?.assignments?.[role] ? WORKER_DEFS[state.workers.assignments[role]]?.name : "空缺"}</b>`).join("")}</div>
@@ -4046,6 +4082,20 @@ function handleModalClick(event) {
       } else {
         audio.play("error");
         showToast(result.message, { strong: "自动化农机" });
+      }
+      break;
+    }
+    case "upgradeAutomatedRanch": {
+      const result = upgradeAutomatedRanch(state);
+      if (result.ok) {
+        audio.play("success");
+        saveGame(state);
+        updateHUD(true);
+        openAutomatedRanchPanel();
+        showToast(result.message, { strong: "自动化养殖牧场" });
+      } else {
+        audio.play("error");
+        showToast(result.message, { strong: "自动化养殖牧场" });
       }
       break;
     }
