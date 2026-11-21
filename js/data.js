@@ -2479,10 +2479,10 @@ export const STORY_OBJECTIVES = {
   },
   feedAnimals: {
     kicker: "第一章 · 牧场",
-    text: "照料三只牲畜",
+    text: "照料全部牲畜",
     progress: (state) => {
       const fed = state.animals.filter((animal) => animal.fed).length;
-      return `${fed} / 3`;
+      return `${fed} / ${state.animals.length}`;
     },
   },
   plantSeeds: {
