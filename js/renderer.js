@@ -273,7 +273,9 @@ export class WorldRenderer {
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, WORLD.width, WORLD.height);
 
-    if (sceneId === "wilderness") {
+    if (sceneId === "farmland") {
+      this.drawFarmlandScene(ctx, state, runtime, time);
+    } else if (sceneId === "wilderness") {
       this.drawWildernessScene(ctx, state, time);
       if (!this.isWorkShift(state)) this.drawOffShiftWildernessResidents(ctx, state, time);
     } else {
@@ -294,6 +296,9 @@ export class WorldRenderer {
     this.drawFestivalMarkers(ctx, state, sceneId, time);
 
     const drawables = [];
+    if (sceneId === "farmland" && this.isWorkShift(state)) {
+      this.addFarmlandWorkers(ctx, state, time, drawables);
+    }
     const npcPositions = scheduledNpcPositions(state.minutes, sceneId);
     this.drawNpcInteractions(ctx, npcPositions, sceneId, time);
     for (const position of npcPositions) {
@@ -320,6 +325,293 @@ export class WorldRenderer {
     this.drawLighting(ctx, state, time);
     this.drawEffects(ctx, runtime, time, delta);
     this.drawDebugVignette(ctx);
+  }
+
+  drawFarmlandScene(ctx, state, runtime, time) {
+    const scene = SCENE_DEFS.farmland || {};
+    const configuredField = scene.field || WORLD.farmland || {};
+    const field = {
+      x: configuredField.x ?? 34,
+      y: configuredField.y ?? 86,
+      cols: configuredField.cols ?? 18,
+      rows: configuredField.rows ?? 10,
+      tile: configuredField.tile ?? 74,
+      gap: configuredField.gap ?? 7,
+    };
+    /*
+     * The fallback keeps old saves playable while the dedicated farmland
+     * layout is being unlocked. New saves provide WORLD.farmland with the
+     * larger 18 × 10 grid.
+     */
+    const fallbackField = {
+      x: 34,
+      y: 86,
+      cols: 15,
+      rows: 8,
+      tile: 94,
+      gap: 7,
+    };
+    if (!configuredField || !Object.keys(configuredField).length) Object.assign(field, fallbackField);
+    const gap = field.gap;
+    const plots = Array.isArray(state.farmlandPlots) && state.farmlandPlots.length
+      ? state.farmlandPlots
+      : (state.plots || []);
+    const season = state.season || "春";
+    const seasonTint = {
+      春: ["#8db86b", "#6c9b5c", "#a7ca7b"],
+      夏: ["#79ad5c", "#4f8a52", "#9fc568"],
+      秋: ["#a9a766", "#8c8852", "#d2bd72"],
+      冬: ["#a7bcac", "#718f7a", "#d7e0c6"],
+    }[season] || ["#8db86b", "#6c9b5c", "#a7ca7b"];
+
+    const sky = ctx.createLinearGradient(0, 0, 0, WORLD.height);
+    sky.addColorStop(0, seasonTint[0]);
+    sky.addColorStop(0.42, seasonTint[1]);
+    sky.addColorStop(1, "#3f6f4d");
+    ctx.fillStyle = sky;
+    ctx.fillRect(0, 0, WORLD.width, WORLD.height);
+
+    // A wide, readable entrance header makes this scene feel like a separate
+    // farming district while keeping every screen tile available to work.
+    ctx.save();
+    ctx.fillStyle = "rgba(25, 61, 43, 0.32)";
+    ctx.fillRect(0, 0, WORLD.width, 64);
+    ctx.fillStyle = "rgba(255, 247, 214, 0.96)";
+    ctx.font = "800 18px 'PingFang SC', sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText(scene.name || "左侧丰收牧场", 34, 29);
+    ctx.fillStyle = "rgba(255, 247, 214, 0.72)";
+    ctx.font = "600 10px 'PingFang SC', sans-serif";
+    ctx.fillText("整片土地都可以开垦、播种、浇水与收获", 36, 47);
+    ctx.textAlign = "right";
+    ctx.fillText(`${season}季 · ${field.cols * field.rows} 格耕地`, WORLD.width - 34, 34);
+    ctx.restore();
+
+    // Water channels and raised borders give the large field a clear rhythm.
+    ctx.save();
+    ctx.strokeStyle = "rgba(183, 224, 208, 0.44)";
+    ctx.lineWidth = 8;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(12, WORLD.height - 56);
+    ctx.bezierCurveTo(320, WORLD.height - 90, 470, 70, 820, 108);
+    ctx.bezierCurveTo(1110, 144, 1300, WORLD.height - 120, WORLD.width - 12, 92);
+    ctx.stroke();
+    ctx.strokeStyle = "rgba(226, 242, 214, 0.24)";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.restore();
+
+    const tileWidth = field.tile;
+    const tileHeight = field.tile * 0.78;
+    const plotAt = (index) => plots[index] || {
+      index,
+      state: "wild",
+      crop: null,
+      growth: 0,
+      watered: false,
+      wateredDays: 0,
+      col: index % field.cols,
+      row: Math.floor(index / field.cols),
+    };
+    const drawMiniCrop = (plot, x, y, width, height) => {
+      if (!plot.crop) return;
+      const crop = CROPS[plot.crop];
+      if (!crop) return;
+      const progress = Math.max(0, Math.min(1, Number(plot.growth || 0) / Math.max(1, crop.days)));
+      const stem = Math.min(height * 0.42, 9 + progress * 20);
+      const color = crop.isGrass ? "#9ec66d" : crop.id === "pumpkin" ? "#e0a84f" : "#8cc272";
+      ctx.save();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = Math.max(1.2, width * 0.018);
+      ctx.beginPath();
+      ctx.moveTo(x + width / 2, y + height - 9);
+      ctx.lineTo(x + width / 2, y + height - stem);
+      ctx.stroke();
+      ctx.fillStyle = color;
+      for (let leaf = 0; leaf < 3; leaf += 1) {
+        const side = leaf % 2 ? -1 : 1;
+        ctx.beginPath();
+        ctx.ellipse(
+          x + width / 2 + side * (5 + leaf * 2),
+          y + height - stem + 7 + leaf * 3,
+          5 + progress * 4,
+          2.5 + progress * 2,
+          side * 0.45,
+          0,
+          TAU,
+        );
+        ctx.fill();
+      }
+      if (progress >= 1) {
+        ctx.fillStyle = crop.id === "pumpkin" || crop.id === "watermelon" ? "#efb85e" : "#f2d989";
+        ctx.beginPath();
+        ctx.arc(x + width / 2, y + 12, Math.max(3, width * 0.07), 0, TAU);
+        ctx.fill();
+      }
+      ctx.restore();
+    };
+
+    for (let row = 0; row < field.rows; row += 1) {
+      for (let col = 0; col < field.cols; col += 1) {
+        const index = row * field.cols + col;
+        const plot = plotAt(index);
+        const x = field.x + col * (tileWidth + gap);
+        const y = field.y + row * (tileHeight + gap);
+        const target = runtime.targetPlot?.index === plot.index;
+        ctx.save();
+        ctx.fillStyle = "rgba(31, 71, 47, 0.22)";
+        roundedRect(ctx, x - 2, y + 5, tileWidth + 4, tileHeight + 7, 8);
+        ctx.fill();
+        roundedRect(ctx, x, y, tileWidth, tileHeight, 7);
+        if (plot.state === "tilled" || plot.crop) {
+          ctx.fillStyle = plot.watered ? "#755039" : "#8c6040";
+          ctx.fill();
+          ctx.strokeStyle = plot.watered ? "rgba(188, 224, 207, 0.62)" : "rgba(94, 54, 36, 0.32)";
+          ctx.lineWidth = plot.watered ? 2 : 1.5;
+          for (let furrow = 1; furrow < 4; furrow += 1) {
+            ctx.beginPath();
+            ctx.moveTo(x + 9, y + furrow * tileHeight / 4);
+            ctx.lineTo(x + tileWidth - 9, y + furrow * tileHeight / 4 + Math.sin(index + furrow) * 2);
+            ctx.stroke();
+          }
+          if (plot.watered) {
+            ctx.fillStyle = "rgba(179, 226, 216, 0.42)";
+            for (let drop = 0; drop < 4; drop += 1) {
+              ctx.beginPath();
+              ctx.arc(x + 16 + drop * (tileWidth - 30) / 3, y + 10 + (drop % 2) * (tileHeight - 20), 2.3, 0, TAU);
+              ctx.fill();
+            }
+          }
+          drawMiniCrop(plot, x, y, tileWidth, tileHeight);
+        } else {
+          ctx.fillStyle = `rgba(${seasonTint[2] === "#d7e0c6" ? "177, 193, 165" : "116, 155, 85"}, 0.76)`;
+          ctx.fill();
+          ctx.strokeStyle = "rgba(64, 109, 61, 0.28)";
+          ctx.lineWidth = 1;
+          for (let blade = 0; blade < 7; blade += 1) {
+            const bx = x + 9 + hash01(index * 17 + blade) * (tileWidth - 18);
+            const by = y + tileHeight - 8 - hash01(index * 31 + blade) * (tileHeight - 18);
+            ctx.beginPath();
+            ctx.moveTo(bx, by + 6);
+            ctx.quadraticCurveTo(bx + Math.sin(time + blade) * 3, by, bx + 3, by - 7);
+            ctx.stroke();
+          }
+        }
+        if (target) {
+          ctx.strokeStyle = "#ffe7a3";
+          ctx.lineWidth = 3;
+          ctx.setLineDash([7, 4]);
+          roundedRect(ctx, x + 3, y + 3, tileWidth - 6, tileHeight - 6, 6);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+        ctx.restore();
+      }
+    }
+
+    const activity = state.workerActivityFarmland || state.workerActivity;
+    if (activity?.day === state.day && this.isWorkShift(state)) {
+      ctx.save();
+      ctx.fillStyle = "rgba(255, 236, 169, 0.86)";
+      ctx.font = "700 9px 'PingFang SC', sans-serif";
+      ctx.textAlign = "center";
+      for (const entry of [
+        ...(activity.harvesting || []).map((item) => ({ ...item, mark: "收" })),
+        ...(activity.planting || []).map((item) => ({ ...item, mark: "种" })),
+        ...(activity.watering || []).map((item) => ({ ...item, mark: "水" })),
+      ]) {
+        const row = Math.floor(entry.index / field.cols);
+        const col = entry.index % field.cols;
+        ctx.fillText(entry.mark, field.x + col * (tileWidth + gap) + tileWidth / 2, field.y + row * (tileHeight + gap) + 15);
+      }
+      ctx.restore();
+    }
+
+    // Animated irrigation wheels and scarecrows keep the enlarged farmland
+    // active even when the player is the only resident on screen.
+    ctx.save();
+    for (let col = 2; col < field.cols; col += 4) {
+      const x = field.x + col * (tileWidth + gap) - gap / 2;
+      ctx.strokeStyle = "#b6d6b2";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(x, field.y - 11);
+      ctx.lineTo(x, field.y + field.rows * (tileHeight + gap) - 10);
+      ctx.stroke();
+      ctx.fillStyle = "#f0d17c";
+      ctx.beginPath();
+      ctx.arc(x, field.y + 22 + Math.sin(time * 1.4 + col) * 3, 5, 0, TAU);
+      ctx.fill();
+    }
+    ctx.fillStyle = "#79563c";
+    ctx.fillRect(WORLD.width - 72, 98, 5, 118);
+    ctx.fillStyle = "#d7bc77";
+    roundedRect(ctx, WORLD.width - 122, 82, 104, 34, 5);
+    ctx.fill();
+    ctx.fillStyle = "#5c4931";
+    ctx.font = "800 11px 'PingFang SC', sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("丰收耕地", WORLD.width - 70, 103);
+    ctx.restore();
+  }
+
+  addFarmlandWorkers(ctx, state, time, drawables) {
+    const routes = [
+      [{ x: 150, y: 188 }, { x: 440, y: 188 }, { x: 720, y: 188 }, { x: 980, y: 188 }, { x: 1290, y: 188 }],
+      [{ x: 260, y: 348 }, { x: 560, y: 348 }, { x: 860, y: 348 }, { x: 1160, y: 348 }, { x: 1440, y: 348 }],
+      [{ x: 140, y: 520 }, { x: 430, y: 520 }, { x: 740, y: 520 }, { x: 1040, y: 520 }, { x: 1360, y: 520 }],
+      [{ x: 230, y: 700 }, { x: 520, y: 700 }, { x: 840, y: 700 }, { x: 1160, y: 700 }, { x: 1450, y: 700 }],
+    ];
+    const roleOrder = ["planting", "watering", "animals", "trade"];
+    const assigned = new Set();
+    const addResident = (character, kind, role, index) => {
+      if (!character || assigned.has(character.id)) return;
+      assigned.add(character.id);
+      const route = routes[index % routes.length];
+      const seed = [...String(character.id)].reduce(
+        (sum, value, valueIndex) => sum + value.charCodeAt(0) * (valueIndex + 1),
+        index * 17,
+      );
+      const progress = (time * (0.12 + (seed % 5) * 0.012) + index * 0.76) % route.length;
+      const segment = Math.floor(progress);
+      const phase = progress - segment;
+      const from = route[segment];
+      const to = route[(segment + 1) % route.length];
+      const eased = phase * phase * (3 - 2 * phase);
+      const motion = {
+        x: from.x + (to.x - from.x) * eased,
+        y: from.y + (to.y - from.y) * eased,
+        facing: to.x >= from.x ? 1 : -1,
+        moving: phase < 0.88,
+        working: true,
+        seed,
+        walkPhase: time * 7 + seed * 0.05,
+        actionPhase: time * 1.3 + seed * 0.04,
+      };
+      drawables.push({
+        y: motion.y,
+        draw: () => {
+          if (kind === "worker") {
+            this.drawFarmEmployee(ctx, motion.x, motion.y, character, role, time, motion);
+          } else {
+            this.drawFarmSprite(ctx, motion.x, motion.y - 18, character, role, time, { ...motion, y: motion.y - 18 });
+          }
+        },
+      });
+    };
+    for (const [role, workerId] of Object.entries(state.workers?.assignments || {})) {
+      const worker = WORKER_DEFS[workerId];
+      if (worker) addResident(worker, "worker", role, roleOrder.indexOf(role));
+    }
+    (state.workers?.hired || []).forEach((workerId, index) => {
+      const worker = WORKER_DEFS[workerId];
+      if (worker) addResident(worker, "worker", roleOrder[index % roleOrder.length], index + 4);
+    });
+    for (const [role, spriteId] of Object.entries(state.sprites?.assignments || {})) {
+      const sprite = SPRITE_DEFS[spriteId];
+      if (sprite) addResident(sprite, "sprite", role, roleOrder.indexOf(role) + 8);
+    }
   }
 
   drawWildernessScene(ctx, state, time) {

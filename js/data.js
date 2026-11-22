@@ -214,6 +214,7 @@ export const SCENE_REGION_MAP = {
   house: "farm",
   workerDorm: "farm",
   wilderness: "farm",
+  farmland: "farm",
 };
 
 export const REGIONS = {
@@ -286,6 +287,15 @@ export const WORLD = {
     bottomGate: { left: 620, right: 704 },
   },
   field: { x: 260, y: 300, cols: 8, rows: 4, tile: 56 },
+  farmland: {
+    x: 34,
+    y: 86,
+    cols: 18,
+    rows: 10,
+    tile: 78,
+    gap: 7,
+    label: "西侧丰收牧场",
+  },
   house: { x: 90, y: 50, w: 250, h: 175 },
   aiShed: { x: 355, y: 68, w: 170, h: 132 },
   workerHousing: { x: 548, y: 68, w: 150, h: 132 },
@@ -311,6 +321,19 @@ export const SCENE_DEFS = {
       { id: "portal_city", x: 652, y: 458, radius: 42, target: "city", label: "沿路去村庄" },
       { id: "portal_port", x: 824, y: 555, radius: 42, target: "port", label: "去码头" },
       { id: "portal_wilderness", x: 1295, y: 443, radius: 50, target: "wilderness", label: "穿过护栏去野外" },
+      { id: "portal_farmland", x: 52, y: 442, radius: 48, target: "farmland", label: "进入西侧丰收牧场" },
+    ],
+  },
+  farmland: {
+    id: "farmland",
+    name: "西侧丰收牧场",
+    subtitle: "一整片可以开垦、播种、浇水和收获的连片田野",
+    palette: ["#91b86d", "#5d8a58"],
+    field: { x: 34, y: 86, cols: 18, rows: 10, tile: 78, gap: 7 },
+    spawn: { x: 1510, y: 442, facing: "left" },
+    blockers: [],
+    portals: [
+      { id: "portal_farm", x: 1548, y: 442, radius: 48, target: "farm", label: "回到月溪牧场" },
     ],
   },
   wilderness: {
@@ -539,6 +562,68 @@ export const SCENE_SEASON_VARIANTS = {
         detail: "渠面结着薄冰，冰下的雪下根仍然活着。旧水渠没有停，只是走得更慢。",
       },
       blockers: [{ x: 720, y: 430, w: 110, h: 32, label: "封路雪堆" }],
+    },
+  },
+  farmland: {
+    春: {
+      label: "西田春播",
+      palette: ["#9bc37c", "#6d9b60"],
+      routeLabel: "沿着新翻的田垄走一圈",
+      landmark: {
+        id: "farmland_spring_seedbed",
+        x: 1280,
+        y: 680,
+        radius: 58,
+        label: "查看春播种床",
+        itemId: "spring_herb",
+        detail: "新翻的土里有一小簇春芽草，西侧田野的播种季从这里开始。",
+      },
+      blockers: [],
+    },
+    夏: {
+      label: "西田夏灌",
+      palette: ["#8eb66a", "#5d8b58"],
+      routeLabel: "沿灌溉渠检查夏田",
+      landmark: {
+        id: "farmland_summer_irrigation",
+        x: 1280,
+        y: 680,
+        radius: 58,
+        label: "查看夏灌水口",
+        itemId: "summer_berry",
+        detail: "水口边的夏莓沾着渠水，整片田野在午后的风里一层层起伏。",
+      },
+      blockers: [],
+    },
+    秋: {
+      label: "西田秋收",
+      palette: ["#b39a5d", "#7f8554"],
+      routeLabel: "沿着收获后的田垄走",
+      landmark: {
+        id: "farmland_autumn_harvest",
+        x: 1280,
+        y: 680,
+        radius: 58,
+        label: "查看秋收田埂",
+        itemId: "autumn_mushroom",
+        detail: "收获后的田埂堆着碎秸秆，秋野菇从湿润的草根旁露出一角。",
+      },
+      blockers: [],
+    },
+    冬: {
+      label: "西田冬闲",
+      palette: ["#a8bcb5", "#718f8e"],
+      routeLabel: "绕过休耕田检查土壤",
+      landmark: {
+        id: "farmland_winter_fallow",
+        x: 1280,
+        y: 680,
+        radius: 58,
+        label: "查看冬闲田",
+        itemId: "winter_root",
+        detail: "冬闲田上盖着一层薄霜，雪下根仍在土里保存着下一季的力气。",
+      },
+      blockers: [],
     },
   },
   city: {
@@ -916,6 +1001,17 @@ export const SCENE_SEASON_VARIANTS = {
 };
 
 export const SCENE_INTERACTIONS = {
+  farmland: [
+    {
+      id: "farmland_station",
+      x: 1450,
+      y: 170,
+      radius: 58,
+      label: "查看西田作业站",
+      keycap: "E",
+      facilityId: "farm",
+    },
+  ],
   workerDorm: [
     { id: "dorm_workers", x: 300, y: 350, radius: 62, label: "下班后慰问员工", keycap: "E" },
     { id: "dorm_sprites", x: 800, y: 350, radius: 62, label: "和小精灵聊聊", keycap: "E" },

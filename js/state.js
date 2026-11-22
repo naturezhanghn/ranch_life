@@ -95,6 +95,27 @@ function createPlots() {
   }));
 }
 
+function createFarmlandPlots() {
+  const total = WORLD.farmland.cols * WORLD.farmland.rows;
+  return Array.from({ length: total }, (_, index) => ({
+    index,
+    col: index % WORLD.farmland.cols,
+    row: Math.floor(index / WORLD.farmland.cols),
+    state: "wild",
+    crop: null,
+    growth: 0,
+    watered: false,
+    wateredDays: 0,
+  }));
+}
+
+function cultivationPlots(state) {
+  return [
+    ...(Array.isArray(state.plots) ? state.plots : []),
+    ...(Array.isArray(state.farmlandPlots) ? state.farmlandPlots : []),
+  ];
+}
+
 function createGrassPlots() {
   const cols = 12;
   const rows = 6;
@@ -470,6 +491,7 @@ export function createInitialState() {
     },
     town: { eventsSeen: [], birthdayGifts: {}, festivalBonus: 0 },
     plots: createPlots(),
+    farmlandPlots: createFarmlandPlots(),
     pasture: {
       grassPlots: createGrassPlots(),
       grazingDays: 0,
@@ -1501,13 +1523,17 @@ export function getTargetPlot(state) {
     right: { x: 1, y: 0 },
   };
   const direction = directions[state.player.facing] || directions.down;
-  const field = WORLD.field;
+  const farmland = state.world?.scene === "farmland" && Array.isArray(state.farmlandPlots);
+  const field = farmland ? WORLD.farmland : WORLD.field;
+  const plots = farmland ? state.farmlandPlots : state.plots;
   const targetX = state.player.x + direction.x * 34;
   const targetY = state.player.y + direction.y * 30;
-  const col = Math.floor((targetX - field.x) / field.tile);
-  const row = Math.floor((targetY - field.y) / field.tile);
+  const stepX = field.tile + (field.gap || 0);
+  const stepY = field.tile * (farmland ? 0.78 : 1) + (field.gap || 0);
+  const col = Math.floor((targetX - field.x) / stepX + 1e-6);
+  const row = Math.floor((targetY - field.y) / stepY + 1e-6);
   if (col < 0 || col >= field.cols || row < 0 || row >= field.rows) return null;
-  return state.plots.find((plot) => plot.col === col && plot.row === row) || null;
+  return plots.find((plot) => plot.col === col && plot.row === row) || null;
 }
 
 export function useToolOnPlot(state, toolId) {
@@ -2754,7 +2780,7 @@ function prepareSeasonalWorkerSupplies(state, report) {
   if (!seasonalCrops.length) return;
 
   let cleared = 0;
-  for (const plot of state.plots) {
+  for (const plot of cultivationPlots(state)) {
     if (!plot.crop || plot.crop === "grass") continue;
     const calendar = SEASONAL_CROP_CALENDAR[plot.crop];
     if (!calendar || calendar.seasons.includes(state.season)) continue;
@@ -2770,7 +2796,7 @@ function prepareSeasonalWorkerSupplies(state, report) {
     addMemory(state, `季节更替后，员工清理了 ${cleared} 格过季作物，准备播种新的季节作物。`, "care", 2);
   }
 
-  const availablePlots = state.plots.filter((plot) => !plot.crop).length;
+  const availablePlots = cultivationPlots(state).filter((plot) => !plot.crop).length;
   const workerCapacity = Math.max(0, (state.workers?.hired?.length || 0) * 2);
   const cropId = plantingSeedForSeason(state) || seasonalCrops[0].id;
   const crop = CROPS[cropId];
@@ -2800,7 +2826,7 @@ function applySpriteAssignments(state, report) {
     let planted = 0;
     const limit = efficiency >= 1 ? 2 : 1;
     if (canPlant && (state.inventory.seeds[cropId] || 0) > 0) {
-      for (const plot of state.plots) {
+      for (const plot of cultivationPlots(state)) {
         if (planted >= limit || (state.inventory.seeds[cropId] || 0) <= 0) break;
         if (plot.crop) continue;
         if (plot.state !== "tilled") {
@@ -2827,7 +2853,7 @@ function applySpriteAssignments(state, report) {
     let watered = 0;
     const efficiency = state.sprites.assignmentEfficiency?.watering || 1;
     const limit = efficiency >= 1 ? 2 : 1;
-    for (const plot of state.plots) {
+    for (const plot of cultivationPlots(state)) {
       if (watered >= limit || state.water <= 0) break;
       if (plot.crop && !plot.watered) {
         plot.watered = true;
@@ -2934,7 +2960,7 @@ function applyAutomationSystem(state, report) {
   if (automation.level >= 3) {
     let harvested = 0;
     const machineBonus = state.city?.research?.completed?.includes("machine") ? 2 : 0;
-    for (const plot of state.plots) {
+    for (const plot of cultivationPlots(state)) {
       if (harvested >= AUTOMATION_UPGRADES[2].capacity + machineBonus || !plot.crop || plot.growth < CROPS[plot.crop].days) continue;
       const harvestCrop = CROPS[plot.crop];
       const amount = plot.wateredDays >= harvestCrop.days ? 2 : 1;
@@ -2953,7 +2979,7 @@ function applyAutomationSystem(state, report) {
   if (automation.level >= 1 && crop && (!calendar || calendar.seasons.includes(state.season))) {
     let planted = 0;
     const machineBonus = state.city?.research?.completed?.includes("machine") ? 2 : 0;
-    for (const plot of state.plots) {
+    for (const plot of cultivationPlots(state)) {
       if (planted >= AUTOMATION_UPGRADES[0].capacity + machineBonus || (state.inventory.seeds[cropId] || 0) <= 0) break;
       if (plot.crop) continue;
       if (plot.state !== "tilled") {
@@ -2975,7 +3001,7 @@ function applyAutomationSystem(state, report) {
   if (automation.level >= 2 && state.water > 0) {
     let watered = 0;
     const machineBonus = state.city?.research?.completed?.includes("machine") ? 2 : 0;
-    for (const plot of state.plots) {
+    for (const plot of cultivationPlots(state)) {
       if (watered >= AUTOMATION_UPGRADES[1].capacity + machineBonus || state.water <= 0) break;
       if (!plot.crop || plot.watered) continue;
       plot.watered = true;
@@ -3051,6 +3077,12 @@ function applyWorkerAssignments(state, report) {
     planting: [],
     watering: [],
   };
+  state.workerActivityFarmland = {
+    day: state.day + 1,
+    harvesting: [],
+    planting: [],
+    watering: [],
+  };
   const payroll = workforce.hired.reduce((sum, workerId) => sum + (WORKER_DEFS[workerId]?.wage || 0), 0);
   if (state.coins < payroll) {
     report.helperActions.push(`员工工资需要 ${payroll} 金，当前余额不足，今天暂停工作`);
@@ -3072,11 +3104,12 @@ function applyWorkerAssignments(state, report) {
     const worker = WORKER_DEFS[workerId];
     if (!worker) continue;
     let harvested = 0;
-    for (const plot of state.plots) {
+    for (const plot of cultivationPlots(state)) {
       if (harvested >= 2 || !plot.crop || plot.growth < CROPS[plot.crop].days) continue;
       const harvestCrop = CROPS[plot.crop];
       const amount = plot.wateredDays >= harvestCrop.days ? 2 : 1;
-      state.workerActivity.harvesting.push({ index: plot.index, crop: harvestCrop.id, amount, workerId });
+      const activity = state.farmlandPlots?.includes(plot) ? state.workerActivityFarmland : state.workerActivity;
+      activity.harvesting.push({ index: plot.index, crop: harvestCrop.id, amount, workerId });
       state.shipping.bin[harvestCrop.id] = (state.shipping.bin[harvestCrop.id] || 0) + amount;
       plot.crop = null;
       plot.growth = 0;
@@ -3087,7 +3120,7 @@ function applyWorkerAssignments(state, report) {
     }
     let planted = 0;
     if (crop && (!calendar || calendar.seasons.includes(state.season))) {
-      for (const plot of state.plots) {
+      for (const plot of cultivationPlots(state)) {
         if (planted >= 2 || (state.inventory.seeds[cropId] || 0) <= 0) break;
         if (plot.crop) continue;
         plot.state = "tilled";
@@ -3097,21 +3130,23 @@ function applyWorkerAssignments(state, report) {
         plot.wateredDays = 0;
         state.inventory.seeds[cropId] -= 1;
         planted += 1;
-        state.workerActivity.planting.push({ index: plot.index, crop: cropId, workerId });
+        const activity = state.farmlandPlots?.includes(plot) ? state.workerActivityFarmland : state.workerActivity;
+        activity.planting.push({ index: plot.index, crop: cropId, workerId });
         bumpCounter(state, "tilled");
         bumpCounter(state, "planted");
       }
     }
     let watered = 0;
     if (state.water > 0) {
-      for (const plot of state.plots) {
+      for (const plot of cultivationPlots(state)) {
         if (watered >= 2 || state.water <= 0) break;
         if (!plot.crop || plot.watered) continue;
         plot.watered = true;
         plot.wateredDays += 1;
         state.water -= 1;
         watered += 1;
-        state.workerActivity.watering.push({ index: plot.index, workerId });
+        const activity = state.farmlandPlots?.includes(plot) ? state.workerActivityFarmland : state.workerActivity;
+        activity.watering.push({ index: plot.index, workerId });
         bumpCounter(state, "watered");
       }
     }
@@ -3237,7 +3272,7 @@ function applyWorkerAssignments(state, report) {
 function restoreOvernightWeeds(state, report) {
   const weedChance = state.season === "冬" ? 0.08 : 0.14;
   let regrown = 0;
-  for (const plot of state.plots) {
+  for (const plot of cultivationPlots(state)) {
     if (plot.crop || plot.state !== "tilled") continue;
     if (nextRandom(state) >= weedChance) continue;
     plot.state = "wild";
@@ -3975,7 +4010,7 @@ export function advanceDay(state) {
     if (!animal.unhappy) animal.daysUnhappy = 0;
   }
 
-  for (const plot of state.plots) {
+  for (const plot of cultivationPlots(state)) {
     const cropCalendar = plot.crop ? SEASONAL_CROP_CALENDAR[plot.crop] : null;
     if (plot.crop && plot.watered && (!cropCalendar || cropCalendar.seasons.includes(state.season))) {
       plot.growth += 1;
@@ -4100,7 +4135,7 @@ export function advanceDay(state) {
   }
   if (weather === "rain") {
     state.water = state.maxWater;
-    for (const plot of state.plots) {
+    for (const plot of cultivationPlots(state)) {
       if (plot.crop) plot.watered = true;
     }
     addMemory(state, "清晨下雨。我自动调整了灌溉计划，但你仍然需要决定水放在哪里。", "weather");
@@ -4664,6 +4699,29 @@ export function loadGame() {
     const legacyPlots = Array.isArray(merged.plots) ? merged.plots : [];
     merged.plots = base.plots.map((plot, index) => {
       const source = legacyPlots[index] && typeof legacyPlots[index] === "object" ? legacyPlots[index] : {};
+      const crop = typeof source.crop === "string" && CROPS[source.crop] ? source.crop : null;
+      const plotState = source.state === "tilled" || source.state === "wild"
+        ? source.state
+        : plot.state;
+      const rawGrowth = Number(source.growth);
+      const growth = crop && Number.isFinite(rawGrowth)
+        ? Math.max(0, Math.min(CROPS[crop].days, Math.floor(rawGrowth)))
+        : 0;
+      const rawWateredDays = Number(source.wateredDays);
+      return {
+        ...plot,
+        state: crop ? "tilled" : plotState,
+        crop,
+        growth,
+        watered: crop && source.watered === true,
+        wateredDays: crop && Number.isFinite(rawWateredDays) ? Math.max(0, Math.floor(rawWateredDays)) : 0,
+      };
+    });
+    const legacyFarmlandPlots = Array.isArray(merged.farmlandPlots) ? merged.farmlandPlots : [];
+    merged.farmlandPlots = base.farmlandPlots.map((plot, index) => {
+      const source = legacyFarmlandPlots[index] && typeof legacyFarmlandPlots[index] === "object"
+        ? legacyFarmlandPlots[index]
+        : {};
       const crop = typeof source.crop === "string" && CROPS[source.crop] ? source.crop : null;
       const plotState = source.state === "tilled" || source.state === "wild"
         ? source.state

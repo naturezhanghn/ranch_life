@@ -630,6 +630,10 @@ function currentSceneId() {
   return state.world?.scene || "farm";
 }
 
+function isCultivationScene(sceneId = currentSceneId()) {
+  return sceneId === "farm" || sceneId === "farmland";
+}
+
 function scenePortalInteractions(sceneId) {
   return (SCENE_DEFS[sceneId]?.portals || []).map((portal) => ({
     ...portal,
@@ -806,7 +810,7 @@ function update(delta) {
     }
   }
 
-  runtime.targetPlot = active && currentSceneId() === "farm" ? getTargetPlot(state) : null;
+  runtime.targetPlot = active && isCultivationScene() ? getTargetPlot(state) : null;
   updateInteractionHint();
 
   timeSinceHud += delta;
@@ -975,7 +979,7 @@ function performAction() {
     return;
   }
 
-  if (currentSceneId() !== "farm") {
+  if (!isCultivationScene()) {
     if (currentSceneId() === "wilderness" && ["shotgun", "huntingKnife"].includes(state.selectedTool)) {
       audio.play("error");
       showToast("靠近猎场标记后按行动键，追踪护栏外的野兽。", { strong: state.selectedTool === "shotgun" ? "猎枪" : "猎刀" });
@@ -3395,11 +3399,12 @@ function openHouseGame() {
 }
 
 function openSleepDialog(auto = false) {
-  const matured = state.plots.filter((plot) => {
+  const plots = [...(state.plots || []), ...(state.farmlandPlots || [])];
+  const matured = plots.filter((plot) => {
     if (!plot.crop) return false;
     return plot.growth >= CROPS[plot.crop].days;
   }).length;
-  const needsWater = state.plots.filter((plot) => plot.crop && !plot.watered).length;
+  const needsWater = plots.filter((plot) => plot.crop && !plot.watered).length;
   const unfed = state.animals.filter((animal) => !animal.fed);
   const special =
     state.story.step === "firstNight"
