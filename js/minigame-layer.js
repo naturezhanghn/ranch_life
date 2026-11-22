@@ -32,7 +32,7 @@ export class MinigameLayer {
       const rect = this.canvas.getBoundingClientRect();
       const x = ((event.clientX - rect.left) / rect.width) * MINIGAME_WIDTH;
       const y = ((event.clientY - rect.top) / rect.height) * MINIGAME_HEIGHT;
-      if (this.game?.type === "hunt") {
+      if (this.game?.type === "hunt" || this.game?.type === "battle") {
         this.game.action(x, y);
       } else if (this.game?.type === "delivery") {
         this.game.action(x);
@@ -41,21 +41,26 @@ export class MinigameLayer {
       }
     });
     this.canvas?.addEventListener("pointermove", (event) => {
-      if (!this.active || this.game?.type !== "hunt" || this.game.finished) return;
+      if (!this.active || !["hunt", "battle"].includes(this.game?.type) || this.game.finished) return;
       const rect = this.canvas.getBoundingClientRect();
       this.game.aim.x = ((event.clientX - rect.left) / rect.width) * MINIGAME_WIDTH;
       this.game.aim.y = ((event.clientY - rect.top) / rect.height) * MINIGAME_HEIGHT;
     });
   }
 
-  start({ type, contract = null, onComplete, onAbort }) {
+  start({ type, contract = null, weapon = null, partner = null, onComplete, onAbort }) {
     if (this.active) return false;
     this.active = true;
     this.completed = false;
     this.resultTimer = 0;
     this.onComplete = onComplete;
     this.onAbort = onAbort;
-    this.game = createMinigame(type, { contract, seed: Date.now() + Math.floor(Math.random() * 1000) });
+    this.game = createMinigame(type, {
+      contract,
+      weapon,
+      partner,
+      seed: Date.now() + Math.floor(Math.random() * 1000),
+    });
     if (!this.game) {
       this.active = false;
       return false;

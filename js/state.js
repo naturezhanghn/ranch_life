@@ -632,24 +632,39 @@ export function createInitialState() {
     },
     minigames: {
       lastPlayed: {
+        battle: 0,
         hunt: 0,
         fishing: 0,
         mining: 0,
         delivery: 0,
       },
       best: {
+        battle: 0,
         hunt: 0,
         fishing: 0,
         mining: 0,
         delivery: 0,
       },
       totals: {
+        battleRuns: 0,
         huntRuns: 0,
         fishingRuns: 0,
         miningRuns: 0,
         deliveryRuns: 0,
       },
       active: null,
+    },
+    combat: {
+      active: null,
+      alert: false,
+      alertDay: 0,
+      lastOutcomeDay: 0,
+      lastOutcome: null,
+      totalRaids: 0,
+      victories: 0,
+      defeats: 0,
+      fortification: 0,
+      damage: 0,
     },
     government: {
       civicPoints: 3,
@@ -2354,14 +2369,18 @@ function minigameSceneUnlocked(state, def) {
 export function getMinigameAvailability(state, type) {
   const def = MINIGAME_DEFS[type];
   if (!def) return { ok: false, message: "这个玩法还没有准备好。" };
+  if (state.combat?.active && type !== "battle") return { ok: false, message: "先处理牧场里的野兽入侵，再进行其他活动。" };
   if (state.minigames?.active) {
     return { ok: false, message: "另一场活动还没有结束。" };
   }
-  if ((state.minigames?.lastPlayed?.[type] || 0) === state.day) {
+  if ((state.minigames?.lastPlayed?.[type] || 0) === state.day && !(type === "battle" && state.combat?.active)) {
     return { ok: false, message: `${def.title}今天已经做过了，明天再来吧。` };
   }
   if (state.energy < def.energy) {
     return { ok: false, message: `体力不够，${def.title}需要 ${def.energy} 点体力。` };
+  }
+  if (type === "battle" && !state.combat?.alert && !state.combat?.active) {
+    return { ok: false, message: "目前没有野兽入侵警报。等黄昏后的脚印出现，再到围栏入口集合。" };
   }
   if (!minigameSceneUnlocked(state, def)) {
     return { ok: false, message: def.scene === "island" ? "先修好蓝潮渡轮，才能进入潮汐路线。" : "先去城市旧矿道看看。" };
@@ -2379,6 +2398,10 @@ export function getMinigameAvailability(state, type) {
 export function beginMinigame(state, type) {
   const availability = getMinigameAvailability(state, type);
   if (!availability.ok) return availability;
+  if (type === "battle" && !state.combat?.active) {
+    const invasion = startBeastInvasion(state);
+    if (!invasion.ok) return invasion;
+  }
   state.energy -= availability.def.energy;
   state.minutes = Math.min(24 * 60, state.minutes + availability.def.clockMinutes);
   state.minigames.lastPlayed[type] = state.day;
@@ -2481,6 +2504,14 @@ export function resolveMinigame(state, type, result = {}) {
       partner: partner?.name || null,
       message: `${partner ? `${partner.name}帮你锁定了一个目标。` : ""}狩猎完成：追踪 ${hits} 个野兽足迹${rareHits ? `，标记 ${rareHits} 个稀有目标` : ""}，获得 ${coins} 金${rareHits ? `，并带回价值约 ${rareValue} 金的月光珍珠` : ""}。${failPenalty ? ` 空手而归额外消耗 ${failPenalty} 体力。` : ""}`,
     };
+  }
+
+  if (type === "battle") {
+    const action = result.action || (result.weapon === "shotgun" || state.selectedTool === "shotgun" ? "shoot" : "strike");
+    const hits = Math.max(0, Math.floor(Number(result.hits ?? result.defeated) || 0));
+    const blocks = Math.max(0, Math.floor(Number(result.blocks) || 0));
+    const resolved = resolveBeastInvasion(state, { ...result, action, hits, blocks });
+    return { ...resolved, type };
   }
 
   if (type === "fishing") {
@@ -3886,6 +3917,144 @@ export function giveGift(state, npcId, itemId) {
   };
 }
 
+const BEAST_INVASION_TYPES = [
+  { id: "boar_pack", name: "黑鬃野猪群", health: 42, damage: 10, reward: 42 },
+  { id: "wolf_pack", name: "灰狼小队", health: 50, damage: 12, reward: 54 },
+  { id: "horned_beast", name: "角兽首领", health: 64, damage: 15, reward: 72 },
+];
+
+function ensureCombatState(state) {
+  state.combat = {
+    active: null,
+    alert: false,
+    alertDay: 0,
+    lastOutcomeDay: 0,
+    lastOutcome: null,
+    totalRaids: 0,
+    victories: 0,
+    defeats: 0,
+    fortification: 0,
+    damage: 0,
+    ...(state.combat || {}),
+  };
+  return state.combat;
+}
+
+export function getCombatStatus(state) {
+  const combat = ensureCombatState(state);
+  return {
+    alert: combat.alert === true,
+    alertDay: combat.alertDay || 0,
+    active: combat.active ? { ...combat.active } : null,
+    totalRaids: combat.totalRaids || 0,
+    victories: combat.victories || 0,
+    defeats: combat.defeats || 0,
+    fortification: combat.fortification || 0,
+    damage: combat.damage || 0,
+  };
+}
+
+export function fortifyRanch(state) {
+  const combat = ensureCombatState(state);
+  const level = Math.max(0, Math.floor(Number(combat.fortification) || 0));
+  if (level >= 5) return { ok: false, message: "牧场防线已经达到最高等级。" };
+  const cost = 90 + level * 55;
+  if (state.coins < cost) return { ok: false, message: `还差 ${cost - state.coins} 金才能加固围栏。` };
+  state.coins -= cost;
+  combat.fortification = level + 1;
+  addMemory(state, `你花费 ${cost} 金加固了牧场防线。下一次野兽入侵会更容易守住。`, "upgrade", 3);
+  return { ok: true, level: combat.fortification, cost, message: `牧场防线升到 ${combat.fortification} 级。` };
+}
+
+export function startBeastInvasion(state, options = {}) {
+  const combat = ensureCombatState(state);
+  if (combat.active) return { ok: false, message: "野兽入侵已经在进行中。" };
+  if (!combat.alert && options.force !== true) return { ok: false, message: "目前没有发现野兽入侵迹象。" };
+  const type = BEAST_INVASION_TYPES[(Math.max(1, state.day) + (combat.totalRaids || 0)) % BEAST_INVASION_TYPES.length];
+  const wave = Math.min(3, 1 + Math.floor((combat.totalRaids || 0) / 3));
+  const fortification = Math.max(0, Math.floor(Number(combat.fortification) || 0));
+  const maxHealth = type.health + wave * 10;
+  combat.active = {
+    id: `beast-raid-${state.day}-${combat.totalRaids + 1}`,
+    day: state.day,
+    name: type.name,
+    wave,
+    maxHealth,
+    health: maxHealth,
+    damage: Math.max(4, type.damage + wave * 2 - fortification),
+    reward: type.reward + wave * 12,
+    partner: state.workers?.assignments?.hunting || state.sprites?.assignments?.hunting || null,
+  };
+  combat.alert = false;
+  combat.alertDay = state.day;
+  combat.totalRaids = (combat.totalRaids || 0) + 1;
+  addMemory(state, `${type.name}冲到牧场围栏外。第 ${wave} 波入侵开始，拿起猎枪或猎刀守住田地。`, "risk", 4);
+  return { ok: true, active: { ...combat.active }, message: `${type.name}来袭。守住牧场，别让它们冲进田地。` };
+}
+
+export function resolveBeastInvasion(state, result = {}) {
+  const combat = ensureCombatState(state);
+  const active = combat.active;
+  if (!active || active.day !== state.day) return { ok: false, message: "当前没有可以结算的野兽入侵。" };
+  const action = ["strike", "shoot", "guard"].includes(result.action)
+    ? result.action
+    : state.selectedTool === "shotgun" ? "shoot" : "strike";
+  const hits = Math.max(0, Math.min(8, Math.floor(Number(result.hits) || 0)));
+  const blocks = Math.max(0, Math.min(8, Math.floor(Number(result.blocks) || 0)));
+  const partnerBonus = active.partner ? 8 : 0;
+  const toolLevel = action === "shoot" ? state.toolLevels.shotgun : state.toolLevels.huntingKnife;
+  const basePower = action === "shoot" ? 18 : action === "strike" ? 12 : 4;
+  const attackPower = basePower + Math.max(0, Number(toolLevel) || 0) * 4;
+  const dealt = Math.max(0, hits * attackPower + partnerBonus + (action === "guard" ? blocks * 2 : 0));
+  const taken = Math.max(0, active.damage * Math.max(1, active.wave) - blocks * 4 - (action === "guard" ? 8 : 0));
+  active.health = Math.max(0, active.health - dealt);
+  const victory = active.health <= 0;
+  const combatDamage = victory ? 0 : Math.min(5, Math.max(1, Math.ceil(taken / 8)));
+  const cropsDamaged = victory ? 0 : Math.min(4, combatDamage);
+  if (!victory) {
+    const targets = cultivationPlots(state).filter((plot) => plot.crop).slice(0, cropsDamaged);
+    targets.forEach((plot) => {
+      plot.crop = null;
+      plot.growth = 0;
+      plot.watered = false;
+      plot.wateredDays = 0;
+      plot.state = "wild";
+    });
+    state.animals.forEach((animal) => {
+      animal.health = Math.max(0, animal.health - combatDamage);
+      animal.mood = Math.max(0, animal.mood - 2);
+    });
+  }
+  combat.active = null;
+  combat.lastOutcomeDay = state.day;
+  combat.lastOutcome = victory ? "victory" : "defeat";
+  combat.damage = Math.max(0, (combat.damage || 0) + combatDamage);
+  if (victory) {
+    const reward = active.reward + Math.max(0, Math.floor(Number(combat.fortification) || 0)) * 4;
+    combat.victories = (combat.victories || 0) + 1;
+    state.coins += reward;
+    state.stats.earned += reward;
+    state.relations.ecology = bounded(state.relations.ecology + 1);
+    addMemory(state, `你和${active.partner ? "副手一起" : "员工不在场也独自"}守住了${active.name}。围栏没有被突破，获得 ${reward} 金巡护奖励。`, "care", 4);
+    return { ok: true, outcome: "victory", reward, dealt, taken, cropsDamaged: 0, message: `守住了牧场，获得 ${reward} 金。` };
+  }
+  combat.defeats = (combat.defeats || 0) + 1;
+  state.relations.ecology = bounded(state.relations.ecology - 2);
+  addMemory(state, `${active.name}冲破了部分围栏。${cropsDamaged} 格作物被踩坏，牲畜也受到了惊吓。`, "risk", 4);
+  return { ok: true, outcome: "defeat", reward: 0, dealt, taken, cropsDamaged, message: `入侵暂时退去，但有 ${cropsDamaged} 格作物受损。` };
+}
+
+function scheduleBeastInvasion(state, report) {
+  const combat = ensureCombatState(state);
+  if (combat.active || combat.alert) return;
+  const due = state.day >= 3 && (state.day % 5 === 0 || (state.weather === "drought" && state.day % 3 === 0));
+  if (!due) return;
+  combat.alert = true;
+  combat.alertDay = state.day;
+  report.invasion = { alert: true, day: state.day, message: "牧场外发现了野兽脚印，天黑前请检查围栏。" };
+  addMemory(state, "牧场外发现了野兽脚印。今晚可能有入侵，最好先加固围栏并准备武器。", "risk", 3);
+}
+
 export function advanceDay(state) {
   const reportStartedAt = Date.now();
   const closingDay = state.day;
@@ -4035,6 +4204,11 @@ export function advanceDay(state) {
     2,
   );
 
+  const combat = ensureCombatState(state);
+  if (combat.active && combat.active.day === state.day) {
+    const unresolved = resolveBeastInvasion(state, { action: "guard" });
+    report.invasion = { ...(report.invasion || {}), ...unresolved, autoResolved: true };
+  }
 
   state.day += 1;
   state.seasonDay += 1;
@@ -4092,6 +4266,7 @@ export function advanceDay(state) {
 
   state.weather = weather;
   report.weather = weather;
+  scheduleBeastInvasion(state, report);
   report.seasonVariant = getSceneSeasonVariant(state, "farm");
   advancePostGameDay(state, report, closingRecapChoice);
 
@@ -4302,6 +4477,11 @@ export function loadGame() {
         ...base.automatedRanch,
         ...(parsed.automatedRanch || {}),
         lastActions: Array.isArray(parsed.automatedRanch?.lastActions) ? parsed.automatedRanch.lastActions : base.automatedRanch.lastActions,
+      },
+      combat: {
+        ...base.combat,
+        ...(parsed.combat || {}),
+        active: parsed.combat?.active && typeof parsed.combat.active === "object" ? parsed.combat.active : null,
       },
       home: { ...base.home, ...(parsed.home || {}) },
       barn: { ...base.barn, ...(parsed.barn || {}) },
@@ -4655,6 +4835,47 @@ export function loadGame() {
     merged.automatedRanch.lastActions = Array.isArray(merged.automatedRanch.lastActions)
       ? merged.automatedRanch.lastActions.slice(0, 24)
       : [];
+    merged.combat.alert = merged.combat.alert === true;
+    merged.combat.alertDay = Number.isFinite(Number(merged.combat.alertDay))
+      ? Math.max(0, Math.floor(Number(merged.combat.alertDay)))
+      : 0;
+    merged.combat.lastOutcomeDay = Number.isFinite(Number(merged.combat.lastOutcomeDay))
+      ? Math.max(0, Math.floor(Number(merged.combat.lastOutcomeDay)))
+      : 0;
+    merged.combat.totalRaids = Number.isFinite(Number(merged.combat.totalRaids))
+      ? Math.max(0, Math.floor(Number(merged.combat.totalRaids)))
+      : 0;
+    merged.combat.victories = Number.isFinite(Number(merged.combat.victories))
+      ? Math.max(0, Math.floor(Number(merged.combat.victories)))
+      : 0;
+    merged.combat.defeats = Number.isFinite(Number(merged.combat.defeats))
+      ? Math.max(0, Math.floor(Number(merged.combat.defeats)))
+      : 0;
+    merged.combat.fortification = Number.isFinite(Number(merged.combat.fortification))
+      ? Math.max(0, Math.min(5, Math.floor(Number(merged.combat.fortification))))
+      : 0;
+    merged.combat.damage = Number.isFinite(Number(merged.combat.damage))
+      ? Math.max(0, Math.floor(Number(merged.combat.damage)))
+      : 0;
+    if (merged.combat.active) {
+      const active = merged.combat.active;
+      const health = Number(active.health);
+      const maxHealth = Number(active.maxHealth);
+      merged.combat.active = Number.isFinite(health) && Number.isFinite(maxHealth) && health > 0
+        ? {
+            ...active,
+            day: Number.isFinite(Number(active.day)) ? Math.max(1, Math.floor(Number(active.day))) : merged.day,
+            wave: Math.max(1, Math.min(3, Math.floor(Number(active.wave) || 1))),
+            maxHealth: Math.max(1, Math.floor(maxHealth)),
+            health: Math.max(1, Math.min(Math.floor(maxHealth), Math.floor(health))),
+          }
+        : null;
+      if (merged.combat.active && merged.combat.active.day !== merged.day) {
+        merged.combat.active = null;
+        merged.combat.alert = true;
+        merged.combat.alertDay = merged.day;
+      }
+    }
     merged.city.research.completed = Array.from(new Set(
       merged.city.research.completed.filter((id) => METROPOLIS_RESEARCH[id]),
     ));

@@ -81,6 +81,7 @@ import {
   getAiPrediction,
   getActiveFestival,
   getClueCount,
+  getCombatStatus,
   getMarketPrice,
   getMinigameAvailability,
   getNpcTopic,
@@ -92,6 +93,7 @@ import {
   emitFeedback,
   exploreIsland,
   fulfillTradeContract,
+  fortifyRanch,
   holdTownHall,
   investInCity,
   researchMetropolis,
@@ -656,7 +658,11 @@ function forageInteractionIsAvailable(interaction) {
 function availableInteractions() {
   const sceneId = currentSceneId();
   const base = sceneId === "farm"
-    ? INTERACTIONS.filter((interaction) => interaction.id !== "investor" || state.story.step === "meetInvestor")
+    ? INTERACTIONS.filter((interaction) => {
+      if (interaction.id === "investor" && state.story.step !== "meetInvestor") return false;
+      if (interaction.id === "ranch_defense" && !state.combat?.alert && !state.combat?.active) return false;
+      return true;
+    })
     : (SCENE_INTERACTIONS[sceneId] || []);
   const sceneFinds = (SCENE_FINDS[sceneId] || [])
     .filter((find) => !state.world.sceneFinds?.[sceneId]?.[find.id])
@@ -1160,6 +1166,16 @@ function handleInteraction(id) {
       showToast("先在工具栏装备猎枪或猎刀，再进入护栏外猎场。", { strong: "野外狩猎" });
       return;
     }
+    if (sceneInteraction.minigame === "battle" && !state.combat?.alert && !state.combat?.active) {
+      audio.play("error");
+      showToast("现在没有入侵警报。等黄昏后的红灯亮起，再到围栏入口集合。", { strong: "牧场防卫" });
+      return;
+    }
+    if (sceneInteraction.minigame === "battle" && !["shotgun", "huntingKnife"].includes(state.selectedTool)) {
+      audio.play("error");
+      showToast("先在工具栏装备猎刀或猎枪，再进入牧场防卫战。", { strong: "牧场防卫" });
+      return;
+    }
     startSceneMinigame(sceneInteraction.minigame);
     return;
   }
@@ -1227,6 +1243,9 @@ function handleInteraction(id) {
       break;
     case "automated_ranch":
       openAutomatedRanchPanel();
+      break;
+    case "ranch_fortify":
+      openCombatPanel();
       break;
     case "house_bed":
       openSleepDialog();
@@ -1444,9 +1463,15 @@ function startSceneMinigame(type) {
   audio.play("ui");
   updateHUD(true);
   saveGame(state);
+  const partnerId = state.workers?.assignments?.hunting || state.sprites?.assignments?.hunting;
+  const partner = state.workers?.assignments?.hunting
+    ? WORKER_DEFS[partnerId]?.name
+    : SPRITE_DEFS[partnerId]?.name;
   const launched = minigameLayer.start({
     type,
     contract: started.contract,
+    weapon: state.selectedTool,
+    partner,
     onComplete: (result) => {
       const resolved = resolveMinigame(state, type, result);
       if (resolved.ok) {
@@ -1480,6 +1505,10 @@ function startSceneMinigame(type) {
     },
     onAbort: () => {
       abortMinigame(state);
+      if (type === "battle" && state.combat?.active) {
+        state.combat.active = null;
+        state.combat.alert = true;
+      }
       audio.play("error");
       const event = emitFeedback(state, {
         eventId: "activity_aborted",
@@ -1661,6 +1690,28 @@ function openAutomatedRanchPanel() {
       ${next ? `<div class="region-card-grid"><article class="region-card facility-card"><div class="region-card-icon region-card-icon--leaf">♜</div><div class="region-card-copy"><strong>${next.title} · ✦ ${next.cost}</strong><span>${next.description}</span><small>升级后每天最多自动照料 ${next.capacity >= 99 ? "全部" : next.capacity} 只牲畜。</small></div></article></div>` : '<div class="weather-note">自动养殖牧场已经完成三级建设，会照料全部牲畜。</div>'}
     `,
     footer: `<button type="button" class="button button--ghost" data-action="close">返回牧场</button>${next ? `<button type="button" class="button button--primary" data-action="upgradeAutomatedRanch" ${state.coins < next.cost ? "disabled" : ""}>${next.title} · ✦ ${next.cost}</button>` : ""}`,
+  });
+}
+
+function openCombatPanel() {
+  const combat = getCombatStatus(state);
+  const level = combat.fortification;
+  const nextCost = level >= 5 ? null : 90 + level * 55;
+  const partnerId = state.workers?.assignments?.hunting || state.sprites?.assignments?.hunting;
+  const partner = state.workers?.assignments?.hunting ? WORKER_DEFS[partnerId]?.name : SPRITE_DEFS[partnerId]?.name;
+  const status = combat.active
+    ? `正在防守第 ${combat.active.wave} 波${combat.active.name}`
+    : combat.alert
+      ? "已发现入侵脚印，黄昏前可出发防守"
+      : combat.lastOutcomeDay === state.day
+        ? combat.lastOutcome === "victory" ? "今天已经守住入侵" : "今天的入侵已经退去"
+        : "当前没有入侵警报";
+  openModal({
+    kicker: "牧场围栏 · 防线管理",
+    title: "野兽入侵与防守",
+    wide: true,
+    body: `<div class="day-summary-grid"><div class="summary-tile"><strong>Lv.${level}</strong><span>防线等级</span></div><div class="summary-tile"><strong>${combat.victories}</strong><span>守住次数</span></div><div class="summary-tile"><strong>${combat.defeats}</strong><span>失守次数</span></div></div><p class="story-lead">${status}。可装备猎刀近战，也可装备猎枪拉开距离。雇用狩猎副手后，战斗中会自动拦截一部分野兽。</p><div class="weather-note">当前围栏损伤 ${combat.damage} · ${partner ? `今日副手：${partner}` : "尚未安排狩猎副手"} · 牧场防线会在战斗结算后记录损害。</div>`,
+    footer: `<button type="button" class="button button--ghost" data-action="close">返回牧场</button>${nextCost ? `<button type="button" class="button button--primary" data-action="fortifyRanch" ${state.coins < nextCost ? "disabled" : ""}>加固防线 · ✦ ${nextCost}</button>` : ""}`,
   });
 }
 
@@ -4101,6 +4152,20 @@ function handleModalClick(event) {
       } else {
         audio.play("error");
         showToast(result.message, { strong: "自动化养殖牧场" });
+      }
+      break;
+    }
+    case "fortifyRanch": {
+      const result = fortifyRanch(state);
+      if (result.ok) {
+        audio.play("success");
+        saveGame(state);
+        updateHUD(true);
+        openCombatPanel();
+        showToast(result.message, { strong: "牧场防线" });
+      } else {
+        audio.play("error");
+        showToast(result.message, { strong: "牧场防线" });
       }
       break;
     }

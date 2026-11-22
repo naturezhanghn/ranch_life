@@ -229,6 +229,7 @@ export class WorldRenderer {
     });
 
     this.drawPastureAnimals(ctx, state, time, drawables);
+    this.drawFarmInvasion(ctx, state, time);
 
     drawables.push({
       y: player.y,
@@ -697,6 +698,127 @@ export class WorldRenderer {
     ctx.fillText("护栏入口 · 进入广阔野外", 1295, 415);
     ctx.fillText("野果林", 1450, 245);
     ctx.restore();
+  }
+
+  drawFarmInvasion(ctx, state, time) {
+    const combat = state.combat || {};
+    const active = combat.active;
+    const hasAlert = Boolean(combat.alert || active);
+    const outcome = combat.lastOutcome;
+    const hasRecentOutcome = Boolean(outcome && combat.lastOutcomeDay === state.day);
+    if (!hasAlert && !hasRecentOutcome) return;
+
+    const pulse = 0.72 + Math.sin(time * 5.5) * 0.2;
+    const positions = [
+      { x: 1110, y: 430, kind: "boar", scale: 1.08 },
+      { x: 1195, y: 515, kind: "boar", scale: 0.94 },
+      { x: 930, y: 470, kind: "fox", scale: 0.82 },
+      { x: 760, y: 400, kind: "deer", scale: 0.9 },
+    ];
+    if (active) {
+      const wave = Math.max(1, Number(active.wave) || 1);
+      const count = Math.min(positions.length, 1 + wave);
+      for (let index = 0; index < count; index += 1) {
+        const entry = positions[index];
+        const drift = Math.sin(time * (0.8 + index * 0.11) + index) * 12;
+        const x = entry.x + drift;
+        const y = entry.y + Math.cos(time * 0.7 + index) * 5;
+        this.drawWildBeast(ctx, x, y, entry.kind, entry.scale, time, index % 2 ? -1 : 1);
+        ctx.save();
+        ctx.globalAlpha = 0.25 + pulse * 0.25;
+        ctx.strokeStyle = "#f06a52";
+        ctx.lineWidth = 2;
+        ctx.setLineDash([5, 5]);
+        ctx.beginPath();
+        ctx.ellipse(x, y - 16, 34 + Math.sin(time * 2 + index) * 3, 22, 0, 0, TAU);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = "#ff725d";
+        ctx.beginPath();
+        ctx.arc(x - 5, y - 31, 2.2, 0, TAU);
+        ctx.arc(x + 5, y - 31, 2.2, 0, TAU);
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+
+    if (hasAlert) {
+      const damage = Math.max(0, Number(combat.damage) || 0);
+      ctx.save();
+      ctx.globalAlpha = 0.78;
+      ctx.fillStyle = "rgba(72, 35, 33, 0.32)";
+      roundedRect(ctx, 424, 76, 752, 58, 12);
+      ctx.fill();
+      ctx.strokeStyle = `rgba(255, 122, 86, ${0.55 + pulse * 0.35})`;
+      ctx.lineWidth = 2;
+      roundedRect(ctx, 424, 76, 752, 58, 12);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = "#ffe2ad";
+      ctx.font = "800 16px 'PingFang SC', sans-serif";
+      ctx.textAlign = "left";
+      ctx.fillText(active ? `⚠ 野兽入侵 · 第${Math.max(1, Number(active.wave) || 1)}波` : "⚠ 野兽入侵预警", 450, 101);
+      ctx.fillStyle = "rgba(255, 239, 204, 0.82)";
+      ctx.font = "600 10px 'PingFang SC', sans-serif";
+      ctx.fillText(
+        active
+          ? `${active.name || active.enemyName || "荒野野兽"}正在逼近围栏 · 近战或猎枪可防守`
+          : "黄昏后请前往围栏入口，召集员工共同防守",
+        450,
+        120,
+      );
+      ctx.textAlign = "right";
+      if (active) {
+        const health = Math.max(0, Math.min(1, Number(active.health) / Math.max(1, Number(active.maxHealth) || 1)));
+        ctx.fillStyle = "rgba(255, 236, 198, 0.9)";
+        ctx.fillText(`敌群体力 ${Math.ceil(health * 100)}%`, 1150, 101);
+        ctx.fillStyle = "rgba(255, 121, 91, 0.8)";
+        roundedRect(ctx, 1012, 110, 138, 8, 4);
+        ctx.fill();
+        ctx.fillStyle = "#ffd085";
+        roundedRect(ctx, 1012, 110, 138 * health, 8, 4);
+        ctx.fill();
+      } else if (damage) {
+        ctx.fillStyle = "#ffb27d";
+        ctx.fillText(`围栏损伤 ${damage}`, 1150, 101);
+      }
+      ctx.restore();
+
+      ctx.save();
+      const warningPosts = [
+        [1248, 408],
+        [1248, 478],
+        [1110, 742],
+        [840, 742],
+      ];
+      for (const [x, y] of warningPosts) {
+        ctx.fillStyle = "#604536";
+        ctx.fillRect(x - 2, y - 21, 4, 26);
+        ctx.fillStyle = `rgba(255, 78, 57, ${0.45 + pulse * 0.45})`;
+        ctx.beginPath();
+        ctx.arc(x, y - 25, 6 + pulse * 2, 0, TAU);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    if (hasRecentOutcome) {
+      const rawText = outcome.message || outcome.result || outcome.status || outcome;
+      const text = rawText === "victory"
+        ? "防守成功，牧场安全"
+        : rawText === "defeat"
+          ? "防守失败，部分设施和作物受损"
+          : String(rawText || "防守记录已更新");
+      ctx.save();
+      ctx.fillStyle = "rgba(30, 59, 45, 0.86)";
+      roundedRect(ctx, 552, 148, 496, 34, 10);
+      ctx.fill();
+      ctx.fillStyle = "#e6f1bf";
+      ctx.font = "700 11px 'PingFang SC', sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText(String(text), 800, 170);
+      ctx.restore();
+    }
   }
 
   drawWildernessBerryTree(ctx, x, y, time, label) {

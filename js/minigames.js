@@ -287,6 +287,240 @@ export class HuntGame extends BaseMiniGame {
   }
 }
 
+export class BattleGame extends BaseMiniGame {
+  constructor(rng = Math.random, options = {}) {
+    super("battle", rng);
+    this.weapon = options.weapon === "shotgun" ? "shotgun" : "huntingKnife";
+    this.partner = options.partner || null;
+    this.enemies = [];
+    this.spawnTimer = 0.4;
+    this.attackCooldown = 0;
+    this.defeated = 0;
+    this.misses = 0;
+    this.damage = 0;
+    this.baseHealth = 100;
+    this.wave = 1;
+    this.aim = { x: WIDTH / 2, y: 330 };
+    this.message = this.weapon === "shotgun"
+      ? "猎枪已上膛，优先守住谷仓入口。"
+      : "猎刀在手，靠近野兽后快速挥砍。";
+  }
+
+  spawnBeast() {
+    const side = this.rng() > 0.5 ? -1 : 1;
+    const kind = this.rng() > 0.45 ? "boar" : "wolf";
+    const elite = this.rng() < 0.16;
+    this.enemies.push({
+      id: `${kind}-${this.wave}-${this.enemies.length}`,
+      kind,
+      elite,
+      x: side < 0 ? -38 : WIDTH + 38,
+      y: 225 + this.rng() * 185,
+      speed: (kind === "boar" ? 36 : 45) + this.rng() * 20 + (elite ? 9 : 0),
+      hp: (kind === "boar" ? 30 : 24) + (elite ? 20 : 0),
+      maxHp: (kind === "boar" ? 30 : 24) + (elite ? 20 : 0),
+      phase: this.rng() * TAU,
+      hitFlash: 0,
+    });
+  }
+
+  tick(dt) {
+    this.attackCooldown = Math.max(0, this.attackCooldown - dt);
+    this.spawnTimer -= dt;
+    const aliveLimit = Math.min(8, 3 + Math.floor(this.wave / 2));
+    if (this.spawnTimer <= 0 && this.enemies.length < aliveLimit && this.defeated < 12) {
+      this.spawnBeast();
+      this.spawnTimer = Math.max(0.38, 1.1 - this.wave * 0.04) + this.rng() * 0.5;
+    }
+    for (const enemy of this.enemies) {
+      const dx = WIDTH / 2 - enemy.x;
+      const dy = 375 - enemy.y;
+      const distance = Math.hypot(dx, dy) || 1;
+      enemy.x += (dx / distance) * enemy.speed * dt;
+      enemy.y += (dy / distance) * enemy.speed * dt + Math.sin(this.timeLeft * 2 + enemy.phase) * 0.18;
+      enemy.phase += dt * 4;
+      enemy.hitFlash = Math.max(0, enemy.hitFlash - dt);
+      if (distance < 58) {
+        this.baseHealth = Math.max(0, this.baseHealth - (enemy.elite ? 13 : 8));
+        this.damage += enemy.elite ? 13 : 8;
+        enemy.hp = 0;
+        this.message = "野兽撞上谷仓围栏，赶快补上缺口！";
+      }
+    }
+    this.enemies = this.enemies.filter((enemy) => enemy.hp > 0);
+    if (this.partner && this.enemies.length && this.rng() < dt * 0.7) {
+      const target = this.enemies[Math.floor(this.rng() * this.enemies.length)];
+      target.hp -= 16;
+      target.hitFlash = 0.16;
+      this.message = `${this.partner}拦住了一只野兽。`;
+      if (target.hp <= 0) {
+        this.defeated += 1;
+        this.score += 12;
+      }
+    }
+    this.wave = Math.max(this.wave, 1 + Math.floor(this.defeated / 3));
+    if (this.baseHealth <= 0 || this.defeated >= 12) this.finish(this.resultForFinish());
+  }
+
+  move(dx, dy = 0) {
+    this.aim.x = clamp(this.aim.x + (dx || 0) * 28, 35, WIDTH - 35);
+    this.aim.y = clamp(this.aim.y + (dy || 0) * 28, 110, HEIGHT - 45);
+  }
+
+  action(x, y) {
+    if (this.finished || this.attackCooldown > 0) return;
+    this.attackCooldown = this.weapon === "shotgun" ? 0.48 : 0.24;
+    if (typeof x === "number") this.aim.x = clamp(x, 35, WIDTH - 35);
+    if (typeof y === "number") this.aim.y = clamp(y, 110, HEIGHT - 45);
+    const reach = this.weapon === "shotgun" ? 132 : 78;
+    let targetIndex = -1;
+    let closest = reach;
+    this.enemies.forEach((enemy, index) => {
+      const distance = Math.hypot(enemy.x - this.aim.x, enemy.y - this.aim.y);
+      if (distance < closest) {
+        closest = distance;
+        targetIndex = index;
+      }
+    });
+    if (targetIndex < 0) {
+      this.misses += 1;
+      this.score = Math.max(0, this.score - 1);
+      this.message = this.weapon === "shotgun" ? "枪声擦过树梢，野兽还在逼近。" : "刀锋落空，先拉开半步再挥刀。";
+      return;
+    }
+    const target = this.enemies[targetIndex];
+    const damage = this.weapon === "shotgun" ? 36 : 18;
+    target.hp -= damage;
+    target.hitFlash = 0.18;
+    this.score += this.weapon === "shotgun" ? 8 : 6;
+    if (target.hp <= 0) {
+      this.enemies.splice(targetIndex, 1);
+      this.defeated += 1;
+      this.score += target.elite ? 24 : 14;
+      this.message = target.elite ? "精英野兽被击退，围栏暂时安全。" : "野兽倒退回林线，谷仓守住了。";
+    } else {
+      this.message = this.weapon === "shotgun" ? "命中！继续守住谷仓入口。" : "刀锋命中，别让它靠近牲畜区。";
+    }
+  }
+
+  resultForFinish() {
+    return {
+      defeated: this.defeated,
+      hits: this.defeated,
+      misses: this.misses,
+      damage: this.damage,
+      baseHealth: this.baseHealth,
+      waves: this.wave,
+      weapon: this.weapon,
+      partner: this.partner,
+    };
+  }
+
+  timeout() {
+    this.finish(this.resultForFinish());
+  }
+
+  render(ctx) {
+    const dusk = ctx.createLinearGradient(0, 0, 0, HEIGHT);
+    dusk.addColorStop(0, "#263d42");
+    dusk.addColorStop(0.5, "#53634d");
+    dusk.addColorStop(1, "#1d302c");
+    ctx.fillStyle = dusk;
+    ctx.fillRect(0, 0, WIDTH, HEIGHT);
+    ctx.fillStyle = "rgba(20, 42, 32, 0.55)";
+    for (let tree = 0; tree < 13; tree += 1) {
+      const x = 28 + tree * 82;
+      const y = 150 + (tree % 3) * 24;
+      ctx.fillRect(x - 4, y, 8, 250);
+      ctx.beginPath();
+      ctx.arc(x, y - 18, 34 + (tree % 3) * 7, 0, TAU);
+      ctx.fill();
+    }
+    ctx.fillStyle = "#6c5138";
+    roundedRect(ctx, 408, 275, 145, 142, 14);
+    ctx.fill();
+    ctx.fillStyle = "#b36d47";
+    ctx.beginPath();
+    ctx.moveTo(390, 286);
+    ctx.lineTo(480, 218);
+    ctx.lineTo(571, 286);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = "#e8c77c";
+    ctx.fillRect(460, 335, 40, 82);
+    ctx.fillStyle = "rgba(227, 201, 126, 0.35)";
+    ctx.fillRect(442, 310, 20, 22);
+    ctx.fillRect(508, 310, 20, 22);
+    ctx.strokeStyle = "#d9ba73";
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(120, 430);
+    ctx.lineTo(838, 430);
+    ctx.stroke();
+    for (let post = 0; post < 10; post += 1) {
+      ctx.fillStyle = "#a67b4d";
+      ctx.fillRect(120 + post * 80, 405, 8, 44);
+    }
+    for (const enemy of this.enemies) {
+      ctx.save();
+      ctx.translate(enemy.x, enemy.y);
+      const scale = enemy.elite ? 1.2 : 1;
+      ctx.scale(scale, scale);
+      ctx.fillStyle = enemy.hitFlash > 0 ? "#f6e29b" : enemy.kind === "boar" ? "#7b5749" : "#4d5f58";
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 25, 14, 0, 0, TAU);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(22, -5, 11, 0, TAU);
+      ctx.fill();
+      ctx.fillStyle = "#e7c17f";
+      ctx.fillRect(29, -8, 8, 3);
+      ctx.fillRect(29, 1, 8, 3);
+      ctx.fillStyle = "#f3e1ae";
+      ctx.fillRect(22, -8, 3, 3);
+      ctx.fillStyle = "rgba(25, 35, 28, 0.72)";
+      ctx.fillRect(-22, -25, 45, 5);
+      ctx.fillStyle = "#db7460";
+      ctx.fillRect(-22, -25, 45 * Math.max(0, enemy.hp / enemy.maxHp), 5);
+      ctx.restore();
+    }
+    ctx.save();
+    ctx.strokeStyle = this.weapon === "shotgun" ? "#f3d58a" : "#d7e2c3";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(this.aim.x, this.aim.y, this.weapon === "shotgun" ? 25 : 16, 0, TAU);
+    ctx.moveTo(this.aim.x - 34, this.aim.y);
+    ctx.lineTo(this.aim.x + 34, this.aim.y);
+    ctx.moveTo(this.aim.x, this.aim.y - 34);
+    ctx.lineTo(this.aim.x, this.aim.y + 34);
+    ctx.stroke();
+    ctx.restore();
+    ctx.fillStyle = "rgba(14, 31, 26, 0.8)";
+    roundedRect(ctx, 28, HEIGHT - 62, 540, 37, 11);
+    ctx.fill();
+    ctx.fillStyle = "#f7e9bd";
+    ctx.font = "600 13px 'PingFang SC', sans-serif";
+    ctx.fillText(`${this.message} · ${this.weapon === "shotgun" ? "猎枪" : "猎刀"}${this.partner ? ` · 副手 ${this.partner}` : ""}`, 44, HEIGHT - 38);
+    ctx.fillStyle = "rgba(15, 28, 25, 0.8)";
+    roundedRect(ctx, 660, HEIGHT - 60, 270, 25, 8);
+    ctx.fill();
+    ctx.fillStyle = "#d86c5e";
+    ctx.fillRect(670, HEIGHT - 52, 250 * this.baseHealth / 100, 9);
+    ctx.fillStyle = "#fff0cb";
+    ctx.font = "700 11px 'PingFang SC', sans-serif";
+    ctx.textAlign = "right";
+    ctx.fillText(`谷仓防线 ${Math.round(this.baseHealth)}% · 击退 ${this.defeated}`, 920, HEIGHT - 38);
+    ctx.textAlign = "left";
+  }
+
+  renderResult(ctx) {
+    this.drawResult(ctx, [
+      this.baseHealth > 0 ? "野兽入侵已被击退，牧场守住了。" : "围栏被冲开了一段，需要尽快修复。",
+      `击退 ${this.defeated} 只 · 防线 ${Math.round(this.baseHealth)}% · 评分 ${Math.round(this.score)}`,
+    ]);
+  }
+}
+
 export class FishingGame extends BaseMiniGame {
   constructor(rng = Math.random) {
     super("fishing", rng);
@@ -720,6 +954,7 @@ export class DeliveryGame extends BaseMiniGame {
 export function createMinigame(type, options = {}) {
   const rng = options.rng || createRng(options.seed || Date.now());
   if (type === "hunt") return new HuntGame(rng);
+  if (type === "battle") return new BattleGame(rng, options);
   if (type === "fishing") return new FishingGame(rng);
   if (type === "mining") return new MiningGame(rng);
   if (type === "delivery") return new DeliveryGame(rng, options.contract || null);

@@ -2554,6 +2554,18 @@ export const MARKET_GOODS = {
 };
 
 export const MINIGAME_DEFS = {
+  battle: {
+    id: "battle",
+    title: "牧场防卫战",
+    subtitle: "野兽冲破林缘，守住牲畜棚与作物，和员工一起完成驱离。",
+    scene: "farm",
+    scenes: ["farm", "farmland"],
+    energy: 2,
+    clockMinutes: 24,
+    duration: 28,
+    action: "方向键移动防守位置，空格或点击挥刀或开枪。金色目标需要优先处理。",
+    rewardNote: "击退入侵会获得巡护补贴，失守会损坏牧场设施和作物。",
+  },
   hunt: {
     id: "hunt",
     title: "狩猎与巡护",
@@ -3168,6 +3180,23 @@ export const INTERACTIONS = [
     label: "在鱼池外的河边垂钓",
     keycap: "E",
     minigame: "fishing",
+  },
+  {
+    id: "ranch_defense",
+    x: 1150,
+    y: 432,
+    radius: 64,
+    label: "抵御野兽入侵",
+    keycap: "E",
+    minigame: "battle",
+  },
+  {
+    id: "ranch_fortify",
+    x: 1050,
+    y: 520,
+    radius: 58,
+    label: "加固牧场防线",
+    keycap: "E",
   },
   {
     id: "investor",
