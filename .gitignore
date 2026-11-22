@@ -4,3 +4,6 @@ node_modules/
 playwright-report/
 test-results/
 tools/__pycache__/
+
+# GitHub Pages staging
+_site/

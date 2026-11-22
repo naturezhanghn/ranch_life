@@ -4159,3 +4159,344 @@ body {
   border-color: rgba(247, 213, 135, 0.45);
   background: linear-gradient(145deg, rgba(245, 207, 119, 0.22), rgba(98, 153, 106, 0.18));
 }
+
+/* Stitch polish pass: a calm field-console hierarchy with tactile controls. */
+:root {
+  --surface-ink: #173d33;
+  --surface-ink-raised: #204c3d;
+  --surface-paper: #fffaf0;
+  --surface-paper-muted: #f2e7c9;
+  --text-strong: #183c34;
+  --text-muted: #617568;
+  --accent-sun: #e9bd68;
+  --accent-leaf: #8eb477;
+  --stroke-soft: rgba(34, 73, 59, 0.16);
+  --focus-ring: rgba(233, 189, 104, 0.9);
+  --motion-fast: 160ms;
+  --motion-smooth: 260ms;
+}
+
+body {
+  background:
+    radial-gradient(circle at 10% 10%, rgba(152, 190, 121, 0.3), transparent 32%),
+    radial-gradient(circle at 92% 78%, rgba(234, 185, 106, 0.2), transparent 30%),
+    linear-gradient(145deg, #2f5a47 0%, #183e34 58%, #23483a 100%);
+}
+
+button,
+.shop-buy,
+.scene-switch-button,
+.region-nav-button,
+.tool-button,
+.seed-pouch {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:focus-visible,
+.shop-buy:focus-visible,
+.scene-switch-button:focus-visible,
+.region-nav-button:focus-visible,
+.tool-button:focus-visible,
+.seed-pouch:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 3px;
+}
+
+.app-shell {
+  border-color: rgba(248, 223, 166, 0.38);
+  box-shadow:
+    0 28px 72px rgba(8, 29, 22, 0.42),
+    inset 0 1px 0 rgba(255, 248, 215, 0.18);
+}
+
+.game-header {
+  min-height: 76px;
+  padding-inline: 22px;
+  background:
+    radial-gradient(circle at 5% -20%, rgba(166, 202, 132, 0.19), transparent 30%),
+    linear-gradient(180deg, #285746 0%, #193e34 100%);
+}
+
+.brand-mark {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.24), 0 5px 14px rgba(13, 39, 29, 0.14);
+}
+
+.brand-name {
+  letter-spacing: 0.015em;
+}
+
+.date-chip,
+.weather {
+  border-color: rgba(245, 222, 165, 0.22);
+  background: rgba(8, 32, 26, 0.3);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.coin-stat,
+.time {
+  font-variant-numeric: tabular-nums;
+}
+
+.icon-button,
+.ai-chip {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+.icon-button {
+  width: 44px;
+  height: 44px;
+  border-radius: 13px;
+}
+
+.ai-chip {
+  padding-inline: 12px;
+  border-radius: 13px;
+  transition: transform var(--motion-fast) ease, background var(--motion-fast) ease, border-color var(--motion-fast) ease;
+}
+
+.ai-chip:hover {
+  transform: translateY(-2px);
+}
+
+.game-stage {
+  background: #88a96a;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
+}
+
+.stage-vignette {
+  box-shadow:
+    inset 0 0 96px rgba(19, 49, 37, 0.24),
+    inset 0 24px 56px rgba(19, 49, 37, 0.13);
+}
+
+.objective-card {
+  top: 20px;
+  left: 20px;
+  border-color: rgba(255, 255, 255, 0.6);
+  box-shadow: 0 12px 34px rgba(28, 56, 39, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  animation: objectiveSettle 600ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
+}
+
+@keyframes objectiveSettle {
+  from { opacity: 0; transform: translateY(-7px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.interaction-hint {
+  min-height: 44px;
+  padding-inline: 9px 17px;
+  box-shadow: 0 10px 28px rgba(10, 29, 24, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.keycap {
+  width: 32px;
+  height: 32px;
+  box-shadow: inset 0 -2px 0 rgba(70, 74, 41, 0.12);
+}
+
+.toast {
+  border-color: rgba(255, 255, 255, 0.56);
+  box-shadow: 0 12px 30px rgba(10, 29, 24, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.tool-dock {
+  min-height: 96px;
+  padding-inline: 21px;
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.27), transparent 30%),
+    linear-gradient(180deg, #f6ecd2 0%, #eddfbd 100%);
+  border-top-color: rgba(255, 255, 255, 0.68);
+}
+
+.tool-button,
+.seed-pouch {
+  min-height: 64px;
+  border-color: var(--stroke-soft);
+  box-shadow: 0 4px 0 rgba(45, 77, 53, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.48);
+  transition: transform var(--motion-fast) ease, box-shadow var(--motion-fast) ease, background var(--motion-fast) ease, border-color var(--motion-fast) ease;
+}
+
+.tool-button:hover,
+.seed-pouch:hover,
+.tool-button:focus-visible,
+.seed-pouch:focus-visible {
+  transform: translateY(-2px);
+  border-color: rgba(66, 105, 73, 0.34);
+  box-shadow: 0 8px 17px rgba(45, 77, 53, 0.13), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+.tool-button:active,
+.seed-pouch:active,
+.button:active,
+.shop-buy:active,
+.scene-switch-button:active,
+.region-nav-button:active {
+  transform: translateY(1px) scale(0.985);
+}
+
+.tool-button.is-active {
+  border-color: #214a3c;
+  box-shadow: 0 7px 18px rgba(25, 63, 49, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.button,
+.shop-buy,
+.scene-switch-button,
+.region-nav-button {
+  min-height: 44px;
+}
+
+.button {
+  box-shadow: 0 4px 0 rgba(45, 77, 53, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+}
+
+.button:hover:not(:disabled),
+.shop-buy:hover:not(:disabled),
+.scene-switch-button:hover:not(:disabled),
+.region-nav-button:hover:not(:disabled) {
+  filter: saturate(1.04);
+}
+
+.welcome-card,
+.modal-card,
+.region-card {
+  box-shadow:
+    0 24px 70px rgba(18, 42, 32, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.72);
+}
+
+.welcome-card {
+  border-color: rgba(255, 251, 237, 0.3);
+  background: rgba(21, 52, 43, 0.68);
+}
+
+.welcome-card h1 {
+  letter-spacing: -0.02em;
+}
+
+.modal-card {
+  border-color: rgba(167, 122, 64, 0.4);
+}
+
+.modal-heading h2 {
+  letter-spacing: -0.02em;
+}
+
+.modal-body {
+  scrollbar-color: rgba(73, 119, 85, 0.48) transparent;
+  scrollbar-width: thin;
+}
+
+.modal-footer {
+  background: rgba(255, 250, 235, 0.32);
+}
+
+.region-card {
+  transition: transform var(--motion-fast) ease, border-color var(--motion-fast) ease, box-shadow var(--motion-fast) ease, background var(--motion-fast) ease;
+}
+
+.region-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 22px rgba(65, 87, 58, 0.12);
+}
+
+@media (max-width: 900px) {
+  .game-header {
+    min-height: 68px;
+    padding-inline: 12px;
+  }
+
+  .icon-button,
+  .ai-chip {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .objective-card {
+    top: 12px;
+    left: 12px;
+  }
+
+  .tool-dock {
+    min-height: 0;
+    padding: 10px 10px calc(10px + env(safe-area-inset-bottom));
+  }
+
+  .tool-button {
+    min-height: 56px;
+  }
+
+  .dpad button,
+  .action-button {
+    min-width: 48px;
+    min-height: 48px;
+  }
+
+  .action-button {
+    width: 82px;
+    height: 82px;
+  }
+}
+
+@media (max-width: 560px) {
+  .game-header {
+    min-height: 64px;
+    padding-inline: 9px;
+  }
+
+  .brand-mark {
+    width: 38px;
+    height: 38px;
+    flex-basis: 38px;
+  }
+
+  .brand-mark svg {
+    width: 29px;
+    height: 29px;
+  }
+
+  .brand-name {
+    font-size: 13px;
+  }
+
+  .header-stats {
+    gap: 4px;
+  }
+
+  .icon-button,
+  .ai-chip {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .objective-card {
+    max-width: calc(100% - 24px);
+  }
+
+  .interaction-hint {
+    bottom: 122px;
+    max-width: calc(100% - 24px);
+    text-align: center;
+  }
+
+  .modal-footer {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .modal-footer .button,
+  .modal-footer .shop-buy {
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .ai-pulse { animation-duration: 3.2s; }
+  .welcome-sun { animation: sunBreath 8s ease-in-out infinite; }
+}
+
+@keyframes sunBreath {
+  0%, 100% { transform: scale(1); opacity: 0.94; }
+  50% { transform: scale(1.035); opacity: 1; }
+}

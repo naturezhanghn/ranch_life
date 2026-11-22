@@ -31,6 +31,11 @@ jobs:
         run: npm run build
       - name: Validate browser release surface
         run: npm run release-check
+      - name: Prepare clean browser artifact
+        run: |
+          mkdir -p _site
+          cp index.html favicon.svg manifest.webmanifest _site/
+          cp -R css js assets vendor _site/
       - name: Check whether Pages is enabled
         id: pages_status
         env:
@@ -59,7 +64,7 @@ jobs:
         if: steps.pages_status.outputs.enabled == 'true'
         uses: actions/upload-pages-artifact@v3
         with:
-          path: .
+          path: _site
       - name: Deploy
         if: steps.pages_status.outputs.enabled == 'true'
         id: deployment

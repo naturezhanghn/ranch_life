@@ -222,6 +222,7 @@ let inputLocked = false;
 let autosaveClock = 0;
 let stageRect = null;
 let mobileCamera = { x: 0, y: 0, initialized: false };
+let cameraRenderSize = { width: 0, height: 0 };
 let runtimeErrorShown = false;
 // A background tab may receive throttled animation frames. Keep those frames
 // from advancing the in-game clock or consuming stamina while the player is
@@ -837,6 +838,7 @@ function resizeViewport() {
   const rect = dom.gameStage.getBoundingClientRect();
   stageRect = { width: rect.width, height: rect.height };
   mobileCamera.initialized = false;
+  cameraRenderSize = { width: 0, height: 0 };
 }
 
 function updateCamera(delta) {
@@ -869,11 +871,11 @@ function updateCamera(delta) {
     mobileCamera.x += (desiredX - mobileCamera.x) * follow;
     mobileCamera.y += (desiredY - mobileCamera.y) * follow;
   }
-  canvas.style.width = `${renderWidth}px`;
-  canvas.style.height = `${renderHeight}px`;
-  canvas.style.position = "absolute";
-  canvas.style.top = "0px";
-  canvas.style.left = "0px";
+  if (cameraRenderSize.width !== renderWidth || cameraRenderSize.height !== renderHeight) {
+    canvas.style.width = `${renderWidth}px`;
+    canvas.style.height = `${renderHeight}px`;
+    cameraRenderSize = { width: renderWidth, height: renderHeight };
+  }
   canvas.style.transform = `translate(${mobileCamera.x}px, ${mobileCamera.y}px)`;
 }
 
